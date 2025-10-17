@@ -1,0 +1,30 @@
+// src/app/lib/supabase.ts
+import { createClient } from '@supabase/supabase-js';
+// If you prefer the SSR helper instead, you can use:
+// import { createBrowserClient as createClient } from '@supabase/ssr';
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!url) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
+}
+if (!anon) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
+}
+
+/**
+ * Creates a Supabase client that always sends the caller’s wallet
+ * in a request header that your Postgres RLS function reads.
+ * We normalize to lowercase so it matches rows stored in lowercase.
+ */
+export function getSupabaseForWallet(wallet: string) {
+  const w = (wallet ?? '').toLowerCase();
+  return createClient(url, anon, {
+    global: {
+      headers: {
+        'x-wallet-address': w,
+      },
+    },
+  });
+}

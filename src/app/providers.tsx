@@ -1,39 +1,59 @@
 'use client';
 
 import '@rainbow-me/rainbowkit/styles.css';
-
 import {
   RainbowKitProvider,
   darkTheme,
-  getDefaultWallets,
+  connectorsForWallets,
 } from '@rainbow-me/rainbowkit';
+import {
+  metaMaskWallet,
+  coinbaseWallet,
+  injectedWallet,
+} from '@rainbow-me/rainbowkit/wallets';
+
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { baseSepolia } from 'viem/chains';
+import { baseSepolia } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const queryClient = new QueryClient();
+// Optional WalletConnect project id.
+// If you don't set it, we WON'T initialize WalletConnect.
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? '';
 
-// Pull from .env.local (you already created this)
-const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
+const wallets = [
+  {
+    groupName: 'Recommended',
+    wallets: [
+      metaMaskWallet,
+      coinbaseWallet,
+      injectedWallet, // you can remove this if you want MetaMask only
+    ],
+  },
+];
 
-// 1) Get wallets + connectors once (env-driven projectId)
-const { wallets, connectors } = getDefaultWallets({
-  appName: 'Story of Emergence',
-  projectId: WC_PROJECT_ID,
-});
+// Only pass { projectId, appName } if projectId exists (prevents WC spam).
+const connectors = projectId
+  ? connectorsForWallets(wallets, {
+      projectId,
+      appName: 'Story of Emergence',
+    })
+  : connectorsForWallets(wallets);
 
-// 2) Build wagmi config with those connectors
 const config = createConfig({
   chains: [baseSepolia],
   connectors,
-  transports: { [baseSepolia.id]: http() },
+  transports: {
+    [baseSepolia.id]: http(), // default public RPC (fine for dev)
+  },
 });
+
+const queryClient = new QueryClient();
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme({ borderRadius: 'large' })}>
+        <RainbowKitProvider theme={darkTheme()}>
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

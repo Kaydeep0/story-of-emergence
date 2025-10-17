@@ -1,22 +1,32 @@
 'use client';
 
-// components (relative to src/app/page.tsx)
-import ReflectionsSkeleton from '../components/ReflectionsSkeleton';
-import EmptyReflections from '../components/EmptyReflections';
-import ExportButton from '../components/ExportButton';
+// components (paths are from src/app/page.tsx)
+import ReflectionsSkeleton from './components/ReflectionsSkeleton';
+import EmptyReflections from './components/EmptyReflections';
+import ExportButton from './components/ExportButton';
 
 // react + ui
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
+import {
+  useAccount,
+  useBalance,
+  useSignMessage,
+  useSwitchChain,
+  useChainId,
+} from 'wagmi';
 import { baseSepolia } from 'viem/chains';
 import { incSaveCount, messageForSave } from '@/app/lib/toast';
 
+// data + crypto (lib is sibling of page.tsx)
 import { getSupabaseForWallet } from './lib/supabase';
-import { keyFromSignatureHex, encryptJSON, decryptJSON, tryDecodeLegacyJSON } from '../lib/crypto';
-
-type Reflection = { mood: string; note: string; ts: string; };
+import {
+  keyFromSignatureHex,
+  encryptJSON,
+  decryptJSON,
+  tryDecodeLegacyJSON,
+} from './lib/crypto';
 
 type Item = {
   id: string;
@@ -26,15 +36,14 @@ type Item = {
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
-  if (e?.code === -32002) return 'A signature request is already pending. Open MetaMask and confirm (or cancel), then try again.';
+  if (e?.code === -32002)
+    return 'A signature request is already pending. Open MetaMask and confirm (or cancel), then try again.';
   return e?.shortMessage || e?.message || 'Unexpected signing error.';
 }
 
 export default function Home() {
-  // ---- hooks must be called first, same order every render ----
+  // ---- wagmi / wallet ----
   const { address, isConnected } = useAccount();
-  const signLockRef = useRef(false);
-
   const chainId = useChainId();
   const { data: balance, isLoading: balLoading } = useBalance({
     address,
@@ -43,22 +52,28 @@ export default function Home() {
   });
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const { switchChain, isPending: switching } = useSwitchChain();
-  const sb = getSupabaseForWallet(address);
+
+  // lowercased wallet (match DB + RLS)
+  const w = (address ?? '').toLowerCase();
+
+  // Supabase client that injects the wallet header
+  const sb = useMemo(() => getSupabaseForWallet(w), [w]);
 
   // ---- local state ----
   const [status, setStatus] = useState('');
   const [note, setNote] = useState('first test reflection from Story of Emergence');
   const [items, setItems] = useState<Item[]>([]);
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
-
   const [loadingList, setLoadingList] = useState(false);
-  const textRef = useRef<HTMLTextAreaElement>(null);
-  const signingConsentRef = useRef(false);
   const [saving, setSaving] = useState(false);
-
-  // cache the consent signature so we don’t re-prompt every time this session
+  const [mounted, setMounted] = useState(false);
   const [consentSig, setConsentSig] = useState<string | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const signLockRef = useRef(false);
+  const signingConsentRef = useRef(false);
+
+  // autosize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -66,59 +81,48 @@ export default function Home() {
     el.style.height = `${el.scrollHeight}px`;
   }, [note]);
 
-  // prevent hydration mismatch — render only after mount
-  const [mounted, setMounted] = useState(false);
+  // prevent hydration mismatch
   useEffect(() => setMounted(true), []);
 
-  // Load consent signature for this browser tab (avoid re-signing after refresh)
+  // load cached consent sig for the tab
   useEffect(() => {
     const s = sessionStorage.getItem('soe-consent-sig');
     if (s) setConsentSig(s);
   }, []);
 
-  // expose wallet and decrypted items for ExportButton
+  // expose for ExportButton
   useEffect(() => {
-    (globalThis as any).__soeWallet = address ?? ""
-  }, [address])
-
+    (globalThis as any).__soeWallet = address ?? '';
+  }, [address]);
   useEffect(() => {
-    (globalThis as any).__soeDecryptedEntries = items
-  }, [items])
+    (globalThis as any).__soeDecryptedEntries = items;
+  }, [items]);
 
-  // If the wallet account changes, drop any previous session signature (wrong key)
+  // clear consent if wallet changes
   useEffect(() => {
     setConsentSig(null);
     sessionStorage.removeItem('soe-consent-sig');
   }, [address]);
 
   const connected = isConnected && !!address;
+  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '';
 
-  // auto-load when connected (and after mount)
+  // auto-load on first mount when connected
   useEffect(() => {
-    if (!mounted) return;
-    if (!connected) return;
-    // don’t spam if we already have items
+    if (!mounted || !connected) return;
     if (items.length > 0) return;
-    // if we already have a cached consent signature, this will not re-prompt;
-    // otherwise MetaMask will pop once.
     loadMyReflections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, connected]);
 
-  const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '';
-
-  // ask wallet for (or reuse) a consent signature; return AES key
+  // ---- session key from consent signature ----
   async function getSessionKey(): Promise<CryptoKey> {
     if (!connected || !address) throw new Error('Connect wallet first');
-
-    // reuse cached signature if we have it
     let sig = consentSig;
 
     if (!sig) {
-      // prevent multiple concurrent popups
       if (signingConsentRef.current) {
         setStatus('Signature already pending — check MetaMask.');
-        // return a rejected promise that we’ll silently ignore in callers
         throw new Error('PENDING_SIG');
       }
       signingConsentRef.current = true;
@@ -141,33 +145,28 @@ export default function Home() {
   // ---- load my reflections (fetch → decrypt → show plaintext) ----
   async function loadMyReflections() {
     try {
-      if (!isConnected || !address) {
+      if (!connected || !w) {
         setStatus('Connect wallet first');
         return;
       }
-
       setLoadingList(true);
       setStatus('Fetching your entries…');
 
-      // 1) fetch your rows from Supabase (skip soft-deleted; fetch up to 100)
       const { data, error } = await sb
         .from('entries')
         .select('id, created_at, ciphertext, deleted_at')
-        .eq('wallet_address', address)
+        .eq('wallet_address', w)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) throw error;
 
-      // 2) prepare key
       setStatus('Preparing decryption key…');
       const key = await getSessionKey();
 
-      // 3) decrypt each row safely (legacy → AES → fallback)
       const next: Item[] = [];
       for (const row of data ?? []) {
-        // legacy base64(JSON) decode for earliest rows
         const legacy = tryDecodeLegacyJSON(row.ciphertext as string);
         if (legacy) {
           next.push({
@@ -177,8 +176,6 @@ export default function Home() {
           });
           continue;
         }
-
-        // AES-GCM decrypt
         try {
           const obj = await decryptJSON(row.ciphertext as string, key);
           next.push({
@@ -187,7 +184,6 @@ export default function Home() {
             note: typeof obj?.note === 'string' ? obj.note : JSON.stringify(obj),
           });
         } catch {
-          // ciphertext preview fallback
           const ct = (row.ciphertext ?? '') as string;
           next.push({
             id: row.id,
@@ -197,7 +193,6 @@ export default function Home() {
         }
       }
 
-      // 4) update UI
       setItems(next);
       setStatus(next.length ? '' : 'No entries yet.');
     } catch (e: any) {
@@ -210,7 +205,7 @@ export default function Home() {
   // ---- save one reflection (plaintext -> AES encrypt -> insert) ----
   async function saveReflection() {
     try {
-      if (!isConnected || !address) {
+      if (!connected || !w) {
         setStatus('Connect wallet first');
         return;
       }
@@ -222,38 +217,28 @@ export default function Home() {
         return;
       }
 
-      // lock submit + show signing/encryption progress
       signLockRef.current = true;
       setSaving(true);
       setStatus('Preparing encryption key…');
       toast.message('Requesting signature in MetaMask…');
 
-      // derive per-session key (use your existing helper)
       const key = await getSessionKey();
-
-      // build the payload you want to store (note stays client-side)
-      const item = {
-        id: crypto.randomUUID(),
-        ts: new Date().toISOString(),
-        note: text,
-      };
-
-      // encrypt, then store ciphertext only
+      const item = { id: crypto.randomUUID(), ts: new Date().toISOString(), note: text };
       const ciphertext = await encryptJSON(item, key);
+
       const { error } = await sb
         .from('entries')
-        .insert({ wallet_address: address, ciphertext });
+        .insert({ wallet_address: w, ciphertext });
 
       if (error) throw error;
 
-      // success UX
       setStatus('Saved (AES)!');
-      const n = incSaveCount();
-      toast.success(messageForSave(n));
-
-      // clear input and keep focus
+      toast.success(messageForSave(incSaveCount()));
       setNote('');
       textareaRef.current?.focus();
+
+      // Refresh list
+      await loadMyReflections();
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       setStatus(`Error: ${msg}`);
@@ -264,6 +249,7 @@ export default function Home() {
     }
   }
 
+  // ---- soft delete (sets deleted_at) ----
   async function deleteEntry(id: string) {
     try {
       const ok = window.confirm('Delete this reflection permanently?');
@@ -272,7 +258,6 @@ export default function Home() {
       setDeletingIds((m) => ({ ...m, [id]: true }));
       setStatus('Deleting…');
 
-      // IMPORTANT: use wallet-scoped client and soft delete
       const { error } = await sb
         .from('entries')
         .update({ deleted_at: new Date().toISOString() })
@@ -280,12 +265,10 @@ export default function Home() {
 
       if (error) throw error;
 
-      // remove from UI
       setItems((prev) => prev.filter((it) => it.id !== id));
       setStatus('Deleted.');
     } catch (e: any) {
-      console.error(e);
-      setStatus(`Delete failed: ${e?.message ?? String(e)}`);
+      setStatus(`Delete failed: ${e?.message ?? 'Delete failed'}`);
     } finally {
       setDeletingIds((m) => {
         const { [id]: _gone, ...rest } = m;
@@ -327,7 +310,7 @@ export default function Home() {
                       disabled={switching}
                       className="rounded-xl border border-white/20 px-3 py-1 hover:bg-white/5 disabled:opacity-50"
                     >
-                      {switching ? "Switching…" : "Switch to Base Sepolia"}
+                      {switching ? 'Switching…' : 'Switch to Base Sepolia'}
                     </button>
                   )}
                 </div>
@@ -336,7 +319,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <span className="text-white/70">Balance</span>
                 <span className="font-mono">
-                  {balLoading ? "…" : balance ? `${balance.formatted} ${balance.symbol}` : "—"}
+                  {balLoading ? '…' : balance ? `${balance.formatted} ${balance.symbol}` : '—'}
                 </span>
               </div>
             </div>
@@ -350,13 +333,13 @@ export default function Home() {
               <button
                 onClick={async () => {
                   if (!isConnected) {
-                    setStatus("Connect wallet first");
+                    setStatus('Connect wallet first');
                     return;
                   }
-                  setStatus("Check MetaMask and click Sign…");
+                  setStatus('Check MetaMask and click Sign…');
                   try {
-                    await signMessageAsync({ message: "Hello from Story of Emergence" });
-                    setStatus("Signed!");
+                    await signMessageAsync({ message: 'Hello from Story of Emergence' });
+                    setStatus('Signed!');
                   } catch (e: any) {
                     setStatus(humanizeSignError(e));
                   }
@@ -364,7 +347,7 @@ export default function Home() {
                 disabled={signing}
                 className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
               >
-                {signing ? "Waiting for signature…" : "Sign a message"}
+                {signing ? 'Waiting for signature…' : 'Sign a message'}
               </button>
             </div>
 
@@ -389,7 +372,7 @@ export default function Home() {
                   disabled={!isConnected || saving || signLockRef.current}
                   className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
                 >
-                  {saving ? "Saving…" : "Save encrypted"}
+                  {saving ? 'Saving…' : 'Save encrypted'}
                 </button>
 
                 <button
@@ -397,23 +380,22 @@ export default function Home() {
                   disabled={!isConnected || loadingList}
                   className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
                 >
-                  {loadingList ? "Loading…" : "Load my reflections"}
+                  {loadingList ? 'Loading…' : 'Load my reflections'}
                 </button>
               </div>
 
               {/* status line */}
               {status && <p className="text-sm text-white/70">{status}</p>}
 
-              {/* list area with loading + empty states */}
+              {/* list */}
               {loadingList ? (
                 <ReflectionsSkeleton />
               ) : items.length === 0 ? (
                 <EmptyReflections onLoadClick={loadMyReflections} />
               ) : (
                 <>
-                  {/* Export toolbar */}
                   <div className="mb-3 flex justify-end">
-                    <ExportButton walletAddress={address ?? ""} items={items} />
+                    <ExportButton walletAddress={address ?? ''} items={items} />
                   </div>
 
                   <div className="mt-4 space-y-2">
@@ -430,7 +412,7 @@ export default function Home() {
                             className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5 disabled:opacity-50"
                             title="Delete this reflection"
                           >
-                            {deletingIds[it.id] ? "Deleting…" : "Delete"}
+                            {deletingIds[it.id] ? 'Deleting…' : 'Delete'}
                           </button>
                         </div>
 

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Providers from './providers';
 import Link from 'next/link';
+import ClientToaster from '@/components/ClientToaster';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import Providers from './providers';
 
 export const metadata: Metadata = {
   title: 'Story of Emergence',
@@ -14,9 +15,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen bg-black text-white">
         <Providers>
+            <ClientToaster />
           <header className="sticky top-0 z-10 border-b border-white/10 bg-black/60 backdrop-blur">
             <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-              <Link href="/" className="font-semibold">Story of Emergence</Link>
+              <Link href="/" className="font-semibold">
+                Story of Emergence
+              </Link>
               <ConnectButton />
             </div>
           </header>
