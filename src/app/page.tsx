@@ -6,7 +6,7 @@ import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from '../components/ExportButton';
 
 // react + ui
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
@@ -16,11 +16,10 @@ import { incSaveCount, messageForSave } from '@/app/lib/toast';
 import { getSupabaseForWallet } from './lib/supabase';
 import { keyFromSignatureHex, encryptJSON, decryptJSON, tryDecodeLegacyJSON } from '../lib/crypto';
 
-type Reflection = { mood: string; note: string; ts: string; };
-
 type Item = {
   id: string;
   ts: string;
+  deleted_at?: string | null;
   note: string; // plaintext after decrypt
 };
 
@@ -43,22 +42,28 @@ export default function Home() {
   });
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const { switchChain, isPending: switching } = useSwitchChain();
-  const sb = getSupabaseForWallet(address);
+  const sb = useMemo(() => getSupabaseForWallet(address ?? ''), [address]);
 
   // ---- local state ----
   const [status, setStatus] = useState('');
   const [note, setNote] = useState('first test reflection from Story of Emergence');
   const [items, setItems] = useState<Item[]>([]);
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const [loadingList, setLoadingList] = useState(false);
-  const textRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const signingConsentRef = useRef(false);
   const [saving, setSaving] = useState(false);
 
   // cache the consent signature so we don’t re-prompt every time this session
   const [consentSig, setConsentSig] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const s = sessionStorage.getItem('soe-consent-sig');
+    if (s) setConsentSig(s);
+  }, []);
+
+  // autosize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -70,20 +75,13 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Load consent signature for this browser tab (avoid re-signing after refresh)
-  useEffect(() => {
-    const s = sessionStorage.getItem('soe-consent-sig');
-    if (s) setConsentSig(s);
-  }, []);
-
   // expose wallet and decrypted items for ExportButton
   useEffect(() => {
-    (globalThis as any).__soeWallet = address ?? ""
-  }, [address])
-
+    (globalThis as any).__soeWallet = address ?? '';
+  }, [address]);
   useEffect(() => {
-    (globalThis as any).__soeDecryptedEntries = items
-  }, [items])
+    (globalThis as any).__soeDecryptedEntries = items;
+  }, [items]);
 
   // If the wallet account changes, drop any previous session signature (wrong key)
   useEffect(() => {
@@ -92,15 +90,13 @@ export default function Home() {
   }, [address]);
 
   const connected = isConnected && !!address;
+  const w = (address ?? '').toLowerCase();
 
   // auto-load when connected (and after mount)
   useEffect(() => {
     if (!mounted) return;
     if (!connected) return;
-    // don’t spam if we already have items
-    if (items.length > 0) return;
-    // if we already have a cached consent signature, this will not re-prompt;
-    // otherwise MetaMask will pop once.
+    if (items.length > 0) return; // don’t spam if we already have items
     loadMyReflections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, connected]);
@@ -111,14 +107,11 @@ export default function Home() {
   async function getSessionKey(): Promise<CryptoKey> {
     if (!connected || !address) throw new Error('Connect wallet first');
 
-    // reuse cached signature if we have it
     let sig = consentSig;
 
     if (!sig) {
-      // prevent multiple concurrent popups
       if (signingConsentRef.current) {
         setStatus('Signature already pending — check MetaMask.');
-        // return a rejected promise that we’ll silently ignore in callers
         throw new Error('PENDING_SIG');
       }
       signingConsentRef.current = true;
@@ -141,7 +134,7 @@ export default function Home() {
   // ---- load my reflections (fetch → decrypt → show plaintext) ----
   async function loadMyReflections() {
     try {
-      if (!isConnected || !address) {
+      if (!connected) {
         setStatus('Connect wallet first');
         return;
       }
@@ -149,57 +142,58 @@ export default function Home() {
       setLoadingList(true);
       setStatus('Fetching your entries…');
 
-      // 1) fetch your rows from Supabase (skip soft-deleted; fetch up to 100)
-      const { data, error } = await sb
+      // Build query once
+      let q = sb
         .from('entries')
         .select('id, created_at, ciphertext, deleted_at')
-        .eq('wallet_address', address)
-        .is('deleted_at', null)
+        .eq('wallet_address', w)
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (error) throw error;
+      if (!showDeleted) q = q.is('deleted_at', null);
 
-      // 2) prepare key
+      const { data: rows, error: listErr } = await q;
+      if (listErr) throw listErr;
+
+      // prepare key
       setStatus('Preparing decryption key…');
       const key = await getSessionKey();
 
-      // 3) decrypt each row safely (legacy → AES → fallback)
+      // decrypt each row (legacy → AES → fallback)
       const next: Item[] = [];
-      for (const row of data ?? []) {
-        // legacy base64(JSON) decode for earliest rows
+      for (const row of rows ?? []) {
         const legacy = tryDecodeLegacyJSON(row.ciphertext as string);
         if (legacy) {
           next.push({
             id: row.id,
             ts: row.created_at,
+            deleted_at: row.deleted_at,
             note: typeof legacy?.note === 'string' ? legacy.note : JSON.stringify(legacy),
           });
           continue;
         }
 
-        // AES-GCM decrypt
         try {
           const obj = await decryptJSON(row.ciphertext as string, key);
           next.push({
             id: row.id,
             ts: row.created_at,
+            deleted_at: row.deleted_at,
             note: typeof obj?.note === 'string' ? obj.note : JSON.stringify(obj),
           });
         } catch {
-          // ciphertext preview fallback
           const ct = (row.ciphertext ?? '') as string;
           next.push({
             id: row.id,
             ts: row.created_at,
+            deleted_at: row.deleted_at,
             note: ct.length ? `[unable to decrypt] ${ct.slice(0, 60)}…` : '[no ciphertext]',
           });
         }
       }
 
-      // 4) update UI
       setItems(next);
-      setStatus(next.length ? '' : 'No entries yet.');
+      setStatus(next.length ? '' : showDeleted ? 'Trash is empty.' : 'No entries yet.');
     } catch (e: any) {
       setStatus(`Error: ${e?.message ?? 'Load failed'}`);
     } finally {
@@ -210,7 +204,7 @@ export default function Home() {
   // ---- save one reflection (plaintext -> AES encrypt -> insert) ----
   async function saveReflection() {
     try {
-      if (!isConnected || !address) {
+      if (!connected) {
         setStatus('Connect wallet first');
         return;
       }
@@ -222,36 +216,31 @@ export default function Home() {
         return;
       }
 
-      // lock submit + show signing/encryption progress
       signLockRef.current = true;
       setSaving(true);
       setStatus('Preparing encryption key…');
       toast.message('Requesting signature in MetaMask…');
 
-      // derive per-session key (use your existing helper)
       const key = await getSessionKey();
 
-      // build the payload you want to store (note stays client-side)
       const item = {
         id: crypto.randomUUID(),
         ts: new Date().toISOString(),
         note: text,
       };
 
-      // encrypt, then store ciphertext only
       const ciphertext = await encryptJSON(item, key);
-      const { error } = await sb
+      const { data: insRow, error: insErr } = await sb
         .from('entries')
-        .insert({ wallet_address: address, ciphertext });
+        .insert({ wallet_address: w, ciphertext })
+        .select('id')
+        .single();
 
-      if (error) throw error;
+      if (insErr) throw insErr;
 
-      // success UX
       setStatus('Saved (AES)!');
       const n = incSaveCount();
       toast.success(messageForSave(n));
-
-      // clear input and keep focus
       setNote('');
       textareaRef.current?.focus();
     } catch (e: any) {
@@ -264,33 +253,84 @@ export default function Home() {
     }
   }
 
+  // ---- soft-delete one item ----
   async function deleteEntry(id: string) {
     try {
-      const ok = window.confirm('Delete this reflection permanently?');
+      if (!connected) {
+        setStatus('Connect wallet first');
+        return;
+      }
+      const ok = window.confirm('Delete this reflection (move to Trash)?');
       if (!ok) return;
 
       setDeletingIds((m) => ({ ...m, [id]: true }));
       setStatus('Deleting…');
 
-      // IMPORTANT: use wallet-scoped client and soft delete
-      const { error } = await sb
+      // Preflight: visible under RLS?
+      const { data: preRows, error: preErr } = await sb
         .from('entries')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+        .select('id, deleted_at', { count: 'exact', head: false })
+        .eq('id', id)
+        .eq('wallet_address', w)
+        .limit(2);
 
-      if (error) throw error;
+      if (preErr) throw preErr;
+      if (!preRows?.length) throw new Error('Row not visible to you (RLS)');
+      if (preRows.length > 1) throw new Error('Duplicate id matched (unexpected)');
 
-      // remove from UI
-      setItems((prev) => prev.filter((it) => it.id !== id));
+     
+      // Soft-delete (no SELECT required)
+const { error: delErr } = await sb
+  .from('entries')
+  .update({ deleted_at: new Date().toISOString() })
+  .eq('id', id)
+  .eq('wallet_address', w)
+  .is('deleted_at', null);
+
+if (delErr) throw delErr;
+
+
+      // Optimistic UI
+      setItems((prev) =>
+        prev.map((it) => (it.id === id ? { ...it, deleted_at: new Date().toISOString() } : it))
+      );
       setStatus('Deleted.');
     } catch (e: any) {
       console.error(e);
-      setStatus(`Delete failed: ${e?.message ?? String(e)}`);
+      setStatus(`Delete failed: ${e?.message ?? 'Update denied (RLS)'}`);
     } finally {
       setDeletingIds((m) => {
         const { [id]: _gone, ...rest } = m;
         return rest;
       });
+    }
+  }
+
+  // ---- restore from trash ----
+  async function restoreEntry(id: string) {
+    try {
+      if (!connected) {
+        setStatus('Connect wallet first');
+        return;
+      }
+      setStatus('Restoring…');
+
+      const { data: resRow, error: resErr } = await sb
+        .from('entries')
+        .update({ deleted_at: null })
+        .eq('id', id)
+        .eq('wallet_address', w)
+        .select('id')
+        .single();
+
+      if (resErr) throw resErr;
+      if (!resRow) throw new Error('No row returned (not your row?)');
+
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, deleted_at: null } : it)));
+      setStatus('Restored.');
+    } catch (e: any) {
+      console.error(e);
+      setStatus(`Restore failed: ${e?.message ?? 'Update denied (RLS)'}`);
     }
   }
 
@@ -317,6 +357,30 @@ export default function Home() {
                 <span className="font-mono">{shortAddr}</span>
               </div>
 
+              <div className="flex items-center justify-between mt-3">
+                <div className="flex gap-3">
+                  <button
+                    onClick={loadMyReflections}
+                    disabled={!isConnected || loadingList}
+                    className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {loadingList ? 'Loading…' : 'Reload'}
+                  </button>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={showDeleted}
+                    onChange={(e) => {
+                      setShowDeleted(e.target.checked);
+                      loadMyReflections();
+                    }}
+                  />
+                  Show deleted (Trash)
+                </label>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-white/70">Network</span>
                 <div className="flex items-center gap-3">
@@ -327,7 +391,7 @@ export default function Home() {
                       disabled={switching}
                       className="rounded-xl border border-white/20 px-3 py-1 hover:bg-white/5 disabled:opacity-50"
                     >
-                      {switching ? "Switching…" : "Switch to Base Sepolia"}
+                      {switching ? 'Switching…' : 'Switch to Base Sepolia'}
                     </button>
                   )}
                 </div>
@@ -336,7 +400,7 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <span className="text-white/70">Balance</span>
                 <span className="font-mono">
-                  {balLoading ? "…" : balance ? `${balance.formatted} ${balance.symbol}` : "—"}
+                  {balLoading ? '…' : balance ? `${balance.formatted} ${balance.symbol}` : '—'}
                 </span>
               </div>
             </div>
@@ -350,13 +414,13 @@ export default function Home() {
               <button
                 onClick={async () => {
                   if (!isConnected) {
-                    setStatus("Connect wallet first");
+                    setStatus('Connect wallet first');
                     return;
                   }
-                  setStatus("Check MetaMask and click Sign…");
+                  setStatus('Check MetaMask and click Sign…');
                   try {
-                    await signMessageAsync({ message: "Hello from Story of Emergence" });
-                    setStatus("Signed!");
+                    await signMessageAsync({ message: 'Hello from Story of Emergence' });
+                    setStatus('Signed!');
                   } catch (e: any) {
                     setStatus(humanizeSignError(e));
                   }
@@ -364,7 +428,7 @@ export default function Home() {
                 disabled={signing}
                 className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
               >
-                {signing ? "Waiting for signature…" : "Sign a message"}
+                {signing ? 'Waiting for signature…' : 'Sign a message'}
               </button>
             </div>
 
@@ -389,7 +453,7 @@ export default function Home() {
                   disabled={!isConnected || saving || signLockRef.current}
                   className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
                 >
-                  {saving ? "Saving…" : "Save encrypted"}
+                  {saving ? 'Saving…' : 'Save encrypted'}
                 </button>
 
                 <button
@@ -397,7 +461,7 @@ export default function Home() {
                   disabled={!isConnected || loadingList}
                   className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
                 >
-                  {loadingList ? "Loading…" : "Load my reflections"}
+                  {loadingList ? 'Loading…' : 'Load my reflections'}
                 </button>
               </div>
 
@@ -413,7 +477,7 @@ export default function Home() {
                 <>
                   {/* Export toolbar */}
                   <div className="mb-3 flex justify-end">
-                    <ExportButton walletAddress={address ?? ""} items={items} />
+                    <ExportButton walletAddress={address ?? ''} items={items} />
                   </div>
 
                   <div className="mt-4 space-y-2">
@@ -422,16 +486,29 @@ export default function Home() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="text-xs text-white/50">
                             {new Date(it.ts).toLocaleString()}
+                            {it.deleted_at ? ' • in Trash' : ''}
                           </div>
 
-                          <button
-                            onClick={() => deleteEntry(it.id)}
-                            disabled={!!deletingIds[it.id]}
-                            className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5 disabled:opacity-50"
-                            title="Delete this reflection"
-                          >
-                            {deletingIds[it.id] ? "Deleting…" : "Delete"}
-                          </button>
+                          <div className="flex gap-2">
+                            {it.deleted_at ? (
+                              <button
+                                onClick={() => restoreEntry(it.id)}
+                                className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5"
+                                title="Restore this reflection"
+                              >
+                                Restore
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => deleteEntry(it.id)}
+                                disabled={!!deletingIds[it.id]}
+                                className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5 disabled:opacity-50"
+                                title="Delete this reflection"
+                              >
+                                {deletingIds[it.id] ? 'Deleting…' : 'Delete'}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-2 whitespace-pre-wrap break-words">{it.note}</div>
