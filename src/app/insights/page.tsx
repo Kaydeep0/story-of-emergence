@@ -269,12 +269,29 @@ export default function InsightsPage() {
 
         {/* Summary placeholder */}
         {mode === 'summary' && (
-          <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4">
-            <div className="text-4xl opacity-40">✨</div>
-            <h2 className="text-lg font-medium">Always-on summary is coming soon</h2>
-            <p className="text-sm text-white/60 max-w-md mx-auto">
-              This view will give you periodic summaries of your recent reflections, highlighting patterns and themes in your activity.
-            </p>
+          <div className="mt-8 space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-zinc-50">
+                Summary view
+              </h2>
+              <p className="text-sm text-zinc-400 max-w-xl">
+                This space is reserved for high-level insights about your encrypted
+                activity. In later phases, this view will stay private but show:
+              </p>
+              <ul className="list-disc pl-6 text-sm text-zinc-300 space-y-1">
+                <li>How often you write and on which days</li>
+                <li>Recent streaks and "quiet" periods</li>
+                <li>Which sources you're engaging with the most</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <p className="text-sm text-zinc-300">
+                For now, use the <span className="font-medium">Timeline</span> tab to
+                see a time-ordered list of your activity. As we build the private
+                insights engine, this Summary tab will light up automatically.
+              </p>
+            </div>
           </div>
         )}
 
