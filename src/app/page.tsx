@@ -24,6 +24,8 @@ import {
   deleteDraft,
   renameDraft,
   migrateLegacyDraft,
+  moveDraftUp,
+  moveDraftDown,
 } from "./lib/drafts";
 import { rpcInsertInternalEvent } from "./lib/internalEvents";
 import { useLogEvent } from "./lib/useLogEvent";
@@ -136,7 +138,12 @@ const activeCount = useMemo(
 
 const lastSaved = useMemo(() => {
   if (items.length === 0) return null;
-  const maxTs = Math.max(...items.map(i => Number(i.ts)));
+  // Parse ISO strings to timestamps, filter out any invalid dates
+  const timestamps = items
+    .map(i => new Date(i.ts).getTime())
+    .filter(ts => !isNaN(ts));
+  if (timestamps.length === 0) return null;
+  const maxTs = Math.max(...timestamps);
   return new Date(maxTs);
 }, [items]);
 
@@ -603,7 +610,7 @@ async function deleteForever(id: string) {
           {items.length > 0 && (
   <p className="text-xs text-white/60 mt-1">
     {activeCount} active · {trashCount} in Trash · last saved{" "}
-    {lastSaved ? lastSaved.toLocaleString() : "—"}
+    {lastSaved ? lastSaved.toLocaleString() : "not available"}
   </p>
 )}
 
@@ -622,9 +629,11 @@ async function deleteForever(id: string) {
             >
               + New draft
             </button>
-            {drafts.map((d) => {
+            {drafts.map((d, index) => {
               const isActive = d.id === activeDraftId;
               const isRenaming = renamingId === d.id;
+              const isFirst = index === 0;
+              const isLast = index === drafts.length - 1;
 
               const handleConfirmRename = () => {
                 const trimmed = renameValue.trim();
@@ -644,7 +653,7 @@ async function deleteForever(id: string) {
               };
 
               return (
-                <div key={d.id} className="flex items-center gap-1">
+                <div key={d.id} className="flex items-center gap-1.5">
                   {isRenaming ? (
                     <input
                       autoFocus
@@ -665,45 +674,70 @@ async function deleteForever(id: string) {
                       }}
                       className={`text-xs rounded-lg border px-2 py-1 max-w-[120px] truncate ${
                         isActive
-                          ? 'bg-white text-black border-white font-medium'
+                          ? 'bg-white text-black border-white font-medium shadow-sm ring-1 ring-white/30'
                           : 'bg-transparent text-white/70 border-white/20 hover:text-white hover:bg-white/5'
                       }`}
                       title={d.content.slice(0, 100) || 'Empty draft'}
+                      aria-current={isActive ? "true" : undefined}
                     >
                       {d.title}
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      setRenamingId(d.id);
-                      setRenameValue(d.title);
-                    }}
-                    className="text-xs text-white/50 hover:text-white/80 px-1"
-                    title="Rename draft"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => {
-                      deleteDraft(d.id);
-                      const updated = loadDrafts();
-                      setDrafts(updated);
-                      // If the active draft was deleted, switch to next available
-                      if (activeDraftId === d.id) {
-                        if (updated.length > 0) {
-                          setActiveDraftId(updated[0].id);
-                          setNote(updated[0].content);
-                        } else {
-                          setActiveDraftId(null);
-                          setNote('');
+                  {/* Icon controls with slight gap from draft name */}
+                  <div className="flex items-center gap-0.5 ml-1">
+                    {/* Reorder buttons */}
+                    <button
+                      onClick={() => setDrafts(moveDraftUp(d.id))}
+                      disabled={isFirst}
+                      className="text-xs text-white/50 hover:text-white/80 px-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move draft up"
+                      aria-label="Move draft up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => setDrafts(moveDraftDown(d.id))}
+                      disabled={isLast}
+                      className="text-xs text-white/50 hover:text-white/80 px-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move draft down"
+                      aria-label="Move draft down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRenamingId(d.id);
+                        setRenameValue(d.title);
+                      }}
+                      className="text-xs text-white/50 hover:text-white/80 px-1"
+                      title="Rename draft"
+                      aria-label="Rename draft"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => {
+                        deleteDraft(d.id);
+                        const updated = loadDrafts();
+                        setDrafts(updated);
+                        // If the active draft was deleted, switch to next available
+                        if (activeDraftId === d.id) {
+                          if (updated.length > 0) {
+                            setActiveDraftId(updated[0].id);
+                            setNote(updated[0].content);
+                          } else {
+                            setActiveDraftId(null);
+                            setNote('');
+                          }
                         }
-                      }
-                    }}
-                    className="text-xs text-white/50 hover:text-rose-400 px-1"
-                    title="Delete draft"
-                  >
-                    🗑️
-                  </button>
+                      }}
+                      className="text-xs text-white/50 hover:text-rose-400 px-1"
+                      title="Delete draft"
+                      aria-label="Delete draft"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               );
             })}

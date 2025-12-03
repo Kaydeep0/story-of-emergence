@@ -91,6 +91,28 @@ export function deleteDraft(id: string): void {
   saveDrafts(filtered);
 }
 
+/** Move a draft up in the list (swap with previous) */
+export function moveDraftUp(id: string): Draft[] {
+  const drafts = loadDrafts();
+  const idx = drafts.findIndex(d => d.id === id);
+  if (idx <= 0) return drafts; // already first or not found
+  // Swap with previous
+  [drafts[idx - 1], drafts[idx]] = [drafts[idx], drafts[idx - 1]];
+  saveDrafts(drafts);
+  return drafts;
+}
+
+/** Move a draft down in the list (swap with next) */
+export function moveDraftDown(id: string): Draft[] {
+  const drafts = loadDrafts();
+  const idx = drafts.findIndex(d => d.id === id);
+  if (idx === -1 || idx >= drafts.length - 1) return drafts; // already last or not found
+  // Swap with next
+  [drafts[idx], drafts[idx + 1]] = [drafts[idx + 1], drafts[idx]];
+  saveDrafts(drafts);
+  return drafts;
+}
+
 /** Get a single draft by ID */
 export function getDraft(id: string): Draft | null {
   const drafts = loadDrafts();
