@@ -33,6 +33,17 @@ Phase One: Complete
 ✓ Cursor refactor of insights/page.tsx
 ✓ Final design option chosen (A)
 
+Phase 1.5: Local UX Enhancements
+Status: complete
+
+Includes
+• Multi draft system with titles stored in localStorage  
+• Inline rename for drafts with Enter and Escape behavior  
+• Delete button support and safe active-draft switching  
+• Updated JSON export with metadata, wallet prefix, and versioned filename  
+• No Supabase changes or encryption-path changes  
+
+
 Next steps (Phase Two):
 1. Local multi-draft system (save unfinished drafts in localStorage)
 2. JSON export of decrypted reflections (client-side only)

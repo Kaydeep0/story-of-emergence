@@ -22,6 +22,7 @@ import {
   createDraft,
   updateDraft,
   deleteDraft,
+  renameDraft,
   migrateLegacyDraft,
 } from "./lib/drafts";
 import { rpcInsertInternalEvent } from "./lib/internalEvents";
@@ -86,6 +87,10 @@ const [items, setItems] = useState<Item[]>([]);
 const [showDeleted, setShowDeleted] = useState(false);
 const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
 const trashCount = useMemo(() => items.filter(i => i.deleted_at).length, [items]);
+
+// Inline rename state
+const [renamingId, setRenamingId] = useState<string | null>(null);
+const [renameValue, setRenameValue] = useState('');
 
 
 
@@ -614,24 +619,91 @@ console.log('ex sample', items.slice(0, 2));
             >
               + New draft
             </button>
-            {drafts.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => {
-                  setActiveDraftId(d.id);
-                  setNote(d.content);
-                }}
-                className={`text-xs rounded-lg border px-2 py-1 max-w-[120px] truncate ${
-                  activeDraftId === d.id
-                    ? 'border-white/50 bg-white/10'
-                    : 'border-white/20 hover:bg-white/5'
-                }`}
-                title={d.content.slice(0, 100) || 'Empty draft'}
-              >
-                {d.content.slice(0, 20) || 'Empty draft'}
-                {d.content.length > 20 ? '…' : ''}
-              </button>
-            ))}
+            {drafts.map((d) => {
+              const isActive = d.id === activeDraftId;
+              const isRenaming = renamingId === d.id;
+
+              const handleConfirmRename = () => {
+                const trimmed = renameValue.trim();
+                if (!trimmed) {
+                  setRenamingId(null);
+                  return;
+                }
+                renameDraft(d.id, trimmed);
+                const updated = loadDrafts();
+                setDrafts(updated);
+                setRenamingId(null);
+              };
+
+              const handleCancelRename = () => {
+                setRenamingId(null);
+                setRenameValue('');
+              };
+
+              return (
+                <div key={d.id} className="flex items-center gap-1">
+                  {isRenaming ? (
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleConfirmRename();
+                        if (e.key === 'Escape') handleCancelRename();
+                      }}
+                      onBlur={handleConfirmRename}
+                      className="bg-black border border-white/30 rounded px-2 py-1 text-xs w-24 focus:outline-none focus:border-white/50"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setActiveDraftId(d.id);
+                        setNote(d.content);
+                      }}
+                      className={`text-xs rounded-lg border px-2 py-1 max-w-[120px] truncate ${
+                        isActive
+                          ? 'bg-white text-black border-white font-medium'
+                          : 'bg-transparent text-white/70 border-white/20 hover:text-white hover:bg-white/5'
+                      }`}
+                      title={d.content.slice(0, 100) || 'Empty draft'}
+                    >
+                      {d.title}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setRenamingId(d.id);
+                      setRenameValue(d.title);
+                    }}
+                    className="text-xs text-white/50 hover:text-white/80 px-1"
+                    title="Rename draft"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => {
+                      deleteDraft(d.id);
+                      const updated = loadDrafts();
+                      setDrafts(updated);
+                      // If the active draft was deleted, switch to next available
+                      if (activeDraftId === d.id) {
+                        if (updated.length > 0) {
+                          setActiveDraftId(updated[0].id);
+                          setNote(updated[0].content);
+                        } else {
+                          setActiveDraftId(null);
+                          setNote('');
+                        }
+                      }
+                    }}
+                    className="text-xs text-white/50 hover:text-rose-400 px-1"
+                    title="Delete draft"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <textarea

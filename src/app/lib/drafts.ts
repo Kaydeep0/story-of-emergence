@@ -3,6 +3,7 @@
 
 export type Draft = {
   id: string;
+  title: string;
   content: string;
   createdAt: number;   // timestamp ms
   updatedAt: number;   // timestamp ms
@@ -23,7 +24,11 @@ export function loadDrafts(): Draft[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed;
+    // Backfill missing titles for existing drafts
+    return parsed.map((d, i) => ({
+      ...d,
+      title: d.title || `Draft ${i + 1}`,
+    }));
   } catch {
     return [];
   }
@@ -36,15 +41,16 @@ function saveDrafts(drafts: Draft[]): void {
 }
 
 /** Create a new draft */
-export function createDraft(content = ''): Draft {
+export function createDraft(content = '', title?: string): Draft {
   const now = Date.now();
+  const drafts = loadDrafts();
   const draft: Draft = {
     id: generateId(),
+    title: title ?? `Draft ${drafts.length + 1}`,
     content,
     createdAt: now,
     updatedAt: now,
   };
-  const drafts = loadDrafts();
   drafts.unshift(draft); // newest first
   saveDrafts(drafts);
   return draft;
@@ -58,6 +64,20 @@ export function updateDraft(id: string, content: string): Draft | null {
   drafts[idx] = {
     ...drafts[idx],
     content,
+    updatedAt: Date.now(),
+  };
+  saveDrafts(drafts);
+  return drafts[idx];
+}
+
+/** Rename a draft */
+export function renameDraft(id: string, title: string): Draft | null {
+  const drafts = loadDrafts();
+  const idx = drafts.findIndex(d => d.id === id);
+  if (idx === -1) return null;
+  drafts[idx] = {
+    ...drafts[idx],
+    title,
     updatedAt: Date.now(),
   };
   saveDrafts(drafts);
