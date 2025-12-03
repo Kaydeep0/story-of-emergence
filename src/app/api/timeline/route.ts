@@ -21,10 +21,13 @@ export async function GET(request: Request) {
 
     // Uses RPC to respect Row Level Security policies
     const { data, error } = await supabase.rpc('list_internal_events', {
-      w: walletAddress.toLowerCase(),
-      lim: 50,
-      off: 0,
+      w: walletAddress,
+      p_limit: 50,
+      p_offset: 0,
     });
+    
+    
+    
 
     
 

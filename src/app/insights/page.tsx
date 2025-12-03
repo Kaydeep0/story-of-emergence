@@ -8,6 +8,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { rpcListInternalEvents } from '../lib/internalEvents';
 import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
 import { keyFromSignatureHex } from '../../lib/crypto';
+import { useLogEvent } from '../lib/useLogEvent';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -54,6 +55,17 @@ export default function InsightsPage() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
 
+  // Summary state
+  const [summaryData, setSummaryData] = useState<{
+    streak: number;
+    entries: number;
+    totalEvents: number;
+    lastActiveAt: string | null;
+  } | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const { logEvent } = useLogEvent();
   const connected = isConnected && !!address;
 
   useEffect(() => {
@@ -61,6 +73,12 @@ export default function InsightsPage() {
     const s = sessionStorage.getItem('soe-consent-sig');
     if (s) setConsentSig(s);
   }, []);
+
+  // Log navigation event when page loads
+  useEffect(() => {
+    if (!mounted || !connected) return;
+    logEvent('page_insights');
+  }, [mounted, connected, logEvent]);
 
   // Reset signature when wallet changes
   useEffect(() => {
@@ -166,6 +184,51 @@ export default function InsightsPage() {
     };
   }, [mode]);
 
+  // Load summary data when Summary mode is active
+  useEffect(() => {
+    if (mode !== 'summary') return;
+    if (!connected || !address) return;
+
+    let cancelled = false;
+
+    async function loadSummary() {
+      try {
+        setSummaryLoading(true);
+        setSummaryError(null);
+
+        const res = await fetch('/api/summary', {
+          headers: {
+            'x-wallet-address': address.toLowerCase(),
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to load summary');
+        }
+
+        const json = await res.json();
+
+        if (!cancelled) {
+          setSummaryData(json);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setSummaryError(err.message ?? 'Failed to load summary');
+        }
+      } finally {
+        if (!cancelled) {
+          setSummaryLoading(false);
+        }
+      }
+    }
+
+    loadSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, connected, address]);
+
   if (!mounted) return null;
 
   // Derive latest insight if available
@@ -267,31 +330,82 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {/* Summary placeholder */}
+        {/* Summary view */}
         {mode === 'summary' && (
           <div className="mt-8 space-y-6">
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-zinc-50">
-                Summary view
-              </h2>
-              <p className="text-sm text-zinc-400 max-w-xl">
-                This space is reserved for high-level insights about your encrypted
-                activity. In later phases, this view will stay private but show:
-              </p>
-              <ul className="list-disc pl-6 text-sm text-zinc-300 space-y-1">
-                <li>How often you write and on which days</li>
-                <li>Recent streaks and "quiet" periods</li>
-                <li>Which sources you're engaging with the most</li>
-              </ul>
-            </div>
+            {/* Not connected state */}
+            {!connected && (
+              <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
+                <h2 className="text-lg font-medium">Connect your wallet</h2>
+                <p className="text-sm text-white/60">
+                  Connect your wallet to view your summary statistics.
+                </p>
+                <div className="flex justify-center">
+                  <ConnectButton />
+                </div>
+              </div>
+            )}
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-              <p className="text-sm text-zinc-300">
-                For now, use the <span className="font-medium">Timeline</span> tab to
-                see a time-ordered list of your activity. As we build the private
-                insights engine, this Summary tab will light up automatically.
-              </p>
-            </div>
+            {/* Loading state */}
+            {connected && summaryLoading && (
+              <div className="rounded-2xl border border-white/10 p-6 space-y-4 animate-pulse">
+                <div className="h-6 bg-white/10 rounded w-1/3" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="h-24 bg-white/5 rounded-xl" />
+                  <div className="h-24 bg-white/5 rounded-xl" />
+                </div>
+              </div>
+            )}
+
+            {/* Error state */}
+            {connected && !summaryLoading && summaryError && (
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
+                <p className="text-sm text-rose-400">{summaryError}</p>
+              </div>
+            )}
+
+            {/* Summary data */}
+            {connected && !summaryLoading && !summaryError && summaryData && (
+              <>
+                <div className="rounded-2xl border border-white/10 p-6 space-y-4">
+                  <h2 className="text-lg font-semibold text-zinc-50">
+                    Your Activity Summary
+                  </h2>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-3xl font-semibold">{summaryData.streak}</div>
+                      <div className="text-xs text-white/50 mt-1">Day streak</div>
+                    </div>
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-3xl font-semibold">{summaryData.entries}</div>
+                      <div className="text-xs text-white/50 mt-1">Total reflections</div>
+                    </div>
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-3xl font-semibold">{summaryData.totalEvents}</div>
+                      <div className="text-xs text-white/50 mt-1">Total events</div>
+                    </div>
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-sm font-medium">
+                        {summaryData.lastActiveAt
+                          ? new Date(summaryData.lastActiveAt).toLocaleDateString()
+                          : '—'}
+                      </div>
+                      <div className="text-xs text-white/50 mt-1">Last active</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Coming soon</p>
+                  <ul className="text-sm text-zinc-300 space-y-1">
+                    <li>• Writing streaks and "quiet" period detection</li>
+                    <li>• Activity heatmap by day of week</li>
+                    <li>• Source engagement breakdown</li>
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         )}
 

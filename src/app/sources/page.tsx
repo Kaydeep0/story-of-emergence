@@ -1,7 +1,28 @@
 // src/app/sources/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useAccount } from 'wagmi';
+import { useLogEvent } from '../lib/useLogEvent';
 
 export default function SourcesPage() {
+  const { address, isConnected } = useAccount();
+  const { logEvent } = useLogEvent();
+  const [mounted, setMounted] = useState(false);
+
+  const connected = isConnected && !!address;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Log navigation event when page loads
+  useEffect(() => {
+    if (!mounted || !connected) return;
+    logEvent('page_sources');
+  }, [mounted, connected, logEvent]);
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto max-w-4xl px-4 py-12">

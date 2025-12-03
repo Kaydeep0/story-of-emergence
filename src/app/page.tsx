@@ -26,6 +26,7 @@ import {
   migrateLegacyDraft,
 } from "./lib/drafts";
 import { rpcInsertInternalEvent } from "./lib/internalEvents";
+import { useLogEvent } from "./lib/useLogEvent";
 
 
 
@@ -77,6 +78,15 @@ useEffect(() => setMounted(true), []);
 // derived helpers — define ONCE, above effects that use them
 const connected = isConnected && !!address;
 const w = (address ?? '').toLowerCase();
+
+// Event logging hook
+const { logEvent } = useLogEvent();
+
+// Log navigation event when page loads (connected wallet only)
+useEffect(() => {
+  if (!mounted || !connected) return;
+  logEvent('page_reflections');
+}, [mounted, connected, logEvent]);
 
 // ---- local state ----
 const [status, setStatus] = useState('');
