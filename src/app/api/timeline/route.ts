@@ -14,14 +14,17 @@ if (!url || !anonKey) {
 // This is a server-side Supabase client just for this route
 const supabase = createClient(url, anonKey);
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Uses your existing RPC. If the RPC later changes, we only fix it here.
-    const { data, error } = await supabase
-  .from('internal_events')
-  .select('*')
-  .order('event_at', { ascending: false })
-  .limit(50);
+    // Extract wallet address from header for RLS-compliant query
+    const walletAddress = request.headers.get('x-wallet-address') ?? '';
+
+    // Uses RPC to respect Row Level Security policies
+    const { data, error } = await supabase.rpc('list_internal_events', {
+      w: walletAddress.toLowerCase(),
+      lim: 50,
+      off: 0,
+    });
 
     
 

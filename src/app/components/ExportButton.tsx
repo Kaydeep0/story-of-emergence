@@ -81,6 +81,9 @@ export default function ExportButton({
       a.remove();
 
       URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Export failed. Please try again.");
     } finally {
       setExporting(false);
     }

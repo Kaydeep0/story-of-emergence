@@ -8,7 +8,7 @@
 import HealthStrip from "./components/HealthStrip";
 import ReflectionsSkeleton from '../components/ReflectionsSkeleton';
 import EmptyReflections from '../components/EmptyReflections';
-import ExportButton from '../components/ExportButton';
+import ExportButton from './components/ExportButton';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
@@ -45,7 +45,7 @@ import { keyFromSignatureHex } from '../lib/crypto';
 type Item = {
   id: string;
   ts: string;
-  deleted_at?: string | null;
+  deleted_at: string | null;
   note: string; // plaintext after decrypt
 };
 
@@ -285,7 +285,7 @@ async function loadMyReflections(reset = false) {
 
     const mapped = rows.map((i) => ({
       id: i.id,
-      ts: i.createdAt.getTime(),
+      ts: i.createdAt.toISOString(),
       deleted_at: i.deletedAt ? i.deletedAt.toISOString() : null,
       note:
         typeof i.plaintext === "object" &&
@@ -480,13 +480,6 @@ async function deleteForever(id: string) {
 
   if (!mounted) return null;
 
-
-console.log('showDeleted:', showDeleted, 'visibleItems:', visibleItems.length);
-console.log('ex sample', items.slice(0, 2));
-
-
-
-
   return (
     <main className="min-h-screen bg-black text-white">
       <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur px-4 py-2 flex items-center justify-between">
@@ -516,7 +509,7 @@ console.log('ex sample', items.slice(0, 2));
           <div className="flex items-center justify-between mt-3">
             <div className="flex gap-3">
               <button
-                onClick={loadMyReflections}
+                onClick={() => loadMyReflections(true)}
                 disabled={!isConnected || loadingList}
                 className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
               >
@@ -727,7 +720,7 @@ console.log('ex sample', items.slice(0, 2));
             </button>
 
             <button
-              onClick={loadMyReflections}
+              onClick={() => loadMyReflections(true)}
               disabled={!isConnected || loadingList}
               className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
             >
