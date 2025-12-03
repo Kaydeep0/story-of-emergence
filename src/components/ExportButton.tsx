@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { downloadJSON } from '../app/lib/export'; // <-- correct path
+import { toast } from "sonner";
+
 
 type ExportButtonProps = {
   walletAddress?: string;
@@ -26,31 +28,36 @@ export default function ExportButton({ walletAddress, items }: ExportButtonProps
   const [busy, setBusy] = useState(false);
 
   async function onExport() {
-    const list = getItemsFallback(items);
-    const addr = getWalletFallback(walletAddress);
+  const list = getItemsFallback(items);
+  const addr = getWalletFallback(walletAddress);
 
-    if (!list || list.length === 0) {
-      alert('Nothing to export yet');
-      return;
-    }
-
-    try {
-      setBusy(true);
-      const exportedAt = new Date().toISOString();
-      const payload = {
-        v: 1,
-        exported_at: exportedAt,
-        wallet_address: addr,
-        count: list.length,
-        entries: list,
-      };
-      const safeAddr = addr ? addr.slice(0, 8) : 'anon';
-      const fname = `soe_export_${safeAddr}_${exportedAt.replace(/[:.]/g, '')}.json`;
-      downloadJSON(fname, payload);
-    } finally {
-      setBusy(false);
-    }
+  if (!list || list.length === 0) {
+    toast.error("Nothing to export yet");
+    return;
   }
+
+  try {
+    setBusy(true);
+    const exportedAt = new Date().toISOString();
+    const payload = {
+      v: 1,
+      exported_at: exportedAt,
+      wallet_address: addr,
+      count: list.length,
+      entries: list,
+    };
+    const safeAddr = addr ? addr.slice(0, 8) : "anon";
+    const fname = `soe_export_${safeAddr}_${exportedAt.replace(/[:.]/g, "")}.json`;
+    downloadJSON(fname, payload);
+    toast.success("Exported JSON");
+  } catch (err: any) {
+    console.error(err);
+    toast.error("Export failed");
+  } finally {
+    setBusy(false);
+  }
+}
+
 
   return (
     <button

@@ -1,5 +1,7 @@
-// src/lib/crypto.ts
+// src/app/lib/crypto.ts
 console.log('[crypto] loaded');
+
+// --- helpers ---
 
 // Convert "0x..." hex string to bytes
 function hexToBytes(hex: string): Uint8Array {
@@ -12,8 +14,7 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-// Ask the wallet to sign a fixed message and derive an AES key from the signature.
-// This costs $0 and just shows a sign prompt in your wallet.
+// --- key derivation (consent signature → AES key) ---
 export async function deriveKeyFromSignature(address: string): Promise<CryptoKey> {
   if (!(window as any)?.ethereum) throw new Error('No wallet detected');
 
@@ -27,6 +28,8 @@ export async function deriveKeyFromSignature(address: string): Promise<CryptoKey
   const digest = await crypto.subtle.digest('SHA-256', sigBytes); // 32 bytes
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
+
+// --- legacy encrypt/decrypt (used in early versions) ---
 
 // Encrypt a JSON object -> base64(iv || ciphertext)
 export async function encryptJSON(obj: any, key: CryptoKey): Promise<string> {
@@ -44,7 +47,7 @@ export async function encryptJSON(obj: any, key: CryptoKey): Promise<string> {
   return btoa(s);
 }
 
-// (Optional) Decrypt base64(iv || ciphertext) -> JSON object
+// Decrypt base64(iv || ciphertext) -> JSON object
 export async function decryptJSON(b64: string, key: CryptoKey): Promise<any> {
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const iv = raw.slice(0, 12);
@@ -52,19 +55,46 @@ export async function decryptJSON(b64: string, key: CryptoKey): Promise<any> {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
   return JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
 }
-// --- derive an AES key from a hex signature (using existing hexToBytes) ---
+
+// --- derive an AES key directly from a hex signature ---
 export async function keyFromSignatureHex(hexSig: string): Promise<CryptoKey> {
-  const sigBytes = hexToBytes(hexSig); // hexToBytes already exists above
+  const sigBytes = hexToBytes(hexSig);
   const digest = await crypto.subtle.digest('SHA-256', sigBytes);
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
-// Best-effort decode for the very first placeholder saves (no AES, just base64 JSON)
+
+// --- legacy fallback for plain base64 JSON ---
 export function tryDecodeLegacyJSON(b64: string): any | null {
   try {
-    // quick sniff: many base64 JSON strings start with "ey" (for '{"' )
     const txt = atob(b64);
     return JSON.parse(txt);
   } catch {
     return null;
   }
+}
+
+// --- v1 AES-GCM wrappers (real encryption layer) ---
+// Format: "v1:" + base64( iv(12 bytes) || ciphertext+tag )
+export async function aesGcmEncryptText(key: CryptoKey, plaintext: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(plaintext);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+
+  const payload = new Uint8Array(iv.length + (ct as ArrayBuffer).byteLength);
+  payload.set(iv, 0);
+  payload.set(new Uint8Array(ct), iv.length);
+
+  let s = '';
+  for (let i = 0; i < payload.length; i++) s += String.fromCharCode(payload[i]);
+  return `v1:${btoa(s)}`;
+}
+
+export async function aesGcmDecryptText(key: CryptoKey, packed: string): Promise<string> {
+  if (!packed.startsWith('v1:')) throw new Error('Unsupported ciphertext format');
+  const b64 = packed.slice(3);
+  const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const iv = raw.slice(0, 12);
+  const ct = raw.slice(12);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return new TextDecoder().decode(new Uint8Array(pt));
 }

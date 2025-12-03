@@ -1,65 +1,112 @@
-'use client';
+"use client";
 
-import { useState } from "react"
-import { downloadJSON } from "../lib/export"
+import { useMemo, useState } from "react";
 
-type ExportButtonProps = {
-  walletAddress?: string
-  items?: unknown[]
-}
+type ExportItem = {
+  id: string;
+  ts: string;
+  note: string;
+  deleted_at: string | null;
+};
 
-function getItemsFallback(items?: unknown[]) {
-  if (Array.isArray(items)) return items
-  const g = globalThis as any
-  if (Array.isArray(g.__soeDecryptedEntries)) return g.__soeDecryptedEntries as unknown[]
-  return []
-}
+type ExportScope = "visible" | "active" | "trash" | "all";
 
-function getWalletFallback(wallet?: string) {
-  if (wallet && wallet.length) return wallet
-  const g = globalThis as any
-  if (typeof g.__soeWallet === "string") return g.__soeWallet as string
-  return ""
-}
+type Props = {
+  walletAddress: string;
+  visibleItems: ExportItem[];
+  allItems: ExportItem[];
+};
 
-export default function ExportButton({ walletAddress, items }: ExportButtonProps) {
-  const [busy, setBusy] = useState(false)
+export default function ExportButton({
+  walletAddress,
+  visibleItems,
+  allItems,
+}: Props) {
+  const [scope, setScope] = useState<ExportScope>("visible");
+  const [exporting, setExporting] = useState(false);
 
-  async function onExport() {
-    const list = getItemsFallback(items)
-    const addr = getWalletFallback(walletAddress)
+  const dataToExport = useMemo(() => {
+    let base: ExportItem[];
 
-    if (!list || list.length === 0) {
-      alert("Nothing to export yet")
-      return
+    switch (scope) {
+      case "visible":
+        base = visibleItems;
+        break;
+      case "active":
+        base = allItems.filter((it) => !it.deleted_at);
+        break;
+      case "trash":
+        base = allItems.filter((it) => !!it.deleted_at);
+        break;
+      case "all":
+      default:
+        base = allItems;
+        break;
+    }
+
+    return base;
+  }, [scope, visibleItems, allItems]);
+
+  function handleExport() {
+    if (dataToExport.length === 0) {
+      // simple guard
+      alert("Nothing to export for this selection.");
+      return;
     }
 
     try {
-      setBusy(true)
-      const exportedAt = new Date().toISOString()
-      const payload = {
-        v: 1,
-        exported_at: exportedAt,
-        wallet_address: addr,
-        count: list.length,
-        entries: list,
-      }
-      const safeAddr = addr ? addr.slice(0, 8) : "anon"
-      const fname = `soe_export_${safeAddr}_${exportedAt.replace(/[:.]/g, "")}.json`
-      downloadJSON(fname, payload)
+      setExporting(true);
+
+      const payload = dataToExport.map((it) => ({
+        id: it.id,
+        created_at: it.ts,
+        note: it.note,
+        deleted_at: it.deleted_at,
+      }));
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const addr = walletAddress || "wallet";
+      const scopeLabel = scope;
+
+      a.href = url;
+      a.download = `${addr}-reflections-${scopeLabel}-${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
     } finally {
-      setBusy(false)
+      setExporting(false);
     }
   }
 
   return (
-    <button
-      onClick={onExport}
-      disabled={busy}
-      className="px-3 py-2 rounded-xl shadow text-sm border border-neutral-300 disabled:opacity-60"
-      title="Export decrypted reflections as JSON"
-    >
-      {busy ? "Exporting..." : "Export JSON"}
-    </button>
-  )
+    <div className="flex items-center gap-2">
+      <select
+        value={scope}
+        onChange={(e) => setScope(e.target.value as ExportScope)}
+        className="rounded-xl border border-white/20 bg-black px-2 py-1 text-xs text-white/80"
+      >
+        <option value="visible">Visible only</option>
+        <option value="active">All active</option>
+        <option value="trash">Trash only</option>
+        <option value="all">All entries</option>
+      </select>
+
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exporting}
+        className="rounded-xl border border-white/20 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-50"
+      >
+        {exporting ? "Exporting…" : "Export JSON"}
+      </button>
+    </div>
+  );
 }

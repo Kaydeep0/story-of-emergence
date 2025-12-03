@@ -1,20 +1,45 @@
 'use client';
 
+
+
+
+
 // components (relative to src/app/page.tsx)
+import HealthStrip from "./components/HealthStrip";
 import ReflectionsSkeleton from '../components/ReflectionsSkeleton';
 import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from '../components/ExportButton';
+import {
+  rpcFetchEntries,
+  rpcInsertEntry,
+  rpcSoftDelete,
+  rpcHardDelete,
+  restoreEntryRpc,
+} from "./lib/entries";
+import {
+  Draft,
+  loadDrafts,
+  createDraft,
+  updateDraft,
+  deleteDraft,
+  migrateLegacyDraft,
+} from "./lib/drafts";
+import { rpcInsertInternalEvent } from "./lib/internalEvents";
+
+
+
+
 
 // react + ui
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from "sonner";
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
 import { baseSepolia } from 'viem/chains';
 import { incSaveCount, messageForSave } from '@/app/lib/toast';
 
 import { getSupabaseForWallet } from './lib/supabase';
-import { keyFromSignatureHex, encryptJSON, decryptJSON, tryDecodeLegacyJSON } from '../lib/crypto';
+import { keyFromSignatureHex } from '../lib/crypto';
 
 type Item = {
   id: string;
@@ -34,6 +59,7 @@ export default function Home() {
   const { address, isConnected } = useAccount();
   const signLockRef = useRef(false);
 
+
   const chainId = useChainId();
   const { data: balance, isLoading: balLoading } = useBalance({
     address,
@@ -43,13 +69,108 @@ export default function Home() {
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const { switchChain, isPending: switching } = useSwitchChain();
   const sb = useMemo(() => getSupabaseForWallet(address ?? ''), [address]);
+  // mounted gate to avoid hydration mismatch
+const [mounted, setMounted] = useState(false);
+useEffect(() => setMounted(true), []);
 
-  // ---- local state ----
-  const [status, setStatus] = useState('');
-  const [note, setNote] = useState('first test reflection from Story of Emergence');
-  const [items, setItems] = useState<Item[]>([]);
-  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
-  const [showDeleted, setShowDeleted] = useState(false);
+// derived helpers — define ONCE, above effects that use them
+const connected = isConnected && !!address;
+const w = (address ?? '').toLowerCase();
+
+// ---- local state ----
+const [status, setStatus] = useState('');
+const [drafts, setDrafts] = useState<Draft[]>([]);
+const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+const [note, setNote] = useState('');
+const [items, setItems] = useState<Item[]>([]);
+const [showDeleted, setShowDeleted] = useState(false);
+const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+const trashCount = useMemo(() => items.filter(i => i.deleted_at).length, [items]);
+
+
+
+
+// Load drafts from localStorage on mount, migrate legacy single draft
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  migrateLegacyDraft();
+  const loaded = loadDrafts();
+  setDrafts(loaded);
+  // Auto-select first draft if exists
+  if (loaded.length > 0) {
+    setActiveDraftId(loaded[0].id);
+    setNote(loaded[0].content);
+  }
+}, []);
+
+// Auto-save note content to active draft
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  if (!activeDraftId) return;
+  const updated = updateDraft(activeDraftId, note);
+  if (updated) {
+    setDrafts(prev => prev.map(d => d.id === activeDraftId ? updated : d));
+  }
+}, [note, activeDraftId]);
+
+
+const activeCount = useMemo(
+  () => items.filter(i => !i.deleted_at).length,
+  [items]
+);
+
+const lastSaved = useMemo(() => {
+  if (items.length === 0) return null;
+  const maxTs = Math.max(...items.map(i => Number(i.ts)));
+  return new Date(maxTs);
+}, [items]);
+
+
+// search box state
+const [searchTerm, setSearchTerm] = useState("");
+
+// derive visible items based on Trash toggle and search
+const baseItems = useMemo(
+  () =>
+    showDeleted
+      ? items.filter(i => i.deleted_at)    // Trash view
+      : items.filter(i => !i.deleted_at),  // Normal view
+  [items, showDeleted]
+);
+
+const visibleItems = useMemo(
+  () => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return baseItems;
+
+    return baseItems.filter(it =>
+      (it.note ?? "").toLowerCase().includes(q)
+    );
+  },
+  [baseItems, searchTerm]
+);
+
+
+
+
+
+// pagination
+const [nextOffset, setNextOffset] = useState<number | null>(0);
+const [loadingMore, setLoadingMore] = useState(false);
+
+
+
+// reload when wallet or Trash toggle changes
+useEffect(() => {
+  if (!mounted) return;
+  if (!connected) return;
+  loadMyReflections();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [mounted, connected, w, showDeleted]);
+
+
+
+
 
   const [loadingList, setLoadingList] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -71,9 +192,7 @@ export default function Home() {
     el.style.height = `${el.scrollHeight}px`;
   }, [note]);
 
-  // prevent hydration mismatch — render only after mount
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+
 
   // expose wallet and decrypted items for ExportButton
   useEffect(() => {
@@ -89,17 +208,17 @@ export default function Home() {
     sessionStorage.removeItem('soe-consent-sig');
   }, [address]);
 
-  const connected = isConnected && !!address;
-  const w = (address ?? '').toLowerCase();
 
-  // auto-load when connected (and after mount)
-  useEffect(() => {
-    if (!mounted) return;
-    if (!connected) return;
-    if (items.length > 0) return; // don’t spam if we already have items
-    loadMyReflections();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, connected]);
+
+// auto-load when connected and after mount
+useEffect(() => {
+  if (!mounted) return;
+  if (!connected) return;
+  if (items.length > 0) return; // avoid spam if already loaded
+  loadMyReflections();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [mounted, connected]);
+
 
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '';
 
@@ -132,209 +251,236 @@ export default function Home() {
   }
 
   // ---- load my reflections (fetch → decrypt → show plaintext) ----
-  async function loadMyReflections() {
-    try {
-      if (!connected) {
-        setStatus('Connect wallet first');
-        return;
-      }
-
-      setLoadingList(true);
-      setStatus('Fetching your entries…');
-
-      // Build query once
-      let q = sb
-        .from('entries')
-        .select('id, created_at, ciphertext, deleted_at')
-        .eq('wallet_address', w)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (!showDeleted) q = q.is('deleted_at', null);
-
-      const { data: rows, error: listErr } = await q;
-      if (listErr) throw listErr;
-
-      // prepare key
-      setStatus('Preparing decryption key…');
-      const key = await getSessionKey();
-
-      // decrypt each row (legacy → AES → fallback)
-      const next: Item[] = [];
-      for (const row of rows ?? []) {
-        const legacy = tryDecodeLegacyJSON(row.ciphertext as string);
-        if (legacy) {
-          next.push({
-            id: row.id,
-            ts: row.created_at,
-            deleted_at: row.deleted_at,
-            note: typeof legacy?.note === 'string' ? legacy.note : JSON.stringify(legacy),
-          });
-          continue;
-        }
-
-        try {
-          const obj = await decryptJSON(row.ciphertext as string, key);
-          next.push({
-            id: row.id,
-            ts: row.created_at,
-            deleted_at: row.deleted_at,
-            note: typeof obj?.note === 'string' ? obj.note : JSON.stringify(obj),
-          });
-        } catch {
-          const ct = (row.ciphertext ?? '') as string;
-          next.push({
-            id: row.id,
-            ts: row.created_at,
-            deleted_at: row.deleted_at,
-            note: ct.length ? `[unable to decrypt] ${ct.slice(0, 60)}…` : '[no ciphertext]',
-          });
-        }
-      }
-
-      setItems(next);
-      setStatus(next.length ? '' : showDeleted ? 'Trash is empty.' : 'No entries yet.');
-    } catch (e: any) {
-      setStatus(`Error: ${e?.message ?? 'Load failed'}`);
-    } finally {
-      setLoadingList(false);
+async function loadMyReflections(reset = false) {
+  try {
+    if (!connected) {
+      const msg = "Connect wallet first";
+      setStatus(msg);
+      toast.error(msg);
+      return;
     }
+
+    if (reset) setNextOffset(0);
+
+    // show the top skeleton only for first page
+    if (reset || items.length === 0) setLoadingList(true);
+
+    const sessionKey = await getSessionKey();
+
+   const { items: rows, nextOffset: no } = await rpcFetchEntries(
+  address!,
+  sessionKey,
+  {
+    includeDeleted: showDeleted,
+    limit: 15,
+    offset: reset ? 0 : (nextOffset ?? 0),
+  }
+);
+
+
+    const mapped = rows.map((i) => ({
+      id: i.id,
+      ts: i.createdAt.getTime(),
+      deleted_at: i.deletedAt ? i.deletedAt.toISOString() : null,
+      note:
+        typeof i.plaintext === "object" &&
+        i.plaintext !== null &&
+        "text" in (i.plaintext as any)
+          ? String((i.plaintext as any).text)
+          : typeof i.plaintext === "string"
+          ? (i.plaintext as string)
+          : JSON.stringify(i.plaintext),
+    }));
+
+    setItems((prev) => (reset ? mapped : [...prev, ...mapped]));
+    setNextOffset(no);
+
+    setStatus("Reflections loaded");
+    toast.success("Reflections loaded");
+} catch (e: any) {
+  if (e?.message === "PENDING_SIG") {
+    // user already has a wallet signature prompt
+    return;
+  }
+  console.error(e);
+  const msg = e?.message ?? "Load failed";
+  setStatus(msg);
+  toast.error(msg);
+} finally {
+  setLoadingList(false);
+  setLoadingMore(false);
+}
+}
+
+
+
+
+
+async function saveReflection() {
+  if (!connected) {
+    setStatus("Connect wallet first");
+    return;
   }
 
-  // ---- save one reflection (plaintext -> AES encrypt -> insert) ----
-  async function saveReflection() {
-    try {
-      if (!connected) {
-        setStatus('Connect wallet first');
-        return;
-      }
-
-      const text = note.trim();
-      if (!text) {
-        setStatus('Type something first');
-        textareaRef.current?.focus();
-        return;
-      }
-
-      signLockRef.current = true;
-      setSaving(true);
-      setStatus('Preparing encryption key…');
-      toast.message('Requesting signature in MetaMask…');
-
-      const key = await getSessionKey();
-
-      const item = {
-        id: crypto.randomUUID(),
-        ts: new Date().toISOString(),
-        note: text,
-      };
-
-      const ciphertext = await encryptJSON(item, key);
-      const { data: insRow, error: insErr } = await sb
-        .from('entries')
-        .insert({ wallet_address: w, ciphertext })
-        .select('id')
-        .single();
-
-      if (insErr) throw insErr;
-
-      setStatus('Saved (AES)!');
-      const n = incSaveCount();
-      toast.success(messageForSave(n));
-      setNote('');
-      textareaRef.current?.focus();
-    } catch (e: any) {
-      const msg = e?.message ?? String(e);
-      setStatus(`Error: ${msg}`);
-      toast.error(`Save failed: ${msg}`);
-    } finally {
-      signLockRef.current = false;
-      setSaving(false);
-    }
+  const text = note.trim();
+  if (!text) {
+    setStatus("Type something first");
+    textareaRef.current?.focus();
+    return;
   }
 
-  // ---- soft-delete one item ----
-  async function deleteEntry(id: string) {
+  signLockRef.current = true;
+  setSaving(true);
+  setStatus("Preparing encryption key…");
+
+  try {
+    const sessionKey = await getSessionKey();
+    const { id: entryId } = await rpcInsertEntry(address!, sessionKey, {
+      text,
+      ts: Date.now(),
+    });
+
     try {
-      if (!connected) {
-        setStatus('Connect wallet first');
-        return;
-      }
-      const ok = window.confirm('Delete this reflection (move to Trash)?');
-      if (!ok) return;
-
-      setDeletingIds((m) => ({ ...m, [id]: true }));
-      setStatus('Deleting…');
-
-      // Preflight: visible under RLS?
-      const { data: preRows, error: preErr } = await sb
-        .from('entries')
-        .select('id, deleted_at', { count: 'exact', head: false })
-        .eq('id', id)
-        .eq('wallet_address', w)
-        .limit(2);
-
-      if (preErr) throw preErr;
-      if (!preRows?.length) throw new Error('Row not visible to you (RLS)');
-      if (preRows.length > 1) throw new Error('Duplicate id matched (unexpected)');
-
-     
-      // Soft-delete (no SELECT required)
-const { error: delErr } = await sb
-  .from('entries')
-  .update({ deleted_at: new Date().toISOString() })
-  .eq('id', id)
-  .eq('wallet_address', w)
-  .is('deleted_at', null);
-
-if (delErr) throw delErr;
-
-
-      // Optimistic UI
-      setItems((prev) =>
-        prev.map((it) => (it.id === id ? { ...it, deleted_at: new Date().toISOString() } : it))
-      );
-      setStatus('Deleted.');
-    } catch (e: any) {
-      console.error(e);
-      setStatus(`Delete failed: ${e?.message ?? 'Update denied (RLS)'}`);
-    } finally {
-      setDeletingIds((m) => {
-        const { [id]: _gone, ...rest } = m;
-        return rest;
+      await rpcInsertInternalEvent(address!, sessionKey, new Date(), {
+        source_kind: "journal",
+        event_kind: "written",
+        content: text,
+        url: null,
+        topics: [],
+        attention_type: null,
+        emotional_valence: null,
+        raw_metadata: {
+          entry_id: entryId,
+          length: text.length,
+        },
       });
+    } catch (e) {
+      console.error("Failed to insert internal_event", e);
     }
+
+    setStatus("Saved");
+    toast.success("Saved");
+
+    // Clear note and delete the draft after successful encryption
+    setNote("");
+    if (activeDraftId) {
+      deleteDraft(activeDraftId);
+      setDrafts(prev => prev.filter(d => d.id !== activeDraftId));
+      setActiveDraftId(null);
+    }
+    await loadMyReflections(true);
+
+} catch (e: any) {
+  if (e?.message === "PENDING_SIG") {
+    // signature already pending in MetaMask, ignore
+    return;
+  }
+  const msg = e?.message ?? "Save failed";
+  setStatus(msg);
+  toast.error(msg);
+} finally {
+  signLockRef.current = false;
+  setSaving(false);
+}
+}
+
+
+
+
+async function deleteEntry(id: string) {
+  try {
+    setDeletingIds(m => ({ ...m, [id]: true }));
+
+    // optimistic UI
+    setItems(prev => prev.map(it => it.id === id ? { ...it, deleted_at: new Date().toISOString() } : it));
+
+    await rpcSoftDelete(address!, id);
+
+    toast.success("Moved to trash");
+
+  } catch (e: any) {
+
+    setItems(prev => prev.map(it => it.id === id ? { ...it, deleted_at: null } : it));
+
+    const msg = e?.message ?? "Delete failed";
+    toast.error(msg);
+    setStatus(msg);
+
+  } finally {
+
+    setDeletingIds(m => ({ ...m, [id]: false }));
+
+  }
+}
+
+
+async function restoreEntry(id: string) {
+  try {
+    // optimistic restore in UI
+    setItems(prev =>
+      prev.map(it =>
+        it.id === id ? { ...it, deleted_at: null } : it
+      )
+    );
+
+    // call RPC to restore in DB
+    await restoreEntryRpc(address!, id);
+
+    toast.success("Restored");
+  } catch (err: any) {
+    console.error(err);
+
+    // revert optimistic change back to deleted
+    setItems(prev =>
+      prev.map(it =>
+        it.id === id
+          ? { ...it, deleted_at: new Date().toISOString() }
+          : it
+      )
+    );
+
+    const msg = err?.message ?? "Restore failed";
+    setStatus(msg);
+    toast.error(msg);
+  }
+}
+
+
+async function deleteForever(id: string) {
+  if (typeof window !== "undefined") {
+    const ok = window.confirm(
+      "Delete this reflection permanently? This cannot be undone."
+    );
+    if (!ok) return;
   }
 
-  // ---- restore from trash ----
-  async function restoreEntry(id: string) {
-    try {
-      if (!connected) {
-        setStatus('Connect wallet first');
-        return;
-      }
-      setStatus('Restoring…');
+  try {
+    // hard delete in DB
+    await rpcHardDelete(address!, id);
 
-      const { data: resRow, error: resErr } = await sb
-        .from('entries')
-        .update({ deleted_at: null })
-        .eq('id', id)
-        .eq('wallet_address', w)
-        .select('id')
-        .single();
+    // remove from local list
+    setItems(prev => prev.filter(it => it.id !== id));
 
-      if (resErr) throw resErr;
-      if (!resRow) throw new Error('No row returned (not your row?)');
-
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, deleted_at: null } : it)));
-      setStatus('Restored.');
-    } catch (e: any) {
-      console.error(e);
-      setStatus(`Restore failed: ${e?.message ?? 'Update denied (RLS)'}`);
-    }
+    toast.success("Deleted permanently");
+  } catch (err: any) {
+    console.error(err);
+    const msg = err?.message ?? "Permanent delete failed";
+    setStatus(msg);
+    toast.error(msg);
   }
+}
+
+
+
 
   if (!mounted) return null;
+
+
+console.log('showDeleted:', showDeleted, 'visibleItems:', visibleItems.length);
+console.log('ex sample', items.slice(0, 2));
+
+
+
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -343,183 +489,317 @@ if (delErr) throw delErr;
         <ConnectButton />
       </header>
 
+  <HealthStrip
+  showDeleted={showDeleted}
+  onToggleDeleted={(v) => {
+    setShowDeleted(v);
+    loadMyReflections(true);
+  }}
+/>
+
+
+
+
       <section className="max-w-2xl mx-auto px-4 py-10 space-y-6">
-        {!isConnected ? (
-          <p className="text-white/70">
-            Connect your wallet to view balance and try a quick signed message.
-          </p>
-        ) : (
-          <>
-            {/* Wallet summary */}
-            <div className="grid gap-4 rounded-2xl border border-white/10 p-6">
-              <div className="flex items-center justify-between">
-                <span className="text-white/70">Address</span>
-                <span className="font-mono">{shortAddr}</span>
-              </div>
+        {/* Wallet summary */}
+        <div className="grid gap-4 rounded-2xl border border-white/10 p-6">
+          <div className="flex items-center justify-between">
+            <span className="text-white/70">Address</span>
+            <span className="font-mono">{shortAddr}</span>
+          </div>
 
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex gap-3">
-                  <button
-                    onClick={loadMyReflections}
-                    disabled={!isConnected || loadingList}
-                    className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
-                  >
-                    {loadingList ? 'Loading…' : 'Reload'}
-                  </button>
-                </div>
-
-                <label className="flex items-center gap-2 text-sm text-white/70">
-                  <input
-                    type="checkbox"
-                    checked={showDeleted}
-                    onChange={(e) => {
-                      setShowDeleted(e.target.checked);
-                      loadMyReflections();
-                    }}
-                  />
-                  Show deleted (Trash)
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-white/70">Network</span>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono">{chainId}</span>
-                  {chainId !== baseSepolia.id && (
-                    <button
-                      onClick={() => switchChain({ chainId: baseSepolia.id })}
-                      disabled={switching}
-                      className="rounded-xl border border-white/20 px-3 py-1 hover:bg-white/5 disabled:opacity-50"
-                    >
-                      {switching ? 'Switching…' : 'Switch to Base Sepolia'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-white/70">Balance</span>
-                <span className="font-mono">
-                  {balLoading ? '…' : balance ? `${balance.formatted} ${balance.symbol}` : '—'}
-                </span>
-              </div>
-            </div>
-
-            {/* Sign a message demo */}
-            <div className="rounded-2xl border border-white/10 p-6 space-y-3">
-              <h3 className="font-semibold">Try a free, on-chain-safe action</h3>
-              <p className="text-white/70 text-sm">
-                Signing a message proves wallet control (no gas, no funds needed).
-              </p>
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex gap-3">
               <button
-                onClick={async () => {
-                  if (!isConnected) {
-                    setStatus('Connect wallet first');
-                    return;
-                  }
-                  setStatus('Check MetaMask and click Sign…');
-                  try {
-                    await signMessageAsync({ message: 'Hello from Story of Emergence' });
-                    setStatus('Signed!');
-                  } catch (e: any) {
-                    setStatus(humanizeSignError(e));
-                  }
-                }}
-                disabled={signing}
-                className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
+                onClick={loadMyReflections}
+                disabled={!isConnected || loadingList}
+                className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
               >
-                {signing ? 'Waiting for signature…' : 'Sign a message'}
+                {loadingList ? 'Loading…' : 'Reload'}
               </button>
             </div>
 
-            {/* Save / Load */}
-            <div className="rounded-2xl border border-white/10 p-6 space-y-3">
-              <h3 className="font-semibold">Private reflections</h3>
-              <p className="text-white/70 text-sm">
-                We encrypt in your browser with a key derived from a wallet signature, then store only ciphertext.
-              </p>
+            <label className="flex items-center gap-2 text-sm text-white/70">
+  <input
+    type="checkbox"
+    checked={showDeleted}
+    onChange={(e) => {
+      setShowDeleted(e.target.checked);
+      loadMyReflections(true);
+    }}
+  />
+  <span>Show deleted {trashCount ? `(Trash ${trashCount})` : "(Trash 0)"}</span>
+</label>
 
-              <textarea
-                ref={textareaRef}
-                className="w-full rounded-xl bg-black border border-white/10 mt-3 p-3"
-                rows={4}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
 
-              <div className="flex gap-3 mt-3">
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-white/70">Network</span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono">{chainId}</span>
+              {chainId !== baseSepolia.id && (
                 <button
-                  onClick={saveReflection}
-                  disabled={!isConnected || saving || signLockRef.current}
-                  className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
+                  onClick={() => switchChain({ chainId: baseSepolia.id })}
+                  disabled={switching}
+                  className="rounded-xl border border-white/20 px-3 py-1 hover:bg-white/5 disabled:opacity-50"
                 >
-                  {saving ? 'Saving…' : 'Save encrypted'}
+                  {switching ? 'Switching…' : 'Switch to Base Sepolia'}
                 </button>
-
-                <button
-                  onClick={loadMyReflections}
-                  disabled={!isConnected || loadingList}
-                  className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
-                >
-                  {loadingList ? 'Loading…' : 'Load my reflections'}
-                </button>
-              </div>
-
-              {/* status line */}
-              {status && <p className="text-sm text-white/70">{status}</p>}
-
-              {/* list area with loading + empty states */}
-              {loadingList ? (
-                <ReflectionsSkeleton />
-              ) : items.length === 0 ? (
-                <EmptyReflections onLoadClick={loadMyReflections} />
-              ) : (
-                <>
-                  {/* Export toolbar */}
-                  <div className="mb-3 flex justify-end">
-                    <ExportButton walletAddress={address ?? ''} items={items} />
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    {items.map((it) => (
-                      <div key={it.id} className="rounded-xl border border-white/10 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="text-xs text-white/50">
-                            {new Date(it.ts).toLocaleString()}
-                            {it.deleted_at ? ' • in Trash' : ''}
-                          </div>
-
-                          <div className="flex gap-2">
-                            {it.deleted_at ? (
-                              <button
-                                onClick={() => restoreEntry(it.id)}
-                                className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5"
-                                title="Restore this reflection"
-                              >
-                                Restore
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => deleteEntry(it.id)}
-                                disabled={!!deletingIds[it.id]}
-                                className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5 disabled:opacity-50"
-                                title="Delete this reflection"
-                              >
-                                {deletingIds[it.id] ? 'Deleting…' : 'Delete'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-2 whitespace-pre-wrap break-words">{it.note}</div>
-                      </div>
-                    ))}
-                  </div>
-                </>
               )}
             </div>
-          </>
-        )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-white/70">Balance</span>
+            <span className="font-mono">
+              {balLoading ? '…' : balance ? `${balance.formatted} ${balance.symbol}` : '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* Sign a message demo */}
+        <div className="rounded-2xl border border-white/10 p-6 space-y-3">
+          <h3 className="font-semibold">Try a free, on-chain-safe action</h3>
+          <p className="text-white/70 text-sm">
+            Signing a message proves wallet control (no gas, no funds needed).
+          </p>
+          <button
+            onClick={async () => {
+              if (!isConnected) {
+                setStatus('Connect wallet first');
+                return;
+              }
+              setStatus('Check MetaMask and click Sign…');
+              try {
+                await signMessageAsync({ message: 'Hello from Story of Emergence' });
+                setStatus('Signed!');
+              } catch (e: any) {
+                setStatus(humanizeSignError(e));
+              }
+            }}
+            disabled={signing}
+            className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
+          >
+            {signing ? 'Waiting for signature…' : 'Sign a message'}
+          </button>
+        </div>
+
+        {/* Save / Load */}
+        <div className="rounded-2xl border border-white/10 p-6 space-y-3">
+          <h3 className="font-semibold">Private reflections</h3>
+          <p className="text-white/70 text-sm">
+            We encrypt in your browser with a key derived from a wallet signature, then store only ciphertext.
+          </p>
+
+          {items.length > 0 && (
+  <p className="text-xs text-white/60 mt-1">
+    {activeCount} active · {trashCount} in Trash · last saved{" "}
+    {lastSaved ? lastSaved.toLocaleString() : "—"}
+  </p>
+)}
+
+
+          {/* Drafts management */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                const newDraft = createDraft('');
+                setDrafts(prev => [newDraft, ...prev]);
+                setActiveDraftId(newDraft.id);
+                setNote('');
+                textareaRef.current?.focus();
+              }}
+              className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5"
+            >
+              + New draft
+            </button>
+            {drafts.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => {
+                  setActiveDraftId(d.id);
+                  setNote(d.content);
+                }}
+                className={`text-xs rounded-lg border px-2 py-1 max-w-[120px] truncate ${
+                  activeDraftId === d.id
+                    ? 'border-white/50 bg-white/10'
+                    : 'border-white/20 hover:bg-white/5'
+                }`}
+                title={d.content.slice(0, 100) || 'Empty draft'}
+              >
+                {d.content.slice(0, 20) || 'Empty draft'}
+                {d.content.length > 20 ? '…' : ''}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            ref={textareaRef}
+            className="w-full rounded-xl bg-black border border-white/10 mt-3 p-3"
+            rows={4}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={activeDraftId ? "Write your reflection..." : "Create a new draft to start writing"}
+            disabled={!activeDraftId}
+          />
+
+          <div className="flex gap-3 mt-3 flex-wrap">
+            <button
+              onClick={saveReflection}
+              disabled={!isConnected || saving || signLockRef.current || !activeDraftId}
+              aria-busy={saving}
+              className="rounded-2xl bg-white text-black px-4 py-2 hover:bg-white/90 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save encrypted"}
+            </button>
+
+            <button
+              onClick={loadMyReflections}
+              disabled={!isConnected || loadingList}
+              className="rounded-2xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
+            >
+              {loadingList ? 'Loading…' : 'Load my reflections'}
+            </button>
+
+            {activeDraftId && (
+              <button
+                onClick={() => {
+                  deleteDraft(activeDraftId);
+                  setDrafts(prev => {
+                    const filtered = prev.filter(d => d.id !== activeDraftId);
+                    // Switch to next draft or clear
+                    if (filtered.length > 0) {
+                      setActiveDraftId(filtered[0].id);
+                      setNote(filtered[0].content);
+                    } else {
+                      setActiveDraftId(null);
+                      setNote('');
+                    }
+                    return filtered;
+                  });
+                }}
+                className="rounded-2xl border border-rose-500/50 text-rose-300 px-4 py-2 hover:bg-rose-500/10"
+              >
+                Discard draft
+              </button>
+            )}
+          </div>
+
+{/* status line */}
+{status && <p className="text-sm text-white/70">{status}</p>}
+
+<div style={{ marginTop: "1rem", marginBottom: "0.75rem" }}>
+<input
+  placeholder="Search reflections"
+  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm focus:border-white/30 focus:outline-none"
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+/>
+</div>
+
+
+{/* list area with loading + empty states */}
+{loadingList ? (
+  <ReflectionsSkeleton />
+) : visibleItems.length === 0 ? (
+  <EmptyReflections onLoadClick={loadMyReflections} />
+) : (
+  <>
+{/* Export toolbar + card count */}
+<div className="mb-3 flex items-center justify-between text-xs text-white/50">
+  <span>
+    Showing {visibleItems.length} of {items.length} reflections
+    {showDeleted ? " in Trash" : ""}
+  </span>
+
+  <ExportButton
+    walletAddress={address ?? ""}
+    visibleItems={visibleItems}
+    allItems={items}
+  />
+</div>
+
+
+
+    {/* cards */}
+    <div className="mt-4 space-y-2">
+{visibleItems.map((it) => (
+        <div key={it.id} className="rounded-xl border border-white/10 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-xs text-white/50">
+              {new Date(it.ts).toLocaleString()}
+              {it.deleted_at ? " • in Trash" : ""}
+            </div>
+
+
+    <div className="flex gap-2">
+  {showDeleted && it.deleted_at ? (
+    <>
+      <button
+        onClick={() => restoreEntry(it.id)}
+        className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5"
+        title="Restore this reflection"
+      >
+        Restore
+      </button>
+
+      <button
+        onClick={() => deleteForever(it.id)}
+        disabled={!!deletingIds[it.id]}
+        aria-busy={!!deletingIds[it.id]}
+        className="text-xs rounded-lg border border-rose-500/70 px-2 py-1 text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
+        title="Delete this reflection permanently"
+      >
+        {deletingIds[it.id] ? "Deleting…" : "Delete forever"}
+      </button>
+    </>
+  ) : (
+    <button
+      onClick={() => deleteEntry(it.id)}
+      disabled={!!deletingIds[it.id]}
+      aria-busy={!!deletingIds[it.id]}
+      className="text-xs rounded-lg border border-white/20 px-2 py-1 hover:bg-white/5 disabled:opacity-50"
+      title="Move this reflection to Trash"
+    >
+      {deletingIds[it.id] ? "Deleting…" : "Delete"}
+    </button>
+  )}
+</div>
+
+
+          </div>
+
+          <div className="mt-2 whitespace-pre-wrap break-words">
+            {it.note}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* global Load more at the very bottom */}
+    {nextOffset !== null && (
+      <div className="mt-4 flex justify-center">
+        <button
+          onClick={async () => {
+            if (loadingMore) return;
+            setLoadingMore(true);
+            await loadMyReflections(false);
+          }}
+          disabled={loadingMore}
+          className="rounded-xl border border-white/20 px-4 py-2 hover:bg-white/5 disabled:opacity-50"
+        >
+          {loadingMore ? "Loading…" : "Load more"}
+        </button>
+      </div>
+    )}
+  </>
+)}
+
+
+
+
+        </div>
       </section>
     </main>
   );
