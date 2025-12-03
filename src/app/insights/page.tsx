@@ -9,11 +9,50 @@ import { rpcListInternalEvents } from '../lib/internalEvents';
 import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
 import { keyFromSignatureHex } from '../../lib/crypto';
 import { useLogEvent } from '../lib/useLogEvent';
+import { rpcFetchEntries } from '../lib/entries';
+import { computeTimelineSpikes, itemToReflectionEntry } from '../lib/insights/timelineSpikes';
+import type { TimelineSpikeCard } from '../lib/insights/types';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
   if (e?.code === -32002) return 'A signature request is already pending. Open MetaMask and confirm (or cancel), then try again.';
   return e?.shortMessage || e?.message || 'Unexpected signing error.';
+}
+
+// Icon component for timeline events
+function EventIcon({ eventType }: { eventType: string }) {
+  const className = "w-4 h-4 text-white/60";
+  
+  switch (eventType) {
+    case 'page_reflections':
+      // Pencil icon
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+        </svg>
+      );
+    case 'page_insights':
+      // Sparkles icon
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+        </svg>
+      );
+    case 'page_sources':
+      // Link icon
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+        </svg>
+      );
+    default:
+      // Default activity icon (circle)
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+      );
+  }
 }
 
 function formatWeekDate(d: Date): string {
@@ -22,13 +61,10 @@ function formatWeekDate(d: Date): string {
 
 type InsightsMode = 'weekly' | 'timeline' | 'summary';
 
-type TimelineEvent = {
+type SimpleEvent = {
   id: string;
-  ts: string;
-  // these are optional because we do not want TS to complain
-  kind?: string | null;
-  source?: string | null;
-  note_count?: number | null;
+  eventAt: string;
+  eventType: string;
 };
 
 const MODE_OPTIONS: { value: InsightsMode; label: string }[] = [
@@ -51,7 +87,7 @@ export default function InsightsPage() {
   const [mode, setMode] = useState<InsightsMode>('weekly');
 
   // Timeline state
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<SimpleEvent[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
 
@@ -64,6 +100,32 @@ export default function InsightsPage() {
   } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Timeline spikes state (computed from decrypted reflections)
+  const [spikeInsights, setSpikeInsights] = useState<TimelineSpikeCard[]>([]);
+  const [reflectionsLoading, setReflectionsLoading] = useState(false);
+  const [reflectionsError, setReflectionsError] = useState<string | null>(null);
+
+  // Expansion state for spike cards (tracks which dates are expanded)
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  // Helper to check if a spike card is expanded
+  function isExpanded(dateKey: string): boolean {
+    return expandedDates.has(dateKey);
+  }
+
+  // Helper to toggle expansion state for a spike card
+  function toggleExpanded(dateKey: string): void {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }
 
   const { logEvent } = useLogEvent();
   const connected = isConnected && !!address;
@@ -147,6 +209,7 @@ export default function InsightsPage() {
   // Load timeline events when Timeline mode is active
   useEffect(() => {
     if (mode !== 'timeline') return;
+    if (!connected || !address) return;
 
     let cancelled = false;
 
@@ -155,16 +218,21 @@ export default function InsightsPage() {
         setTimelineLoading(true);
         setTimelineError(null);
 
-        const res = await fetch('/api/timeline');
+        const res = await fetch('/api/timeline', {
+          headers: {
+            'x-wallet-address': address!.toLowerCase(),
+          },
+        });
+
         if (!res.ok) {
-          throw new Error('Failed to load timeline');
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error ?? 'Failed to load timeline');
         }
 
         const json = await res.json();
 
         if (!cancelled) {
-          // Defensive cast because we do not know the exact RPC row type
-          setTimelineEvents((json.events ?? []) as TimelineEvent[]);
+          setTimelineEvents((json.events ?? []) as SimpleEvent[]);
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -182,7 +250,7 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, connected, address]);
 
   // Load summary data when Summary mode is active
   useEffect(() => {
@@ -198,7 +266,7 @@ export default function InsightsPage() {
 
         const res = await fetch('/api/summary', {
           headers: {
-            'x-wallet-address': address.toLowerCase(),
+            'x-wallet-address': address!.toLowerCase(),
           },
         });
 
@@ -228,6 +296,61 @@ export default function InsightsPage() {
       cancelled = true;
     };
   }, [mode, connected, address]);
+
+  // Load decrypted reflections and compute spikes when Timeline mode is active
+  useEffect(() => {
+    if (mode !== 'timeline') return;
+    if (!connected || !address) return;
+
+    let cancelled = false;
+
+    async function loadReflectionsAndComputeSpikes() {
+      try {
+        setReflectionsLoading(true);
+        setReflectionsError(null);
+        setSpikeInsights([]);
+
+        // Get session key for decryption
+        const sessionKey = await getSessionKey();
+
+        // Fetch all reflections (up to 500 for analysis)
+        const { items } = await rpcFetchEntries(address!, sessionKey, {
+          includeDeleted: false,
+          limit: 500,
+          offset: 0,
+        });
+
+        if (cancelled) return;
+
+        // Convert to ReflectionEntry format
+        const reflectionEntries = items.map(itemToReflectionEntry);
+
+        // Compute spikes (pure function, no network calls)
+        const spikes = computeTimelineSpikes(reflectionEntries);
+
+        if (!cancelled) {
+          setSpikeInsights(spikes);
+        }
+      } catch (err: any) {
+        if (err?.message === 'PENDING_SIG') return;
+        if (!cancelled) {
+          console.error('Failed to load reflections for spike analysis', err);
+          setReflectionsError(err.message ?? 'Failed to analyze reflections');
+        }
+      } finally {
+        if (!cancelled) {
+          setReflectionsLoading(false);
+        }
+      }
+    }
+
+    loadReflectionsAndComputeSpikes();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, connected, address, consentSig]);
 
   if (!mounted) return null;
 
@@ -268,65 +391,222 @@ export default function InsightsPage() {
 
         {/* Timeline view */}
         {mode === 'timeline' && (
-          <div className="mt-8">
-            {timelineLoading && (
-              <p className="text-sm text-white/60">Loading timeline…</p>
-            )}
-
-            {!timelineLoading && timelineError && (
-              <p className="text-sm text-rose-400">
-                {timelineError}
-              </p>
-            )}
-
-            {!timelineLoading &&
-              !timelineError &&
-              timelineEvents.length === 0 && (
+          <div className="mt-8 space-y-8">
+            {/* Not connected state */}
+            {!connected && (
+              <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
+                <h2 className="text-lg font-medium">Connect your wallet</h2>
                 <p className="text-sm text-white/60">
-                  No internal events recorded yet. As you write reflections and
-                  connect sources, your activity will appear here in time order.
+                  Connect your wallet to view your activity timeline.
                 </p>
-              )}
+                <div className="flex justify-center">
+                  <ConnectButton />
+                </div>
+              </div>
+            )}
 
-            {!timelineLoading &&
-              !timelineError &&
-              timelineEvents.length > 0 && (
-                <ul className="space-y-4">
-                  {timelineEvents
-                    .slice()
-                    .sort(
-                      (a, b) =>
-                        new Date(b.ts).getTime() - new Date(a.ts).getTime(),
-                    )
-                    .map((ev) => {
-                      const d = new Date(ev.ts);
-                      const dateLabel = d.toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      });
-                      const timeLabel = d.toLocaleTimeString(undefined, {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      });
+            {/* Timeline Spikes Section */}
+            {connected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                  </svg>
+                  Timeline Spikes
+                </h2>
+
+                {reflectionsLoading && (
+                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
+                    <div className="h-5 bg-white/10 rounded w-1/2" />
+                    <div className="h-4 bg-white/5 rounded w-3/4" />
+                    <div className="h-3 bg-white/5 rounded w-1/3" />
+                  </div>
+                )}
+
+                {!reflectionsLoading && reflectionsError && (
+                  <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+                    <p className="text-sm text-rose-400">{reflectionsError}</p>
+                  </div>
+                )}
+
+                {!reflectionsLoading && !reflectionsError && spikeInsights.length === 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                    <p className="text-sm text-white/60">
+                      No writing spikes detected yet. Keep adding reflections — when you have days with unusually high activity, they&apos;ll show up here.
+                    </p>
+                    <p className="text-xs text-white/40 mt-2">
+                      Spikes are detected when a day has at least 3 entries and 2× your typical daily activity.
+                    </p>
+                  </div>
+                )}
+
+                {!reflectionsLoading && !reflectionsError && spikeInsights.length > 0 && (
+                  <div className="space-y-4">
+                    {spikeInsights.map((spike) => {
+                      const dateKey = spike.data.date;
+                      const expanded = isExpanded(dateKey);
+                      const visibleCount = expanded ? spike.evidence.length : 5;
+                      const visibleEntries = spike.evidence.slice(0, visibleCount);
+                      const hiddenCount = spike.evidence.length - 5;
+                      const hasMore = spike.evidence.length > 5;
 
                       return (
-                        <li
-                          key={ev.id}
-                          className="rounded-2xl border border-white/10 px-4 py-3"
+                        <div
+                          key={spike.id}
+                          className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-3"
                         >
-                          <p className="text-xs text-white/50">
-                            {dateLabel} · {timeLabel}
-                          </p>
-                          <p className="mt-1 text-sm text-white">
-                            {ev.kind || 'activity'}
-                            {ev.source ? ` · ${ev.source}` : ''}
-                          </p>
-                        </li>
+                          {/* Card header */}
+                          <div className="flex items-start justify-between">
+                            <h3 className="font-medium text-amber-200">{spike.title}</h3>
+                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                              {spike.data.count} entries
+                            </span>
+                          </div>
+
+                          {/* Explanation */}
+                          <p className="text-sm text-white/70">{spike.explanation}</p>
+
+                          {/* Evidence list */}
+                          {spike.evidence.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-xs text-white/50 uppercase tracking-wide">
+                                Entries on this day
+                              </p>
+                              <ul className="space-y-1.5">
+                                {visibleEntries.map((ev) => (
+                                  <li
+                                    key={ev.entryId}
+                                    className="flex items-center gap-2 text-xs"
+                                  >
+                                    <span className="text-white/40 min-w-[60px]">
+                                      {new Date(ev.timestamp).toLocaleTimeString(undefined, {
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                    <span className="text-white/60 truncate">
+                                      {ev.preview || '(no preview)'}
+                                    </span>
+                                  </li>
+                                ))}
+                                {hasMore && (
+                                  <li className="pl-[68px]">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(dateKey)}
+                                      className="text-xs text-amber-300/70 hover:text-amber-200 transition-colors"
+                                    >
+                                      {expanded ? 'Show fewer' : `+${hiddenCount} more`}
+                                    </button>
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
-                </ul>
-              )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Activity Timeline Section */}
+            {connected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  Activity Timeline
+                </h2>
+
+                {timelineLoading && (
+                  <p className="text-sm text-white/60">Loading timeline…</p>
+                )}
+
+                {!timelineLoading && timelineError && (
+                  <p className="text-sm text-rose-400">
+                    Failed to load timeline: {timelineError}
+                  </p>
+                )}
+
+                {!timelineLoading && !timelineError && timelineEvents.length === 0 && (
+                  <p className="text-sm text-white/60">
+                    No internal events recorded yet. As you write reflections and
+                    connect sources, your activity will appear here in time order.
+                  </p>
+                )}
+
+                {!timelineLoading && !timelineError && timelineEvents.length > 0 && (() => {
+                // Group events by calendar day
+                const groupedByDay = timelineEvents.reduce((acc, ev) => {
+                  const d = new Date(ev.eventAt);
+                  const dateKey = d.toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  });
+                  if (!acc[dateKey]) acc[dateKey] = [];
+                  acc[dateKey].push(ev);
+                  return acc;
+                }, {} as Record<string, typeof timelineEvents>);
+
+                return (
+                  <div className="space-y-6">
+                    {Object.entries(groupedByDay).map(([dateLabel, events]) => (
+                      <div key={dateLabel}>
+                        {/* Date header */}
+                        <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 px-1">
+                          {dateLabel}
+                        </h3>
+
+                        {/* Events for this day */}
+                        <ul className="space-y-3">
+                          {events.map((ev) => {
+                            const d = new Date(ev.eventAt);
+                            const timeLabel = d.toLocaleTimeString(undefined, {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            });
+                            const isUnknown = ev.eventType === 'unknown';
+
+                            // Badge color based on event type
+                            const badgeClass = isUnknown
+                              ? 'bg-zinc-700/50 text-zinc-400'
+                              : 'bg-white/10 text-white';
+
+                            return (
+                              <li
+                                key={ev.id}
+                                className="group rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4 flex items-center gap-4 shadow-md shadow-black/30 transition-all duration-200 hover:bg-white/[0.04] hover:border-white/15 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40"
+                              >
+                                {/* Icon on left */}
+                                <EventIcon eventType={ev.eventType} />
+
+                                {/* Time - bold */}
+                                <span className="text-sm font-semibold text-white min-w-[70px]">
+                                  {timeLabel}
+                                </span>
+
+                                {/* Event type badge */}
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-medium ${badgeClass}`}
+                                >
+                                  {ev.eventType}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              </div>
+            )}
           </div>
         )}
 

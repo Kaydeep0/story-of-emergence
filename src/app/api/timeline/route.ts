@@ -11,25 +11,36 @@ if (!url || !anonKey) {
   throw new Error('Missing Supabase env vars for timeline route');
 }
 
-// This is a server-side Supabase client just for this route
-const supabase = createClient(url, anonKey);
+type SimpleEvent = {
+  id: string;
+  eventAt: string;
+  eventType: string;
+};
 
 export async function GET(request: Request) {
   try {
     // Extract wallet address from header for RLS-compliant query
     const walletAddress = request.headers.get('x-wallet-address') ?? '';
 
+    if (!walletAddress) {
+      return NextResponse.json({ events: [] });
+    }
+
+    // Create Supabase client with wallet header for RLS
+    const supabase = createClient(url!, anonKey!, {
+      global: {
+        headers: {
+          'x-wallet-address': walletAddress.toLowerCase(),
+        },
+      },
+    });
+
     // Uses RPC to respect Row Level Security policies
     const { data, error } = await supabase.rpc('list_internal_events', {
-      w: walletAddress,
+      w: walletAddress.toLowerCase(),
       p_limit: 50,
       p_offset: 0,
     });
-    
-    
-    
-
-    
 
     if (error) {
       console.error('[timeline] list_internal_events error', error);
@@ -39,9 +50,29 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      events: data ?? [],
+    // Map each row to a SimpleEvent
+    const events: SimpleEvent[] = (data ?? []).map((row: any) => {
+      let eventType = 'unknown';
+
+      // Parse ciphertext as JSON to extract event_type
+      try {
+        const parsed = JSON.parse(row.ciphertext);
+        eventType = parsed.event_type ?? parsed.event_kind ?? 'unknown';
+      } catch {
+        // If parsing fails, keep eventType as 'unknown'
+      }
+
+      return {
+        id: row.id,
+        eventAt: row.event_at,
+        eventType,
+      };
     });
+
+    // Sort by eventAt descending (most recent first)
+    events.sort((a, b) => new Date(b.eventAt).getTime() - new Date(a.eventAt).getTime());
+
+    return NextResponse.json({ events });
   } catch (err: any) {
     console.error('[timeline] unexpected error', err);
     return NextResponse.json(
@@ -50,4 +81,3 @@ export async function GET(request: Request) {
     );
   }
 }
-
