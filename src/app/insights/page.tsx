@@ -11,7 +11,9 @@ import { keyFromSignatureHex } from '../../lib/crypto';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
 import { computeTimelineSpikes, itemToReflectionEntry } from '../lib/insights/timelineSpikes';
-import type { TimelineSpikeCard } from '../lib/insights/types';
+import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
+import { useHighlights } from '../lib/insights/useHighlights';
+import type { TimelineSpikeCard, AlwaysOnSummaryCard, InsightCard } from '../lib/insights/types';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -101,6 +103,11 @@ export default function InsightsPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
+  // Always On Summary insight cards (computed from decrypted reflections)
+  const [summaryInsights, setSummaryInsights] = useState<AlwaysOnSummaryCard[]>([]);
+  const [summaryReflectionsLoading, setSummaryReflectionsLoading] = useState(false);
+  const [summaryReflectionsError, setSummaryReflectionsError] = useState<string | null>(null);
+
   // Timeline spikes state (computed from decrypted reflections)
   const [spikeInsights, setSpikeInsights] = useState<TimelineSpikeCard[]>([]);
   const [reflectionsLoading, setReflectionsLoading] = useState(false);
@@ -108,6 +115,9 @@ export default function InsightsPage() {
 
   // Expansion state for spike cards (tracks which dates are expanded)
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  // Highlights state (backed by localStorage)
+  const { highlights, isHighlighted, toggleHighlight } = useHighlights();
 
   // Helper to check if a spike card is expanded
   function isExpanded(dateKey: string): boolean {
@@ -297,6 +307,61 @@ export default function InsightsPage() {
     };
   }, [mode, connected, address]);
 
+  // Load decrypted reflections and compute Always On Summary when Summary mode is active
+  useEffect(() => {
+    if (mode !== 'summary') return;
+    if (!connected || !address) return;
+
+    let cancelled = false;
+
+    async function loadReflectionsAndComputeSummaryInsights() {
+      try {
+        setSummaryReflectionsLoading(true);
+        setSummaryReflectionsError(null);
+        setSummaryInsights([]);
+
+        // Get session key for decryption
+        const sessionKey = await getSessionKey();
+
+        // Fetch all reflections (up to 500 for analysis)
+        const { items } = await rpcFetchEntries(address!, sessionKey, {
+          includeDeleted: false,
+          limit: 500,
+          offset: 0,
+        });
+
+        if (cancelled) return;
+
+        // Convert to ReflectionEntry format
+        const reflectionEntries = items.map(itemToReflectionEntry);
+
+        // Compute always-on summary insights (pure function, no network calls)
+        const insights = computeAlwaysOnSummary(reflectionEntries);
+
+        if (!cancelled) {
+          setSummaryInsights(insights);
+        }
+      } catch (err: any) {
+        if (err?.message === 'PENDING_SIG') return;
+        if (!cancelled) {
+          console.error('Failed to load reflections for summary analysis', err);
+          setSummaryReflectionsError(err.message ?? 'Failed to analyze reflections');
+        }
+      } finally {
+        if (!cancelled) {
+          setSummaryReflectionsLoading(false);
+        }
+      }
+    }
+
+    loadReflectionsAndComputeSummaryInsights();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, connected, address, consentSig]);
+
   // Load decrypted reflections and compute spikes when Timeline mode is active
   useEffect(() => {
     if (mode !== 'timeline') return;
@@ -450,6 +515,8 @@ export default function InsightsPage() {
                       const hiddenCount = spike.evidence.length - 5;
                       const hasMore = spike.evidence.length > 5;
 
+                      const highlighted = isHighlighted(spike);
+
                       return (
                         <div
                           key={spike.id}
@@ -458,9 +525,27 @@ export default function InsightsPage() {
                           {/* Card header */}
                           <div className="flex items-start justify-between">
                             <h3 className="font-medium text-amber-200">{spike.title}</h3>
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
-                              {spike.data.count} entries
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleHighlight(spike)}
+                                className="p-1 rounded-full transition-colors hover:bg-white/10"
+                                title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
+                              >
+                                {highlighted ? (
+                                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                                  </svg>
+                                )}
+                              </button>
+                              <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                                {spike.data.count} entries
+                              </span>
+                            </div>
                           </div>
 
                           {/* Explanation */}
@@ -676,10 +761,148 @@ export default function InsightsPage() {
                   </div>
                 </div>
 
+                {/* Always On Summary Section */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                    </svg>
+                    Always On Summary
+                  </h2>
+
+                  {summaryReflectionsLoading && (
+                    <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
+                      <div className="h-5 bg-white/10 rounded w-1/2" />
+                      <div className="h-4 bg-white/5 rounded w-3/4" />
+                    </div>
+                  )}
+
+                  {!summaryReflectionsLoading && summaryReflectionsError && (
+                    <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+                      <p className="text-sm text-rose-400">{summaryReflectionsError}</p>
+                    </div>
+                  )}
+
+                  {!summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length === 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                      <p className="text-sm text-white/60">
+                        No summary insights yet. Keep writing reflections — once you have at least a week of activity, insights will appear here.
+                      </p>
+                    </div>
+                  )}
+
+                  {!summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length > 0 && (
+                    <div className="space-y-4">
+                      {summaryInsights.map((insight) => {
+                        const highlighted = isHighlighted(insight);
+                        return (
+                          <div
+                            key={insight.id}
+                            className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-3"
+                          >
+                            {/* Card header */}
+                            <div className="flex items-start justify-between">
+                              <h3 className="font-medium text-emerald-200">{insight.title}</h3>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleHighlight(insight)}
+                                  className="p-1 rounded-full transition-colors hover:bg-white/10"
+                                  title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
+                                >
+                                  {highlighted ? (
+                                    <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                                  {insight.data.summaryType === 'writing_change' ? 'Trend' : 'Consistency'}
+                                </span>
+                              </div>
+                            </div>
+
+                          {/* Explanation */}
+                          <p className="text-sm text-white/70">{insight.explanation}</p>
+
+                          {/* Evidence (optional, compact display) */}
+                          {insight.evidence.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {insight.evidence.slice(0, 4).map((ev) => (
+                                <span
+                                  key={ev.entryId}
+                                  className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded"
+                                >
+                                  {new Date(ev.timestamp).toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </span>
+                              ))}
+                              {insight.evidence.length > 4 && (
+                                <span className="text-xs text-white/40">
+                                  +{insight.evidence.length - 4} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Highlights Section */}
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    Highlights
+                  </h2>
+
+                  {highlights.length === 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                      <p className="text-sm text-white/60">
+                        Tap the star on any insight to save it here.
+                      </p>
+                    </div>
+                  )}
+
+                  {highlights.length > 0 && (
+                    <div className="space-y-3">
+                      {highlights.map((highlight) => (
+                        <div
+                          key={highlight.id}
+                          className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-2"
+                        >
+                          <div className="flex items-start justify-between">
+                            <h3 className="font-medium text-yellow-200 text-sm">{highlight.title}</h3>
+                            <span className="text-xs text-white/40 bg-white/5 px-2 py-0.5 rounded-full">
+                              {highlight.kind === 'timeline_spike' ? 'Spike' : 'Summary'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-white/60">{highlight.explanation}</p>
+                          <p className="text-xs text-white/30">
+                            Saved {new Date(highlight.createdAt).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Coming soon</p>
                   <ul className="text-sm text-zinc-300 space-y-1">
-                    <li>• Writing streaks and "quiet" period detection</li>
                     <li>• Activity heatmap by day of week</li>
                     <li>• Source engagement breakdown</li>
                   </ul>
