@@ -2,8 +2,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useAccount } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useLogEvent } from '../lib/useLogEvent';
 
 export default function SourcesPage() {
@@ -17,77 +17,70 @@ export default function SourcesPage() {
     setMounted(true);
   }, []);
 
-  // Log navigation event when page loads
+  // Log navigation event when page loads (connected wallet only)
   useEffect(() => {
     if (!mounted || !connected) return;
     logEvent('page_sources');
   }, [mounted, connected, logEvent]);
 
+  if (!mounted) return null;
+
   return (
     <main className="min-h-screen bg-black text-white">
-      <div className="mx-auto max-w-4xl px-4 py-12">
-        <header className="mb-8">
-          <p className="text-sm uppercase tracking-wide text-zinc-400">
-            Story of Emergence
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold">
-            Sources
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm text-zinc-400">
-            This is where you will connect the streams that feed your mind. 
-            Reflections, saved links, books, videos, and other activity you decide to bring in.
-          </p>
-        </header>
+      <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur px-4 py-2 flex items-center justify-between">
+        <span className="font-semibold">Story of Emergence</span>
+        <ConnectButton />
+      </header>
 
-        <section className="space-y-6">
-          {/* Empty state card */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-5 py-6">
-            <h2 className="text-lg font-medium">
-              No sources connected yet
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              When you connect a source, entries from that stream will be encrypted with your key 
-              and show up in Insights and future evolution views.
-            </p>
+      <section className="max-w-2xl mx-auto px-4 py-10">
+        <h1 className="text-2xl font-semibold text-center mb-2">Sources</h1>
+        <p className="text-center text-sm text-white/60 mb-6">
+          Connected feeds and external activity will appear here in a future phase.
+        </p>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                className="cursor-not-allowed rounded-full bg-zinc-800 px-4 py-2 text-sm text-zinc-400"
-              >
-                Add source (coming soon)
-              </button>
-
-              <Link
-                href="/insights"
-                className="text-sm text-sky-400 underline-offset-4 hover:underline"
-              >
-                Go to Insights
-              </Link>
-            </div>
+        {/* Empty state card */}
+        <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
+          <div className="mx-auto w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+            <svg
+              className="w-6 h-6 text-white/40"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+              />
+            </svg>
           </div>
 
-          {/* Roadmap hints card */}
-          <div className="rounded-2xl border border-zinc-900 bg-zinc-950 px-5 py-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Coming in Phase One and Phase Two
-            </p>
+          <h2 className="text-lg font-medium">No sources connected yet</h2>
+          <p className="text-sm text-white/60 max-w-md mx-auto">
+            When you connect a source, entries from that stream will be encrypted with your key
+            and show up in Insights and future evolution views.
+          </p>
 
-            <ul className="mt-3 space-y-2 text-sm text-zinc-400">
-              <li>
-                Private imports for links, notes, and external activity.
-              </li>
-              <li>
-                Internal events that log how you use Story of Emergence 
-                without revealing content.
-              </li>
-              <li>
-                Source level controls so you can decide what flows into Insights.
-              </li>
-            </ul>
-          </div>
-        </section>
-      </div>
+          <button
+            type="button"
+            disabled
+            className="cursor-not-allowed rounded-full bg-white/5 border border-white/10 px-5 py-2 text-sm text-white/40"
+          >
+            Add source (coming soon)
+          </button>
+        </div>
+
+        {/* Roadmap hints card */}
+        <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Coming soon</p>
+          <ul className="text-sm text-zinc-300 space-y-1">
+            <li>• Private imports for links, notes, and external activity</li>
+            <li>• Source level controls for what flows into Insights</li>
+            <li>• YouTube, X, LinkedIn, and RSS feed connections</li>
+          </ul>
+        </div>
+      </section>
     </main>
   );
 }

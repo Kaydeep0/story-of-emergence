@@ -1,6 +1,7 @@
 // src/app/lib/weeklyInsights.ts
 
 import type { InternalEvent } from "./types";
+import type { UnifiedInternalEvent } from "../../lib/internalEvents";
 
 export type WeeklyInsight = {
   weekId: string;         // e.g. "2025-12-01" for the Monday of that week
@@ -39,15 +40,11 @@ function formatDateKey(d: Date): string {
 
 /**
  * Compute simple weekly insights from a list of internal events.
- * For now we only know about journal events with payload:
- * {
- *   source_kind: "journal",
- *   event_kind: "written",
- *   content: string,
- *   raw_metadata: { length: number }
- * }
+ * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
  */
-export function computeWeeklyInsights(events: InternalEvent[]): WeeklyInsight[] {
+export function computeWeeklyInsights(
+  events: InternalEvent[] | UnifiedInternalEvent[]
+): WeeklyInsight[] {
   const buckets = new Map<
     string,
     {
@@ -61,7 +58,9 @@ export function computeWeeklyInsights(events: InternalEvent[]): WeeklyInsight[] 
   >();
 
   for (const ev of events) {
-    const start = startOfWeek(ev.eventAt);
+    // Handle both InternalEvent (eventAt is Date) and UnifiedInternalEvent (eventAt is string)
+    const eventAtDate = typeof ev.eventAt === "string" ? new Date(ev.eventAt) : ev.eventAt;
+    const start = startOfWeek(eventAtDate);
     const weekId = formatDateKey(start);
     const end = endOfWeek(start);
 
@@ -80,26 +79,52 @@ export function computeWeeklyInsights(events: InternalEvent[]): WeeklyInsight[] 
 
     bucket.totalEvents += 1;
 
-    // Try to interpret the plaintext payload
-    const payload: any = ev.plaintext ?? {};
-    const sourceKind = payload.source_kind;
-    const eventKind = payload.event_kind;
+    // Determine if this is a UnifiedInternalEvent or legacy InternalEvent
+    const isUnified = "sourceKind" in ev;
+
+    let sourceKind: string | undefined;
+    let eventKind: string | undefined;
+    let topics: string[] = [];
+    let length = 0;
+
+    if (isUnified) {
+      // UnifiedInternalEvent - use structured fields directly
+      const unified = ev as UnifiedInternalEvent;
+      sourceKind = unified.sourceKind;
+      eventKind = unified.eventKind;
+      topics = unified.topics ?? [];
+
+      // Extract length from rawMetadata if present
+      const rawMeta = unified.rawMetadata as Record<string, unknown> | undefined;
+      if (rawMeta?.raw_metadata && typeof (rawMeta.raw_metadata as Record<string, unknown>)?.length === "number") {
+        length = (rawMeta.raw_metadata as Record<string, unknown>).length as number;
+      } else if (rawMeta?.length && typeof rawMeta.length === "number") {
+        length = rawMeta.length as number;
+      } else if (unified.details) {
+        length = unified.details.length;
+      }
+    } else {
+      // Legacy InternalEvent - interpret plaintext payload
+      const internal = ev as InternalEvent;
+      const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
+      sourceKind = payload.source_kind as string | undefined;
+      eventKind = payload.event_kind as string | undefined;
+
+      length =
+        typeof (payload?.raw_metadata as Record<string, unknown>)?.length === "number"
+          ? ((payload.raw_metadata as Record<string, unknown>).length as number)
+          : typeof payload?.content === "string"
+          ? (payload.content as string).length
+          : 0;
+
+      topics = Array.isArray(payload?.topics)
+        ? (payload.topics as unknown[]).filter((t): t is string => typeof t === "string")
+        : [];
+    }
 
     if (sourceKind === "journal" && eventKind === "written") {
       bucket.journalEvents += 1;
-
-      const length =
-        typeof payload?.raw_metadata?.length === "number"
-          ? payload.raw_metadata.length
-          : typeof payload?.content === "string"
-          ? payload.content.length
-          : 0;
-
       bucket.totalJournalLength += length;
-
-      const topics: string[] = Array.isArray(payload?.topics)
-        ? payload.topics.filter((t: unknown) => typeof t === "string")
-        : [];
 
       for (const t of topics) {
         bucket.topicCounts.set(t, (bucket.topicCounts.get(t) ?? 0) + 1);
