@@ -574,8 +574,8 @@ async function createShare() {
       senderWallet: address.toLowerCase(),
     };
 
-    // Build the capsule URL
-    const capsuleUrl = `${window.location.origin}/shared/open?capsule=${encodeCapsule(capsule)}`;
+    // Build the capsule URL (URL-encode the base64url string for safety)
+    const capsuleUrl = `${window.location.origin}/shared/open?capsule=${encodeURIComponent(encodeCapsule(capsule))}`;
     setShareCapsuleUrl(capsuleUrl);
 
     // Log the share event

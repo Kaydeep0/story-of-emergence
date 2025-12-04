@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { keyFromSignatureHex } from '../../../lib/crypto';
 import {
-  decodeCapsule,
   isCapsuleExpired,
   unwrapKeyForRecipient,
   decryptSlice,
@@ -18,6 +17,51 @@ import {
 } from '../../../lib/sharing';
 import { rpcGetShare, rpcInsertAcceptedShare } from '../../lib/shares';
 import { useLogEvent } from '../../lib/useLogEvent';
+
+/**
+ * Decode a base64url string (URL-safe base64) back to original string.
+ * Local helper to keep decoding self-contained.
+ */
+function fromBase64Url(str: string): string {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4;
+  if (pad) {
+    base64 += '='.repeat(4 - pad);
+  }
+  return atob(base64);
+}
+
+/**
+ * Safely decode and parse the capsule query parameter.
+ * Handles URL decoding, base64url decoding, and JSON parsing.
+ * Returns null if any step fails.
+ */
+function safeParseCapsuleParam(capsuleParam: string | null): CapsulePayload | null {
+  if (!capsuleParam) return null;
+  
+  try {
+    // URL-decode the parameter first (handles encodeURIComponent from sender)
+    const urlDecoded = decodeURIComponent(capsuleParam);
+    // Base64url decode to get JSON string
+    const json = fromBase64Url(urlDecoded);
+    // Parse JSON and validate
+    const parsed = JSON.parse(json);
+    
+    // Basic validation
+    if (
+      typeof parsed.shareId !== 'string' ||
+      typeof parsed.wrappedKey !== 'string' ||
+      typeof parsed.senderWallet !== 'string'
+    ) {
+      return null;
+    }
+    
+    return parsed as CapsulePayload;
+  } catch (err) {
+    console.error('Failed to decode capsule:', err);
+    return null;
+  }
+}
 
 function humanizeSignError(e: unknown): string {
   const err = e as { code?: number; shortMessage?: string; message?: string };
@@ -121,8 +165,8 @@ function CapsuleOpenContent() {
         return;
       }
 
-      // Decode capsule
-      const capsule = decodeCapsule(capsuleParam);
+      // Decode capsule (handles URL decoding + base64url decoding + JSON parsing)
+      const capsule = safeParseCapsuleParam(capsuleParam);
       if (!capsule) {
         setState({ status: 'error', message: 'Invalid capsule format. The link may be corrupted.' });
         logEvent('capsule_open_failed');

@@ -1,6 +1,31 @@
 // src/lib/sharing.ts
 // Types and helpers for private sharing (Phase 2)
 
+// ----- Base64URL helpers -----
+
+/**
+ * Encode a string to base64url (URL-safe base64)
+ */
+export function toBase64Url(str: string): string {
+  const base64 = btoa(str);
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+/**
+ * Decode a base64url string back to original string
+ */
+export function fromBase64Url(str: string): string {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4;
+  if (pad) {
+    base64 += '='.repeat(4 - pad);
+  }
+  return atob(base64);
+}
+
 // ----- Types -----
 
 /**
@@ -84,12 +109,7 @@ export type AcceptedShareRow = {
  */
 export function encodeCapsule(capsule: CapsulePayload): string {
   const json = JSON.stringify(capsule);
-  // Use base64url encoding (URL-safe)
-  const b64 = btoa(json)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-  return b64;
+  return toBase64Url(json);
 }
 
 /**
@@ -98,11 +118,7 @@ export function encodeCapsule(capsule: CapsulePayload): string {
  */
 export function decodeCapsule(encoded: string): CapsulePayload | null {
   try {
-    // Restore base64 from base64url
-    let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    // Add padding if needed
-    while (b64.length % 4) b64 += '=';
-    const json = atob(b64);
+    const json = fromBase64Url(encoded);
     const parsed = JSON.parse(json);
     
     // Basic validation
@@ -134,7 +150,7 @@ export function isCapsuleExpired(capsule: CapsulePayload): boolean {
  */
 export function buildCapsuleUrl(capsule: CapsulePayload, baseUrl: string): string {
   const encoded = encodeCapsule(capsule);
-  return `${baseUrl}/shared/open?capsule=${encoded}`;
+  return `${baseUrl}/shared/open?capsule=${encodeURIComponent(encoded)}`;
 }
 
 // ----- Key wrapping helpers -----
