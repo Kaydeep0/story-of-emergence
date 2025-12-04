@@ -10,12 +10,18 @@ export type EventType =
   | 'page_reflections'
   | 'page_insights'
   | 'page_sources'
+  | 'page_shared'
   | 'reflection_saved'
   | 'reflection_deleted'
   | 'reflection_restored'
   | 'draft_created'
   | 'draft_deleted'
-  | 'export_triggered';
+  | 'export_triggered'
+  | 'capsule_open_success'
+  | 'capsule_open_failed'
+  | 'share_accepted'
+  | 'share_dismissed'
+  | 'share_created';
 
 /**
  * Hook that provides a function to log internal events
