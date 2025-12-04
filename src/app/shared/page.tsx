@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { keyFromSignatureHex } from '../../lib/crypto';
 import { useLogEvent } from '../lib/useLogEvent';
-import { rpcListAcceptedShares } from '../lib/shares';
+import { rpcListAcceptedShares, rpcDeleteAcceptedShare } from '../lib/shares';
 import type { AcceptedShare, SliceKind } from '../../lib/sharing';
 
 function humanizeSignError(e: unknown): string {
@@ -88,6 +88,115 @@ function EmptySharedState() {
   );
 }
 
+// ----- Helper: extract preview text from share -----
+function getPreviewText(share: AcceptedShare): string | null {
+  if (typeof share.decryptedPayload !== 'object' || share.decryptedPayload === null) {
+    return null;
+  }
+  const payload = share.decryptedPayload as Record<string, unknown>;
+  
+  if ('preview' in payload && typeof payload.preview === 'string') {
+    return payload.preview;
+  }
+  if ('content' in payload && typeof payload.content === 'string') {
+    const content = payload.content;
+    return content.length > 200 ? content.slice(0, 200) + '…' : content;
+  }
+  if ('links' in payload && Array.isArray(payload.links)) {
+    return `${payload.links.length} links`;
+  }
+  return null;
+}
+
+// ----- Helper: extract sender from source label -----
+function extractSenderFromLabel(sourceLabel: string): string {
+  // sourceLabel is like "From 0x1234...5678 on Dec 4, 2025"
+  const match = sourceLabel.match(/From\s+(0x[a-fA-F0-9…]+)/);
+  return match ? match[1] : sourceLabel;
+}
+
+// ----- Detail Drawer Component -----
+function DetailDrawer({
+  share,
+  onClose,
+  onDelete,
+  deleting,
+}: {
+  share: AcceptedShare;
+  onClose: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const preview = getPreviewText(share);
+  const sender = extractSenderFromLabel(share.sourceLabel);
+  const receivedDate = new Date(share.receivedAt).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+        {/* Header with slice kind pill */}
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <SliceKindBadge kind={share.sliceKind} />
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/40 hover:text-white transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Title */}
+        <h2 className="text-xl font-semibold mb-3">{share.title}</h2>
+
+        {/* Metadata */}
+        <div className="space-y-1 text-sm text-white/60 mb-4">
+          <p>From {sender}</p>
+          <p>Received {receivedDate}</p>
+        </div>
+
+        {/* Preview content */}
+        {preview && (
+          <div className="rounded-xl bg-white/5 border border-white/10 p-4 mb-6">
+            <p className="text-sm text-white/80 whitespace-pre-wrap">{preview}</p>
+          </div>
+        )}
+
+        {/* Footer buttons */}
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="px-4 py-2 text-sm rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? 'Deleting…' : 'Delete from Shared'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-2 text-sm rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors font-medium"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SharedPage() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
@@ -98,6 +207,8 @@ export default function SharedPage() {
   const [error, setError] = useState<string | null>(null);
   const [shares, setShares] = useState<AcceptedShare[]>([]);
   const [consentSig, setConsentSig] = useState<string | null>(null);
+  const [selected, setSelected] = useState<AcceptedShare | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { logEvent } = useLogEvent();
   const connected = isConnected && !!address;
@@ -177,6 +288,27 @@ export default function SharedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, connected, address]);
 
+  // Handle delete from drawer
+  async function handleDelete() {
+    if (!selected || !address) return;
+
+    setDeleting(true);
+    try {
+      await rpcDeleteAcceptedShare(address, selected.id);
+      // Remove from local list
+      setShares((prev) => prev.filter((s) => s.id !== selected.id));
+      // Close drawer
+      setSelected(null);
+      toast.success('Removed from Shared');
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      console.error('Failed to delete share', e);
+      toast.error(err?.message ?? 'Failed to remove share');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (!mounted) return null;
 
   return (
@@ -232,61 +364,53 @@ export default function SharedPage() {
               </button>
             </div>
 
-            {shares.map((share) => (
-              <div
-                key={share.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3 hover:bg-white/[0.04] transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <h3 className="font-medium">{share.title}</h3>
-                    <p className="text-xs text-white/50">{share.sourceLabel}</p>
+            {shares.map((share) => {
+              const preview = getPreviewText(share);
+              return (
+                <button
+                  key={share.id}
+                  type="button"
+                  onClick={() => setSelected(share)}
+                  className="w-full text-left rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3 hover:bg-white/[0.04] hover:border-white/20 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <h3 className="font-medium">{share.title}</h3>
+                      <p className="text-xs text-white/50">{share.sourceLabel}</p>
+                    </div>
+                    <SliceKindBadge kind={share.sliceKind} />
                   </div>
-                  <SliceKindBadge kind={share.sliceKind} />
-                </div>
 
-                {/* Preview content (first few lines if string, or summary) */}
-                {typeof share.decryptedPayload === 'object' &&
-                  share.decryptedPayload !== null &&
-                  'preview' in (share.decryptedPayload as Record<string, unknown>) && (
-                    <p className="text-sm text-white/70 line-clamp-2">
-                      {String((share.decryptedPayload as Record<string, unknown>).preview)}
-                    </p>
+                  {/* Preview content */}
+                  {preview && (
+                    <p className="text-sm text-white/70 line-clamp-2">{preview}</p>
                   )}
 
-                {typeof share.decryptedPayload === 'object' &&
-                  share.decryptedPayload !== null &&
-                  'content' in (share.decryptedPayload as Record<string, unknown>) &&
-                  typeof (share.decryptedPayload as Record<string, unknown>).content === 'string' && (
-                    <p className="text-sm text-white/70 line-clamp-2">
-                      {String((share.decryptedPayload as Record<string, unknown>).content).slice(0, 200)}
-                      {String((share.decryptedPayload as Record<string, unknown>).content).length > 200 ? '…' : ''}
-                    </p>
-                  )}
-
-                {typeof share.decryptedPayload === 'object' &&
-                  share.decryptedPayload !== null &&
-                  'links' in (share.decryptedPayload as Record<string, unknown>) &&
-                  Array.isArray((share.decryptedPayload as Record<string, unknown>).links) && (
-                    <p className="text-sm text-white/50">
-                      {((share.decryptedPayload as Record<string, unknown>).links as unknown[]).length} links
-                    </p>
-                  )}
-
-                <div className="flex items-center justify-between text-xs text-white/40">
-                  <span>
-                    Received {new Date(share.receivedAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between text-xs text-white/40">
+                    <span>
+                      Received {new Date(share.receivedAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
+
+      {/* Detail drawer */}
+      {selected && (
+        <DetailDrawer
+          share={selected}
+          onClose={() => setSelected(null)}
+          onDelete={handleDelete}
+          deleting={deleting}
+        />
+      )}
     </main>
   );
 }
