@@ -30,7 +30,9 @@ export type InsightKind =
   | 'timeline_spike'
   | 'quiet_period'
   | 'topic_cluster'
-  | 'always_on_summary';
+  | 'always_on_summary'
+  | 'link_cluster'
+  | 'streak_coach';
 
 /**
  * Base insight card type
@@ -81,6 +83,45 @@ export type AlwaysOnSummaryData = {
 export type AlwaysOnSummaryCard = InsightCard & {
   kind: 'always_on_summary';
   data: AlwaysOnSummaryData;
+};
+
+/**
+ * Link cluster specific data
+ */
+export type LinkClusterData = {
+  clusterSize: number;
+  topTokens: string[];
+  avgSimilarity: number;
+};
+
+/**
+ * Extended insight card for link clusters
+ */
+export type LinkClusterCard = InsightCard & {
+  kind: 'link_cluster';
+  data: LinkClusterData;
+};
+
+/**
+ * Streak coach specific data
+ */
+export type StreakCoachData = {
+  bestHour: number; // 0-23
+  bestHourLabel: string; // "10 PM", "8 AM", etc.
+  periodLabel: string; // "evening", "morning", etc.
+  entriesAtBestHour: number;
+  totalEntries: number;
+  percentageAtBestHour: number;
+  currentStreak: number;
+  longestStreak: number;
+};
+
+/**
+ * Extended insight card for streak coach
+ */
+export type StreakCoachCard = InsightCard & {
+  kind: 'streak_coach';
+  data: StreakCoachData;
 };
 
 /**

@@ -1,26 +1,37 @@
 'use client';
 
 import { useState } from 'react';
-import { downloadJSON } from '../app/lib/export'; // <-- correct path
-import { toast } from "sonner";
-
+import { downloadJSON } from '../app/lib/export';
+import { toast } from 'sonner';
 
 type ExportButtonProps = {
   walletAddress?: string;
   items?: unknown[];
 };
 
+// Extend globalThis in a typed way
+type SoeGlobal = typeof globalThis & {
+  __soeDecryptedEntries?: unknown[];
+  __soeWallet?: string;
+};
+
 function getItemsFallback(items?: unknown[]) {
   if (Array.isArray(items)) return items;
-  const g = globalThis as any;
-  if (Array.isArray(g.__soeDecryptedEntries)) return g.__soeDecryptedEntries as unknown[];
+
+  const g = globalThis as SoeGlobal;
+  if (Array.isArray(g.__soeDecryptedEntries)) {
+    return g.__soeDecryptedEntries as unknown[];
+  }
   return [];
 }
 
 function getWalletFallback(wallet?: string) {
   if (wallet && wallet.length) return wallet;
-  const g = globalThis as any;
-  if (typeof g.__soeWallet === 'string') return g.__soeWallet as string;
+
+  const g = globalThis as SoeGlobal;
+  if (typeof g.__soeWallet === 'string') {
+    return g.__soeWallet;
+  }
   return '';
 }
 
@@ -33,12 +44,12 @@ export default function ExportButton({ walletAddress, items }: ExportButtonProps
 
   async function onExport() {
     if (!addr) {
-      toast.error("Connect your wallet to export.");
+      toast.error('Connect your wallet to export.');
       return;
     }
 
     if (!hasReflections) {
-      toast.error("Nothing to export yet");
+      toast.error('Nothing to export yet');
       return;
     }
 
@@ -52,25 +63,28 @@ export default function ExportButton({ walletAddress, items }: ExportButtonProps
         reflections: list,
       };
       const shortAddr = addr.slice(0, 6);
-      const date = exportedAt.slice(0, 10); // YYYY-MM-DD
+      const date = exportedAt.slice(0, 10); // YYYY MM DD
       const filename = `soe_export_${shortAddr}_${date}.json`;
       downloadJSON(filename, payload);
       toast.success(`Exported ${list.length} reflections to ${filename}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error("Export failed. Please try again.");
+      toast.error('Export failed. Please try again.');
     } finally {
       setBusy(false);
     }
   }
-
 
   return (
     <button
       onClick={onExport}
       disabled={busy || !hasReflections}
       className="px-3 py-2 rounded-xl shadow text-sm border border-neutral-300 disabled:opacity-60"
-      title={hasReflections ? "Export decrypted reflections as JSON" : "No reflections to export"}
+      title={
+        hasReflections
+          ? 'Export decrypted reflections as JSON'
+          : 'No reflections to export'
+      }
     >
       {busy ? 'Exporting...' : 'Export JSON'}
     </button>
