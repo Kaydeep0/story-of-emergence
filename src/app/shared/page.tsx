@@ -7,6 +7,13 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { keyFromSignatureHex } from '../../lib/crypto';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcListAcceptedShares, rpcDeleteAcceptedShare } from '../lib/shares';
+import {
+  rpcListContactsDecrypted,
+  rpcInsertContact,
+  rpcDeleteContact,
+  buildContactsMap,
+  type ContactDecrypted,
+} from '../lib/contacts';
 import type { AcceptedShare, SliceKind } from '../../lib/sharing';
 
 function humanizeSignError(e: unknown): string {
@@ -108,11 +115,38 @@ function getPreviewText(share: AcceptedShare): string | null {
   return null;
 }
 
-// ----- Helper: extract sender from source label -----
-function extractSenderFromLabel(sourceLabel: string): string {
+// ----- Helper: extract sender wallet from source label -----
+function extractSenderWallet(sourceLabel: string): string | null {
   // sourceLabel is like "From 0x1234...5678 on Dec 4, 2025"
+  // We need the full wallet - check if decryptedPayload has it
   const match = sourceLabel.match(/From\s+(0x[a-fA-F0-9…]+)/);
-  return match ? match[1] : sourceLabel;
+  return match ? match[1] : null;
+}
+
+// ----- Helper: extract full sender wallet from share payload -----
+// Checks multiple possible field names for robustness
+function extractSenderWalletFromSelected(selected: AcceptedShare | null): string | null {
+  if (!selected) return null;
+
+  const payload = selected.decryptedPayload as Record<string, unknown> | undefined;
+
+  // Check multiple possible field names in payload
+  const candidate =
+    (payload?.senderWallet as string | undefined) ||
+    (payload?.sender_wallet as string | undefined) ||
+    // Also check top-level on the share object (shouldn't be there, but be safe)
+    ((selected as Record<string, unknown>).senderWallet as string | undefined) ||
+    ((selected as Record<string, unknown>).sender_wallet as string | undefined);
+
+  if (!candidate || typeof candidate !== 'string') return null;
+
+  return candidate.toLowerCase();
+}
+
+// ----- Helper: shorten wallet address -----
+function shortenWallet(wallet: string): string {
+  if (wallet.length < 12) return wallet;
+  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 }
 
 // ----- Detail Drawer Component -----
@@ -121,19 +155,45 @@ function DetailDrawer({
   onClose,
   onDelete,
   deleting,
+  contactName,
+  senderWallet,
+  onSaveContact,
+  savingContact,
 }: {
   share: AcceptedShare;
   onClose: () => void;
   onDelete: () => void;
   deleting: boolean;
+  contactName: string;
+  senderWallet: string | null;
+  onSaveContact: (name: string, wallet: string | null) => Promise<void>;
+  savingContact: boolean;
 }) {
   const preview = getPreviewText(share);
-  const sender = extractSenderFromLabel(share.sourceLabel);
+  const senderDisplay = extractSenderWallet(share.sourceLabel) || 'Unknown sender';
   const receivedDate = new Date(share.receivedAt).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
+
+  const [labelInput, setLabelInput] = useState(contactName);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Track if input changed from initial value
+  useEffect(() => {
+    setHasChanges(labelInput !== contactName);
+  }, [labelInput, contactName]);
+
+  // Reset input when share or contactName changes
+  useEffect(() => {
+    setLabelInput(contactName);
+  }, [contactName, share.id]);
+
+  async function handleSaveLabel() {
+    await onSaveContact(labelInput.trim(), senderWallet);
+    setHasChanges(false);
+  }
 
   return (
     <div
@@ -161,16 +221,52 @@ function DetailDrawer({
         {/* Title */}
         <h2 className="text-xl font-semibold mb-3">{share.title}</h2>
 
-        {/* Metadata */}
+        {/* Metadata - show contact name if available */}
         <div className="space-y-1 text-sm text-white/60 mb-4">
-          <p>From {sender}</p>
+          {contactName ? (
+            <>
+              <p className="text-white/90 font-medium">From {contactName}</p>
+              <p className="text-xs text-white/40">{senderDisplay}</p>
+            </>
+          ) : (
+            <p>From {senderDisplay}</p>
+          )}
           <p>Received {receivedDate}</p>
         </div>
 
         {/* Preview content */}
         {preview && (
-          <div className="rounded-xl bg-white/5 border border-white/10 p-4 mb-6">
+          <div className="rounded-xl bg-white/5 border border-white/10 p-4 mb-4">
             <p className="text-sm text-white/80 whitespace-pre-wrap">{preview}</p>
+          </div>
+        )}
+
+        {/* Contact label editor - only show if we can identify the sender wallet */}
+        {senderWallet && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 mb-6">
+            <label className="block text-xs text-white/50 uppercase tracking-wide mb-2">
+              Contact label
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={labelInput}
+                onChange={(e) => setLabelInput(e.target.value)}
+                placeholder="Add a name for this sender…"
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-white/30"
+              />
+              <button
+                type="button"
+                onClick={handleSaveLabel}
+                disabled={!hasChanges || savingContact}
+                className="px-4 py-2 text-sm rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {savingContact ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <p className="text-xs text-white/40 mt-2">
+              This label is encrypted and only visible to you.
+            </p>
           </div>
         )}
 
@@ -209,6 +305,11 @@ export default function SharedPage() {
   const [consentSig, setConsentSig] = useState<string | null>(null);
   const [selected, setSelected] = useState<AcceptedShare | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+
+  // Contacts state
+  const [contacts, setContacts] = useState<ContactDecrypted[]>([]);
+  const [contactsMap, setContactsMap] = useState<Map<string, ContactDecrypted>>(new Map());
 
   const { logEvent } = useLogEvent();
   const connected = isConnected && !!address;
@@ -229,6 +330,8 @@ export default function SharedPage() {
   useEffect(() => {
     setConsentSig(null);
     sessionStorage.removeItem('soe-consent-sig');
+    setContacts([]);
+    setContactsMap(new Map());
   }, [address]);
 
   async function getSessionKey(): Promise<CryptoKey> {
@@ -268,6 +371,9 @@ export default function SharedPage() {
         offset: 0,
       });
       setShares(items);
+
+      // Load contacts after shares
+      await loadContacts(sessionKey);
     } catch (e: unknown) {
       const err = e as { message?: string };
       if (err?.message === 'PENDING_SIG') return;
@@ -277,6 +383,22 @@ export default function SharedPage() {
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadContacts(sessionKey?: CryptoKey) {
+    if (!connected || !address) return;
+
+    try {
+      const key = sessionKey ?? (await getSessionKey());
+      const contactsList = await rpcListContactsDecrypted(address, key);
+      setContacts(contactsList);
+      setContactsMap(buildContactsMap(contactsList));
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      if (err?.message === 'PENDING_SIG') return;
+      console.error('Failed to load contacts', e);
+      // Don't show error toast for contacts - it's not critical
     }
   }
 
@@ -307,6 +429,83 @@ export default function SharedPage() {
     } finally {
       setDeleting(false);
     }
+  }
+
+  // Handle save contact from drawer
+  async function handleSaveContact(name: string, walletFromDrawer: string | null) {
+    if (!selected || !address) return;
+
+    // Use wallet passed from drawer, or fallback to extracting it
+    const walletForContact = walletFromDrawer ?? extractSenderWalletFromSelected(selected);
+    if (!walletForContact) {
+      toast.error('Cannot identify sender wallet');
+      return;
+    }
+
+    setSavingContact(true);
+    try {
+      const sessionKey = await getSessionKey();
+
+      if (name === '') {
+        // Empty name - delete the contact if it exists
+        const existingContact = contactsMap.get(walletForContact.toLowerCase());
+        if (existingContact) {
+          await rpcDeleteContact(address, existingContact.id);
+          // Update local state
+          setContacts((prev) => prev.filter((c) => c.id !== existingContact.id));
+          setContactsMap((prev) => {
+            const newMap = new Map(prev);
+            newMap.delete(walletForContact.toLowerCase());
+            return newMap;
+          });
+          toast.success('Contact label removed');
+        }
+      } else {
+        // Save or update the contact
+        const newId = await rpcInsertContact(address, sessionKey, walletForContact, name);
+        
+        // Update local state
+        const newContact: ContactDecrypted = {
+          id: newId,
+          contactWallet: walletForContact.toLowerCase(),
+          name,
+          createdAt: new Date().toISOString(),
+        };
+        
+        setContacts((prev) => {
+          const existing = prev.findIndex((c) => c.contactWallet === walletForContact.toLowerCase());
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = newContact;
+            return updated;
+          }
+          return [newContact, ...prev];
+        });
+        
+        setContactsMap((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(walletForContact.toLowerCase(), newContact);
+          return newMap;
+        });
+        
+        toast.success('Contact label saved');
+      }
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      if (err?.message === 'PENDING_SIG') return;
+      console.error('Failed to save contact', e);
+      toast.error(err?.message ?? 'Failed to save contact');
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  // Get contact name for a share
+  function getContactNameForShare(share: AcceptedShare): string {
+    const senderWallet = extractSenderWalletFromSelected(share);
+    if (!senderWallet) return '';
+    const contact = contactsMap.get(senderWallet.toLowerCase());
+    return contact?.name || '';
   }
 
   if (!mounted) return null;
@@ -366,6 +565,9 @@ export default function SharedPage() {
 
             {shares.map((share) => {
               const preview = getPreviewText(share);
+              const contactName = getContactNameForShare(share);
+              const senderDisplay = extractSenderWallet(share.sourceLabel) || 'Unknown';
+              
               return (
                 <button
                   key={share.id}
@@ -376,7 +578,15 @@ export default function SharedPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <h3 className="font-medium">{share.title}</h3>
-                      <p className="text-xs text-white/50">{share.sourceLabel}</p>
+                      {/* Show contact name with wallet below, or just wallet */}
+                      {contactName ? (
+                        <div>
+                          <p className="text-sm text-white/70">From {contactName}</p>
+                          <p className="text-xs text-white/40">{senderDisplay}</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-white/50">{share.sourceLabel}</p>
+                      )}
                     </div>
                     <SliceKindBadge kind={share.sliceKind} />
                   </div>
@@ -409,9 +619,12 @@ export default function SharedPage() {
           onClose={() => setSelected(null)}
           onDelete={handleDelete}
           deleting={deleting}
+          contactName={getContactNameForShare(selected)}
+          senderWallet={extractSenderWalletFromSelected(selected)}
+          onSaveContact={handleSaveContact}
+          savingContact={savingContact}
         />
       )}
     </main>
   );
 }
-

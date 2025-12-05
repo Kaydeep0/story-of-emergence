@@ -251,13 +251,19 @@ function CapsuleOpenContent() {
       const sessionKey = await getSessionKey();
       const sourceLabel = createSourceLabel(state.capsule.senderWallet, new Date());
 
+      // Ensure senderWallet is included in the payload for contact labeling
+      const payloadWithSender =
+        typeof state.decryptedPayload === 'object' && state.decryptedPayload !== null
+          ? { ...(state.decryptedPayload as Record<string, unknown>), senderWallet: state.capsule.senderWallet }
+          : { content: state.decryptedPayload, senderWallet: state.capsule.senderWallet };
+
       await rpcInsertAcceptedShare(
         address,
         sessionKey,
         state.capsule.shareId,
         state.sliceKind,
         state.title,
-        state.decryptedPayload,
+        payloadWithSender,
         sourceLabel
       );
 
