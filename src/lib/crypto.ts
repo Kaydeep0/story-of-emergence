@@ -1,5 +1,18 @@
-// src/app/lib/crypto.ts
+// src/lib/crypto.ts
 console.log('[crypto] loaded');
+
+// --- types ---
+
+/** EIP-1193 provider interface for ethereum wallet */
+interface EthereumProvider {
+  request: (args: { method: string; params: unknown[] }) => Promise<string>;
+}
+
+declare global {
+  interface Window {
+    ethereum?: EthereumProvider;
+  }
+}
 
 // --- helpers ---
 
@@ -16,10 +29,10 @@ function hexToBytes(hex: string): Uint8Array {
 
 // --- key derivation (consent signature → AES key) ---
 export async function deriveKeyFromSignature(address: string): Promise<CryptoKey> {
-  if (!(window as any)?.ethereum) throw new Error('No wallet detected');
+  if (!window?.ethereum) throw new Error('No wallet detected');
 
   const msg = `Story of Emergence — encryption key consent for ${address}`;
-  const hexSig: string = await (window as any).ethereum.request({
+  const hexSig: string = await window.ethereum.request({
     method: 'personal_sign',
     params: [msg, address],
   });
@@ -32,7 +45,7 @@ export async function deriveKeyFromSignature(address: string): Promise<CryptoKey
 // --- legacy encrypt/decrypt (used in early versions) ---
 
 // Encrypt a JSON object -> base64(iv || ciphertext)
-export async function encryptJSON(obj: any, key: CryptoKey): Promise<string> {
+export async function encryptJSON(obj: unknown, key: CryptoKey): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12)); // 12-byte IV for AES-GCM
   const plaintext = new TextEncoder().encode(JSON.stringify(obj));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
@@ -48,7 +61,7 @@ export async function encryptJSON(obj: any, key: CryptoKey): Promise<string> {
 }
 
 // Decrypt base64(iv || ciphertext) -> JSON object
-export async function decryptJSON(b64: string, key: CryptoKey): Promise<any> {
+export async function decryptJSON(b64: string, key: CryptoKey): Promise<unknown> {
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const iv = raw.slice(0, 12);
   const ct = raw.slice(12);
@@ -64,7 +77,7 @@ export async function keyFromSignatureHex(hexSig: string): Promise<CryptoKey> {
 }
 
 // --- legacy fallback for plain base64 JSON ---
-export function tryDecodeLegacyJSON(b64: string): any | null {
+export function tryDecodeLegacyJSON(b64: string): unknown {
   try {
     const txt = atob(b64);
     return JSON.parse(txt);

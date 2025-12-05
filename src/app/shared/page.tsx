@@ -143,11 +143,6 @@ function extractSenderWalletFromSelected(selected: AcceptedShare | null): string
   return candidate.toLowerCase();
 }
 
-// ----- Helper: shorten wallet address -----
-function shortenWallet(wallet: string): string {
-  if (wallet.length < 12) return wallet;
-  return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
-}
 
 // ----- Detail Drawer Component -----
 function DetailDrawer({
@@ -307,8 +302,8 @@ export default function SharedPage() {
   const [deleting, setDeleting] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
 
-  // Contacts state
-  const [contacts, setContacts] = useState<ContactDecrypted[]>([]);
+  // Contacts state - we maintain both array and map for different use cases
+  const [, setContacts] = useState<ContactDecrypted[]>([]);
   const [contactsMap, setContactsMap] = useState<Map<string, ContactDecrypted>>(new Map());
 
   const { logEvent } = useLogEvent();
@@ -372,8 +367,10 @@ export default function SharedPage() {
       });
       setShares(items);
 
-      // Load contacts after shares
-      await loadContacts(sessionKey);
+      // Load contacts after shares - don't await to avoid blocking on contact failures
+      loadContacts(sessionKey).catch(() => {
+        // Silently ignore - loadContacts already logs and doesn't show error toasts
+      });
     } catch (e: unknown) {
       const err = e as { message?: string };
       if (err?.message === 'PENDING_SIG') return;
