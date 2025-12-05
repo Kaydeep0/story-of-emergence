@@ -177,7 +177,7 @@ export default function InsightsPage() {
   const { highlights, isHighlighted, toggleHighlight } = useHighlights();
 
   // Feedback state (backed by localStorage)
-  const { getFeedback, toggleFeedback, recipeScores } = useFeedback();
+  const { getFeedback, toggleFeedback, recipeScores, insightScores } = useFeedback();
 
   // Helper to check if a spike card is expanded
   function isExpanded(dateKey: string): boolean {
@@ -571,7 +571,7 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && !reflectionsError && spikeInsights.length > 0 && (
                   <div className="space-y-4">
-                    {sortByRecipeScore(spikeInsights, recipeScores).map((spike) => {
+                    {sortByRecipeScore(spikeInsights, recipeScores, insightScores).map((spike) => {
                       const dateKey = spike.data.date;
                       const expanded = isExpanded(dateKey);
                       const visibleCount = expanded ? spike.evidence.length : 5;
@@ -694,7 +694,7 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && coachInsights.length > 0 && (
                   <div className="space-y-4">
-                    {sortByRecipeScore(coachInsights, recipeScores).map((coach) => {
+                    {sortByRecipeScore(coachInsights, recipeScores, insightScores).map((coach) => {
                       const highlighted = isHighlighted(coach);
                       return (
                         <div
@@ -807,7 +807,7 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && clusterInsights.length > 0 && (
                   <div className="space-y-4">
-                    {sortByRecipeScore(clusterInsights, recipeScores).map((cluster) => {
+                    {sortByRecipeScore(clusterInsights, recipeScores, insightScores).map((cluster) => {
                       const highlighted = isHighlighted(cluster);
                       return (
                         <div
@@ -1099,7 +1099,7 @@ export default function InsightsPage() {
 
                   {!summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length > 0 && (
                     <div className="space-y-4">
-                      {sortByRecipeScore(summaryInsights, recipeScores).map((insight) => {
+                      {sortByRecipeScore(summaryInsights, recipeScores, insightScores).map((insight) => {
                         const highlighted = isHighlighted(insight);
                         return (
                           <div
