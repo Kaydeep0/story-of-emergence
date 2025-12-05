@@ -14,6 +14,7 @@ import { computeTimelineSpikes, itemToReflectionEntry } from '../lib/insights/ti
 import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
 import { computeLinkClusters } from '../lib/insights/linkClusters';
 import { computeStreakCoach } from '../lib/insights/streakCoach';
+import { computeTopicDrift } from '../lib/insights/topicDrift';
 import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
 import type { TimelineSpikeCard, AlwaysOnSummaryCard, InsightCard, LinkClusterCard, StreakCoachCard } from '../lib/insights/types';
@@ -322,9 +323,8 @@ export default function InsightsPage() {
     };
   }, [mode, connected, address]);
 
-  // Load summary data when Summary mode is active
+  // Load summary data when connected (for health strip and Summary tab)
   useEffect(() => {
-    if (mode !== 'summary') return;
     if (!connected || !address) return;
 
     let cancelled = false;
@@ -365,7 +365,7 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, connected, address]);
+  }, [connected, address]);
 
   // Load decrypted reflections and compute Always On Summary when Summary mode is active
   useEffect(() => {
@@ -454,6 +454,10 @@ export default function InsightsPage() {
         const spikes = computeTimelineSpikes(reflectionEntries);
         const clusters = computeLinkClusters(reflectionEntries);
         const coach = computeStreakCoach(reflectionEntries);
+        
+        // Topic drift debug (Phase Four scaffolding - console only for now)
+        const drift = computeTopicDrift(reflectionEntries);
+        console.log('Topic drift debug', drift);
 
         if (!cancelled) {
           setSpikeInsights(spikes);
@@ -498,6 +502,34 @@ export default function InsightsPage() {
         <p className="text-center text-sm text-white/60 mb-6">
           Different ways to view your encrypted activity.
         </p>
+
+        {/* Health strip - shows summary data when loaded and connected */}
+        {connected && !summaryLoading && summaryData && (
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 mb-6">
+            <div className="flex items-center justify-center gap-6 text-xs text-white/60">
+              <span>
+                <span className="font-medium text-white/80">{summaryData.entries}</span> reflections
+              </span>
+              <span className="text-white/20">•</span>
+              <span>
+                <span className="font-medium text-white/80">{summaryData.totalEvents}</span> events
+              </span>
+              <span className="text-white/20">•</span>
+              <span>
+                Last active{' '}
+                <span className="font-medium text-white/80">
+                  {summaryData.lastActiveAt
+                    ? new Date(summaryData.lastActiveAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    : 'never'}
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Mode switcher */}
         <div className="flex justify-center mb-8">
