@@ -151,6 +151,7 @@ function calculateScores(
  * - getInsightScore: get score for a specific insight
  * - recipeScores: all recipe scores for sorting
  * - insightScores: all individual insight scores
+ * - hydrateFromStorage: explicitly load feedback from localStorage
  */
 export function useFeedback() {
   const [store, setStore] = useState<FeedbackStore>({
@@ -160,12 +161,21 @@ export function useFeedback() {
   });
   const [loaded, setLoaded] = useState(false);
 
-  // Load from localStorage on mount
-  useEffect(() => {
+  /**
+   * Hydrate the store from localStorage
+   * Idempotent - safe to call multiple times
+   * Swallows errors and falls back to current state
+   */
+  const hydrateFromStorage = useCallback(() => {
     const stored = loadFeedbackStore();
     setStore(stored);
     setLoaded(true);
   }, []);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    hydrateFromStorage();
+  }, [hydrateFromStorage]);
 
   // Save to localStorage whenever store changes
   useEffect(() => {
@@ -299,6 +309,7 @@ export function useFeedback() {
     recipeScores: store.recipeScores,
     insightScores: store.insightScores,
     loaded,
+    hydrateFromStorage,
   };
 }
 

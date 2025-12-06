@@ -187,7 +187,12 @@ export default function InsightsPage() {
   const { highlights, isHighlighted, toggleHighlight } = useHighlights();
 
   // Feedback state (backed by localStorage)
-  const { getFeedback, toggleFeedback, recipeScores, insightScores } = useFeedback();
+  const { getFeedback, toggleFeedback, recipeScores, insightScores, hydrateFromStorage } = useFeedback();
+
+  // Hydrate feedback scores from localStorage on mount to ensure stable ordering
+  useEffect(() => {
+    hydrateFromStorage();
+  }, [hydrateFromStorage]);
 
   // Helper to check if a spike card is expanded
   function isExpanded(dateKey: string): boolean {
