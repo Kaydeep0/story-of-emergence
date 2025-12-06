@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { keyFromSignatureHex } from '../../lib/crypto';
+import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcListAcceptedShares, rpcDeleteAcceptedShare } from '../lib/shares';
 import {
@@ -290,14 +290,12 @@ function DetailDrawer({
 
 export default function SharedPage() {
   const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
-  const signingConsentRef = useRef(false);
+  const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shares, setShares] = useState<AcceptedShare[]>([]);
-  const [consentSig, setConsentSig] = useState<string | null>(null);
   const [selected, setSelected] = useState<AcceptedShare | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
@@ -311,8 +309,6 @@ export default function SharedPage() {
 
   useEffect(() => {
     setMounted(true);
-    const s = sessionStorage.getItem('soe-consent-sig');
-    if (s) setConsentSig(s);
   }, []);
 
   // Log navigation event
@@ -321,46 +317,26 @@ export default function SharedPage() {
     logEvent('page_shared');
   }, [mounted, connected, logEvent]);
 
-  // Reset signature when wallet changes
+  // Reset contacts when wallet changes
   useEffect(() => {
-    setConsentSig(null);
-    sessionStorage.removeItem('soe-consent-sig');
     setContacts([]);
     setContactsMap(new Map());
   }, [address]);
 
-  async function getSessionKey(): Promise<CryptoKey> {
-    if (!connected || !address) throw new Error('Connect wallet first');
-
-    let sig = consentSig;
-
-    if (!sig) {
-      if (signingConsentRef.current) {
-        throw new Error('PENDING_SIG');
-      }
-      signingConsentRef.current = true;
-      try {
-        const msg = `Story of Emergence — encryption key consent for ${address}`;
-        sig = await signMessageAsync({ message: msg });
-        setConsentSig(sig);
-        sessionStorage.setItem('soe-consent-sig', sig);
-      } catch (e: unknown) {
-        throw new Error(humanizeSignError(e));
-      } finally {
-        signingConsentRef.current = false;
-      }
-    }
-    return keyFromSignatureHex(sig);
-  }
-
   async function loadShares() {
     if (!connected || !address) return;
+    if (!encryptionReady || !sessionKey) {
+      if (encryptionError) {
+        setError(encryptionError);
+        toast.error(encryptionError);
+      }
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const sessionKey = await getSessionKey();
       const { items } = await rpcListAcceptedShares(address, sessionKey, {
         limit: 50,
         offset: 0,
@@ -373,7 +349,6 @@ export default function SharedPage() {
       });
     } catch (e: unknown) {
       const err = e as { message?: string };
-      if (err?.message === 'PENDING_SIG') return;
       console.error('Failed to load shares', e);
       const msg = err?.message ?? 'Could not load shared content';
       setError(msg);
@@ -385,15 +360,17 @@ export default function SharedPage() {
 
   async function loadContacts(sessionKey?: CryptoKey) {
     if (!connected || !address) return;
+    if (!sessionKey && (!encryptionReady || !sessionKey)) {
+      return;
+    }
 
     try {
-      const key = sessionKey ?? (await getSessionKey());
+      const key = sessionKey ?? (encryptionReady ? sessionKey! : null);
+      if (!key) return;
       const contactsList = await rpcListContactsDecrypted(address, key);
       setContacts(contactsList);
       setContactsMap(buildContactsMap(contactsList));
     } catch (e: unknown) {
-      const err = e as { message?: string };
-      if (err?.message === 'PENDING_SIG') return;
       console.error('Failed to load contacts', e);
       // Don't show error toast for contacts - it's not critical
     }
@@ -441,7 +418,14 @@ export default function SharedPage() {
 
     setSavingContact(true);
     try {
-      const sessionKey = await getSessionKey();
+      if (!encryptionReady || !sessionKey) {
+        if (encryptionError) {
+          toast.error(encryptionError);
+        } else {
+          toast.error('Encryption key not ready');
+        }
+        return;
+      }
 
       if (name === '') {
         // Empty name - delete the contact if it exists
@@ -489,7 +473,6 @@ export default function SharedPage() {
       }
     } catch (e: unknown) {
       const err = e as { message?: string };
-      if (err?.message === 'PENDING_SIG') return;
       console.error('Failed to save contact', e);
       toast.error(err?.message ?? 'Failed to save contact');
     } finally {
@@ -525,6 +508,16 @@ export default function SharedPage() {
             <div className="flex justify-center">
               <ConnectButton />
             </div>
+          </div>
+        )}
+
+        {/* Encryption not ready state */}
+        {connected && !encryptionReady && (
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-center space-y-4">
+            <h2 className="text-lg font-medium text-amber-200">Preparing encryption key</h2>
+            <p className="text-sm text-white/60">
+              {encryptionError || 'Please sign the message in your wallet to continue.'}
+            </p>
           </div>
         )}
 

@@ -24,9 +24,30 @@ export function useHealth(showDeleted: boolean): Health {
   const [entriesCount, setEntriesCount] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
-  const keyOk =
-    typeof window !== "undefined" &&
-    !!sessionStorage.getItem("soe-consent-sig");
+  const keyOk = (() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const stored = sessionStorage.getItem("soe-encryption-session");
+      if (!stored) return false;
+      const parsed = JSON.parse(stored);
+      // Check if it has the required fields and wallet matches
+      if (
+        parsed.signature &&
+        parsed.consentTimestamp &&
+        parsed.walletAddress &&
+        parsed.walletAddress.toLowerCase() === address?.toLowerCase()
+      ) {
+        // Check if consent is not expired (12 hours)
+        const consentDate = new Date(parsed.consentTimestamp);
+        const now = new Date();
+        const hoursSinceConsent = (now.getTime() - consentDate.getTime()) / (1000 * 60 * 60);
+        return hoursSinceConsent < 12;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  })();
 
   useEffect(() => {
     let cancelled = false;

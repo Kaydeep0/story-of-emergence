@@ -43,7 +43,7 @@ import { baseSepolia } from 'viem/chains';
 import { incSaveCount, messageForSave } from '@/app/lib/toast';
 
 import { getSupabaseForWallet } from './lib/supabase';
-import { keyFromSignatureHex } from '../lib/crypto';
+import { useEncryptionSession } from './lib/useEncryptionSession';
 import { rpcInsertShare } from './lib/shares';
 import {
   generateContentKey,
@@ -81,6 +81,7 @@ export default function Home() {
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const { switchChain, isPending: switching } = useSwitchChain();
   const sb = useMemo(() => getSupabaseForWallet(address ?? ''), [address]);
+  const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   // mounted gate to avoid hydration mismatch
 const [mounted, setMounted] = useState(false);
 useEffect(() => setMounted(true), []);
@@ -210,15 +211,7 @@ useEffect(() => {
 
   const [loadingList, setLoadingList] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const signingConsentRef = useRef(false);
   const [saving, setSaving] = useState(false);
-
-  // cache the consent signature so we don’t re-prompt every time this session
-  const [consentSig, setConsentSig] = useState<string | null>(null);
-  useEffect(() => {
-    const s = sessionStorage.getItem('soe-consent-sig');
-    if (s) setConsentSig(s);
-  }, []);
 
   // autosize textarea
   useEffect(() => {
@@ -238,11 +231,6 @@ useEffect(() => {
     (globalThis as any).__soeDecryptedEntries = items;
   }, [items]);
 
-  // If the wallet account changes, drop any previous session signature (wrong key)
-  useEffect(() => {
-    setConsentSig(null);
-    sessionStorage.removeItem('soe-consent-sig');
-  }, [address]);
 
 
 
@@ -258,34 +246,6 @@ useEffect(() => {
 
   const shortAddr = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : '';
 
-  // ask wallet for (or reuse) a consent signature; return AES key
-  async function getSessionKey(): Promise<CryptoKey> {
-    if (!connected || !address) throw new Error('Connect wallet first');
-
-    let sig = consentSig;
-
-    if (!sig) {
-      if (signingConsentRef.current) {
-        setStatus('Signature already pending — check MetaMask.');
-        throw new Error('PENDING_SIG');
-      }
-      signingConsentRef.current = true;
-      try {
-        const msg = `Story of Emergence — encryption key consent for ${address}`;
-        setStatus('Requesting signature in MetaMask… (look for the popup)');
-        sig = await signMessageAsync({ message: msg });
-        setConsentSig(sig);
-        sessionStorage.setItem('soe-consent-sig', sig);
-      } catch (e: any) {
-        setStatus(humanizeSignError(e));
-        throw e;
-      } finally {
-        signingConsentRef.current = false;
-      }
-    }
-    return keyFromSignatureHex(sig);
-  }
-
   // ---- load my reflections (fetch → decrypt → show plaintext) ----
 async function loadMyReflections(reset = false) {
   try {
@@ -296,12 +256,20 @@ async function loadMyReflections(reset = false) {
       return;
     }
 
+    if (!encryptionReady || !sessionKey) {
+      if (encryptionError) {
+        setStatus(encryptionError);
+        toast.error(encryptionError);
+      } else {
+        setStatus('Preparing encryption key…');
+      }
+      return;
+    }
+
     if (reset) setNextOffset(0);
 
     // show the top skeleton only for first page
     if (reset || items.length === 0) setLoadingList(true);
-
-    const sessionKey = await getSessionKey();
 
    const { items: rows, nextOffset: no } = await rpcFetchEntries(
   address!,
@@ -334,10 +302,6 @@ async function loadMyReflections(reset = false) {
     setStatus("Reflections loaded");
     toast.success("Reflections loaded");
 } catch (e: any) {
-  if (e?.message === "PENDING_SIG") {
-    // user already has a wallet signature prompt
-    return;
-  }
   console.error(e);
   const msg = e?.message ?? "Load failed";
   setStatus(msg);
@@ -370,7 +334,15 @@ async function saveReflection() {
   setStatus("Preparing encryption key…");
 
   try {
-    const sessionKey = await getSessionKey();
+    if (!encryptionReady || !sessionKey) {
+      if (encryptionError) {
+        setStatus(encryptionError);
+        toast.error(encryptionError);
+      } else {
+        setStatus('Preparing encryption key…');
+      }
+      return;
+    }
     const { id: entryId } = await rpcInsertEntry(address!, sessionKey, {
       text,
       ts: Date.now(),
@@ -407,10 +379,6 @@ async function saveReflection() {
     await loadMyReflections(true);
 
 } catch (e: any) {
-  if (e?.message === "PENDING_SIG") {
-    // signature already pending in MetaMask, ignore
-    return;
-  }
   const msg = e?.message ?? "Save failed";
   setStatus(msg);
   toast.error(msg);
@@ -535,7 +503,14 @@ async function createShare() {
   setShareCreating(true);
 
   try {
-    const sessionKey = await getSessionKey();
+    if (!encryptionReady || !sessionKey) {
+      if (encryptionError) {
+        toast.error(encryptionError);
+      } else {
+        toast.error('Encryption key not ready');
+      }
+      return;
+    }
 
     // Generate a content key for this share
     const contentKey = await generateContentKey();
@@ -714,6 +689,12 @@ async function copyCapsuleUrl() {
           <p className="text-white/70 text-sm">
             We encrypt in your browser with a key derived from a wallet signature, then store only ciphertext.
           </p>
+
+          {!encryptionReady && connected && (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-200">
+              {encryptionError || 'Preparing encryption key…'}
+            </div>
+          )}
 
           {items.length > 0 && (
   <p className="text-xs text-white/60 mt-1">

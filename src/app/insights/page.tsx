@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { rpcListInternalEvents } from '../lib/internalEvents';
 import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
-import { keyFromSignatureHex } from '../../lib/crypto';
+import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
 import { computeTimelineSpikes, itemToReflectionEntry } from '../lib/insights/timelineSpikes';
@@ -23,6 +23,7 @@ import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard, StreakCoa
 import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
+import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -293,15 +294,13 @@ const MODE_OPTIONS: { value: InsightsMode; label: string }[] = [
 
 export default function InsightsPage() {
   const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
-  const signingConsentRef = useRef(false);
   const router = useRouter();
+  const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [insights, setInsights] = useState<WeeklyInsight[]>([]);
-  const [consentSig, setConsentSig] = useState<string | null>(null);
   const [mode, setMode] = useState<InsightsMode>('weekly');
 
   // Timeline state
@@ -385,8 +384,6 @@ export default function InsightsPage() {
 
   useEffect(() => {
     setMounted(true);
-    const s = sessionStorage.getItem('soe-consent-sig');
-    if (s) setConsentSig(s);
   }, []);
 
   // Log navigation event when page loads
@@ -395,44 +392,20 @@ export default function InsightsPage() {
     logEvent('page_insights');
   }, [mounted, connected, logEvent]);
 
-  // Reset signature when wallet changes
-  useEffect(() => {
-    setConsentSig(null);
-    sessionStorage.removeItem('soe-consent-sig');
-  }, [address]);
-
-  async function getSessionKey(): Promise<CryptoKey> {
-    if (!connected || !address) throw new Error('Connect wallet first');
-
-    let sig = consentSig;
-
-    if (!sig) {
-      if (signingConsentRef.current) {
-        throw new Error('PENDING_SIG');
-      }
-      signingConsentRef.current = true;
-      try {
-        const msg = `Story of Emergence — encryption key consent for ${address}`;
-        sig = await signMessageAsync({ message: msg });
-        setConsentSig(sig);
-        sessionStorage.setItem('soe-consent-sig', sig);
-      } catch (e: any) {
-        throw new Error(humanizeSignError(e));
-      } finally {
-        signingConsentRef.current = false;
-      }
-    }
-    return keyFromSignatureHex(sig);
-  }
-
   async function loadInsights() {
     if (!connected || !address) return;
+    if (!encryptionReady || !sessionKey) {
+      if (encryptionError) {
+        setError(encryptionError);
+        toast.error(encryptionError);
+      }
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const sessionKey = await getSessionKey();
       const { items } = await rpcListInternalEvents(address, sessionKey, {
         limit: 500,
         offset: 0,
@@ -441,7 +414,6 @@ export default function InsightsPage() {
       const weekly = computeWeeklyInsights(items);
       setInsights(weekly);
     } catch (e: any) {
-      if (e?.message === 'PENDING_SIG') return;
       console.error('Failed to load insights', e);
       const msg = e?.message ?? 'Could not load insights';
       setError(msg);
@@ -562,8 +534,13 @@ export default function InsightsPage() {
         setSummaryReflectionsError(null);
         setSummaryInsights([]);
 
-        // Get session key for decryption
-        const sessionKey = await getSessionKey();
+        // Check encryption ready
+        if (!encryptionReady || !sessionKey) {
+          if (encryptionError) {
+            setSummaryReflectionsError(encryptionError);
+          }
+          return;
+        }
 
         // Fetch all reflections (up to 500 for analysis)
         const { items } = await rpcFetchEntries(address!, sessionKey, {
@@ -589,7 +566,6 @@ export default function InsightsPage() {
           setSummaryReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
-        if (err?.message === 'PENDING_SIG') return;
         if (!cancelled) {
           console.error('Failed to load reflections for summary analysis', err);
           setSummaryReflectionsError(err.message ?? 'Failed to analyze reflections');
@@ -607,7 +583,7 @@ export default function InsightsPage() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, connected, address, consentSig]);
+  }, [mode, connected, address, encryptionReady, sessionKey]);
 
   // Load decrypted reflections and compute spikes when Timeline mode is active
   useEffect(() => {
@@ -622,8 +598,13 @@ export default function InsightsPage() {
         setReflectionsError(null);
         setSpikeInsights([]);
 
-        // Get session key for decryption
-        const sessionKey = await getSessionKey();
+        // Check encryption ready
+        if (!encryptionReady || !sessionKey) {
+          if (encryptionError) {
+            setReflectionsError(encryptionError);
+          }
+          return;
+        }
 
         // Fetch all reflections (up to 500 for analysis)
         const { items } = await rpcFetchEntries(address!, sessionKey, {
@@ -653,7 +634,6 @@ export default function InsightsPage() {
           setTimelineReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
-        if (err?.message === 'PENDING_SIG') return;
         if (!cancelled) {
           console.error('Failed to load reflections for spike analysis', err);
           setReflectionsError(err.message ?? 'Failed to analyze reflections');
@@ -671,7 +651,7 @@ export default function InsightsPage() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, connected, address, consentSig]);
+  }, [mode, connected, address, encryptionReady, sessionKey]);
 
   if (!mounted) return null;
 
@@ -754,6 +734,16 @@ export default function InsightsPage() {
               </div>
             )}
 
+            {/* Encryption not ready state */}
+            {connected && !encryptionReady && (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-center space-y-4">
+                <h2 className="text-lg font-medium text-amber-200">Preparing encryption key</h2>
+                <p className="text-sm text-white/60">
+                  {encryptionError || 'Please sign the message in your wallet to continue.'}
+                </p>
+              </div>
+            )}
+
             {/* Timeline Spikes Section */}
             {connected && (
               <div className="space-y-4">
@@ -765,11 +755,7 @@ export default function InsightsPage() {
                 </h2>
 
                 {reflectionsLoading && (
-                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                    <div className="h-5 bg-white/10 rounded w-1/2" />
-                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                    <div className="h-3 bg-white/5 rounded w-1/3" />
-                  </div>
+                  <TimelineSectionSkeleton />
                 )}
 
                 {!reflectionsLoading && reflectionsError && (
@@ -898,10 +884,7 @@ export default function InsightsPage() {
                 </h2>
 
                 {reflectionsLoading && (
-                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                    <div className="h-5 bg-white/10 rounded w-1/2" />
-                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                  </div>
+                  <TimelineSectionSkeleton />
                 )}
 
                 {!reflectionsLoading && coachInsights.length === 0 && (
@@ -1011,10 +994,7 @@ export default function InsightsPage() {
                 </h2>
 
                 {reflectionsLoading && (
-                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                    <div className="h-5 bg-white/10 rounded w-1/2" />
-                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                  </div>
+                  <TimelineSectionSkeleton />
                 )}
 
                 {!reflectionsLoading && clusterInsights.length === 0 && (
@@ -1153,10 +1133,7 @@ export default function InsightsPage() {
                 </h2>
 
                 {reflectionsLoading && (
-                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                    <div className="h-5 bg-white/10 rounded w-1/2" />
-                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                  </div>
+                  <TimelineSectionSkeleton />
                 )}
 
                 {!reflectionsLoading && topicDrift.length === 0 && (
@@ -1265,10 +1242,7 @@ export default function InsightsPage() {
                 </h2>
 
                 {reflectionsLoading && (
-                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                    <div className="h-5 bg-white/10 rounded w-1/2" />
-                    <div className="h-4 bg-white/5 rounded w-3/4" />
-                  </div>
+                  <TimelineSectionSkeleton />
                 )}
 
                 {!reflectionsLoading && contrastPairs.length === 0 && (
@@ -1455,11 +1429,11 @@ export default function InsightsPage() {
 
             {/* Loading state */}
             {connected && summaryLoading && (
-              <div className="rounded-2xl border border-white/10 p-6 space-y-4 animate-pulse">
-                <div className="h-6 bg-white/10 rounded w-1/3" />
+              <div className="rounded-2xl border border-white/10 p-6 space-y-4">
+                <div className="h-6 bg-white/10 animate-pulse rounded w-48 mb-4" />
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="h-24 bg-white/5 rounded-xl" />
-                  <div className="h-24 bg-white/5 rounded-xl" />
+                  <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
+                  <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
                 </div>
               </div>
             )}
@@ -1512,6 +1486,7 @@ export default function InsightsPage() {
                     <div className="mt-3 flex gap-2">
                       <div className="h-6 w-20 bg-white/10 rounded-full animate-pulse" />
                       <div className="h-6 w-16 bg-white/10 rounded-full animate-pulse" />
+                      <div className="h-6 w-24 bg-white/10 rounded-full animate-pulse" />
                     </div>
                   ) : topicDrift.length === 0 ? (
                     <p className="mt-2 text-xs text-white/60">
@@ -1534,11 +1509,7 @@ export default function InsightsPage() {
                 {/* Quick Stats Strip */}
                 <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
                   {summaryReflectionsLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-pulse">
-                      <div className="h-16 bg-white/5 rounded-lg" />
-                      <div className="h-16 bg-white/5 rounded-lg" />
-                      <div className="h-16 bg-white/5 rounded-lg" />
-                    </div>
+                    <SummaryStatsGridSkeleton />
                   ) : (() => {
                     const stats = computeStatsForLast30Days(summaryReflectionEntries);
                     const hasData = stats.totalEntries > 0;
@@ -1585,9 +1556,10 @@ export default function InsightsPage() {
                   </h2>
 
                   {summaryReflectionsLoading && (
-                    <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
-                      <div className="h-5 bg-white/10 rounded w-1/2" />
-                      <div className="h-4 bg-white/5 rounded w-3/4" />
+                    <div className="space-y-4">
+                      {[1, 2].map((i) => (
+                        <InsightCardSkeleton key={i} />
+                      ))}
                     </div>
                   )}
 
@@ -1764,15 +1736,22 @@ export default function InsightsPage() {
 
             {/* Loading state */}
             {connected && loading && (
-              <div className="rounded-2xl border border-white/10 p-6 space-y-4 animate-pulse">
-                <div className="h-6 bg-white/10 rounded w-1/3 mx-auto" />
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="h-20 bg-white/5 rounded-xl" />
-                  <div className="h-20 bg-white/5 rounded-xl" />
-                  <div className="h-20 bg-white/5 rounded-xl" />
+              <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
+                <div className="h-6 bg-white/10 animate-pulse rounded w-48" />
+                <SummaryStatsSkeleton />
+                <div className="space-y-2 mt-4">
+                  <div className="h-3 bg-white/5 animate-pulse rounded w-16 mb-2" />
+                  <div className="flex flex-wrap gap-2">
+                    <div className="h-6 bg-white/5 animate-pulse rounded-full w-20" />
+                    <div className="h-6 bg-white/5 animate-pulse rounded-full w-16" />
+                    <div className="h-6 bg-white/5 animate-pulse rounded-full w-24" />
+                  </div>
                 </div>
-                <div className="h-4 bg-white/5 rounded w-2/3 mx-auto" />
-                <div className="h-4 bg-white/5 rounded w-1/2 mx-auto" />
+                <div className="space-y-2 mt-4">
+                  <div className="h-3 bg-white/5 animate-pulse rounded w-20 mb-2" />
+                  <div className="h-4 bg-white/5 animate-pulse rounded w-full" />
+                  <div className="h-4 bg-white/5 animate-pulse rounded w-3/4" />
+                </div>
               </div>
             )}
 

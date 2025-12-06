@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { keyFromSignatureHex } from '../../../lib/crypto';
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import {
   isCapsuleExpired,
   unwrapKeyForRecipient,
@@ -103,51 +103,13 @@ function CapsuleOpenContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
-  const signingConsentRef = useRef(false);
+  const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
   const [state, setState] = useState<OpenState>({ status: 'loading' });
-  const [consentSig, setConsentSig] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
 
   const { logEvent } = useLogEvent();
   const connected = isConnected && !!address;
-
-  // Load consent sig from session
-  useEffect(() => {
-    const s = sessionStorage.getItem('soe-consent-sig');
-    if (s) setConsentSig(s);
-  }, []);
-
-  // Reset signature when wallet changes
-  useEffect(() => {
-    setConsentSig(null);
-    sessionStorage.removeItem('soe-consent-sig');
-  }, [address]);
-
-  async function getSessionKey(): Promise<CryptoKey> {
-    if (!connected || !address) throw new Error('Connect wallet first');
-
-    let sig = consentSig;
-
-    if (!sig) {
-      if (signingConsentRef.current) {
-        throw new Error('PENDING_SIG');
-      }
-      signingConsentRef.current = true;
-      try {
-        const msg = `Story of Emergence — encryption key consent for ${address}`;
-        sig = await signMessageAsync({ message: msg });
-        setConsentSig(sig);
-        sessionStorage.setItem('soe-consent-sig', sig);
-      } catch (e: unknown) {
-        throw new Error(humanizeSignError(e));
-      } finally {
-        signingConsentRef.current = false;
-      }
-    }
-    return keyFromSignatureHex(sig);
-  }
 
   // Process the capsule when page loads
   useEffect(() => {
@@ -181,8 +143,21 @@ function CapsuleOpenContent() {
       }
 
       try {
-        // Get session key
-        const sessionKey = await getSessionKey();
+        // Check encryption ready
+        if (!encryptionReady || !sessionKey) {
+          if (encryptionError) {
+            setState({
+              status: 'error',
+              message: encryptionError,
+            });
+          } else {
+            setState({
+              status: 'error',
+              message: 'Encryption key not ready. Please sign the message in your wallet.',
+            });
+          }
+          return;
+        }
 
         // Fetch share from Supabase
         const share = await rpcGetShare(address!, capsule.shareId);
@@ -228,11 +203,10 @@ function CapsuleOpenContent() {
         logEvent('capsule_open_success');
       } catch (e: unknown) {
         const err = e as { message?: string };
-        if (err?.message === 'PENDING_SIG') return;
         console.error('Capsule open error:', e);
         setState({
           status: 'error',
-          message: 'This shared capsule cannot be opened. The link may be expired or you may be on a different wallet than the intended recipient.',
+          message: err?.message ?? 'This shared capsule cannot be opened. The link may be expired or you may be on a different wallet than the intended recipient.',
         });
         logEvent('capsule_open_failed');
       }
@@ -240,7 +214,7 @@ function CapsuleOpenContent() {
 
     processCapsule();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, address, searchParams]);
+  }, [connected, address, searchParams, encryptionReady, sessionKey]);
 
   async function handleAccept() {
     if (state.status !== 'preview') return;
@@ -248,7 +222,14 @@ function CapsuleOpenContent() {
 
     setAccepting(true);
     try {
-      const sessionKey = await getSessionKey();
+      if (!encryptionReady || !sessionKey) {
+        if (encryptionError) {
+          toast.error(encryptionError);
+        } else {
+          toast.error('Encryption key not ready');
+        }
+        return;
+      }
       const sourceLabel = createSourceLabel(state.capsule.senderWallet, new Date());
 
       // Ensure senderWallet is included in the payload for contact labeling
