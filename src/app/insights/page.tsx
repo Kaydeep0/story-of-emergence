@@ -21,6 +21,7 @@ import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
 import type { TimelineSpikeCard, AlwaysOnSummaryCard, InsightCard, LinkClusterCard, StreakCoachCard } from '../lib/insights/types';
 import type { TopicDriftBucket } from '../lib/insights/topicDrift';
+import type { ReflectionEntry } from '../lib/insights/types';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -93,6 +94,81 @@ function EventIcon({ eventType }: { eventType: string }) {
 
 function formatWeekDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Get the calendar date key (YYYY-MM-DD) for a given date in local timezone
+ */
+function getDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Compute stats from reflection entries for the last 30 days
+ * Returns total entries, active days, and longest streak
+ */
+function computeStatsForLast30Days(entries: ReflectionEntry[]): {
+  totalEntries: number;
+  activeDays: number;
+  longestStreak: number;
+} {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999); // End of today
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+  thirtyDaysAgo.setHours(0, 0, 0, 0); // Start of day 30 days ago
+
+  // Filter entries from last 30 days (non-deleted only)
+  const recentEntries = entries.filter((entry) => {
+    if (entry.deletedAt) return false;
+    const entryDate = new Date(entry.createdAt);
+    return entryDate >= thirtyDaysAgo && entryDate <= now;
+  });
+
+  // Group entries by date (YYYY-MM-DD)
+  const entriesByDate = new Map<string, number>();
+  recentEntries.forEach((entry) => {
+    const entryDate = new Date(entry.createdAt);
+    const dateKey = getDateKey(entryDate);
+    entriesByDate.set(dateKey, (entriesByDate.get(dateKey) || 0) + 1);
+  });
+
+  const totalEntries = recentEntries.length;
+  const activeDays = entriesByDate.size;
+
+  // Calculate longest streak of consecutive days with at least one entry
+  // We need to check all 30 days to find the longest consecutive streak
+  let longestStreak = 0;
+  let currentStreak = 0;
+
+  // Create a set of all dates with entries
+  const datesWithEntries = new Set(entriesByDate.keys());
+
+  // Iterate through all last 30 days to find longest consecutive streak
+  // Start from 30 days ago and go forward to today
+  for (let i = 29; i >= 0; i--) {
+    const checkDate = new Date(now);
+    checkDate.setDate(now.getDate() - i);
+    checkDate.setHours(0, 0, 0, 0);
+    const dateKey = getDateKey(checkDate);
+
+    if (datesWithEntries.has(dateKey)) {
+      currentStreak++;
+      longestStreak = Math.max(longestStreak, currentStreak);
+    } else {
+      // Reset streak when we hit a day with no entries
+      currentStreak = 0;
+    }
+  }
+
+  return {
+    totalEntries,
+    activeDays,
+    longestStreak,
+  };
 }
 
 /**
@@ -246,6 +322,7 @@ export default function InsightsPage() {
   const [summaryInsights, setSummaryInsights] = useState<AlwaysOnSummaryCard[]>([]);
   const [summaryReflectionsLoading, setSummaryReflectionsLoading] = useState(false);
   const [summaryReflectionsError, setSummaryReflectionsError] = useState<string | null>(null);
+  const [summaryReflectionEntries, setSummaryReflectionEntries] = useState<ReflectionEntry[]>([]);
 
   // Timeline spikes state (computed from decrypted reflections)
   const [spikeInsights, setSpikeInsights] = useState<TimelineSpikeCard[]>([]);
@@ -502,6 +579,7 @@ export default function InsightsPage() {
         if (!cancelled) {
           setSummaryInsights(insights);
           setTopicDrift(drift);
+          setSummaryReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
         if (err?.message === 'PENDING_SIG') return;
@@ -1426,6 +1504,50 @@ export default function InsightsPage() {
                     </div>
                   )}
                 </section>
+
+                {/* Quick Stats Strip */}
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
+                  {summaryReflectionsLoading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-pulse">
+                      <div className="h-16 bg-white/5 rounded-lg" />
+                      <div className="h-16 bg-white/5 rounded-lg" />
+                      <div className="h-16 bg-white/5 rounded-lg" />
+                    </div>
+                  ) : (() => {
+                    const stats = computeStatsForLast30Days(summaryReflectionEntries);
+                    const hasData = stats.totalEntries > 0;
+
+                    if (!hasData) {
+                      return (
+                        <div className="text-center py-2">
+                          <p className="text-sm text-white/60">
+                            Start writing to see your stats here
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                        {/* Total entries */}
+                        <div className="text-center">
+                          <div className="text-xs text-white/60 mb-1">Total entries</div>
+                          <div className="text-2xl font-semibold text-white">{stats.totalEntries}</div>
+                        </div>
+                        {/* Active days */}
+                        <div className="text-center">
+                          <div className="text-xs text-white/60 mb-1">Active days</div>
+                          <div className="text-2xl font-semibold text-white">{stats.activeDays}</div>
+                        </div>
+                        {/* Longest streak */}
+                        <div className="text-center">
+                          <div className="text-xs text-white/60 mb-1">Longest streak</div>
+                          <div className="text-2xl font-semibold text-white">{stats.longestStreak}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
 
                 {/* Always On Summary Section */}
                 <div className="space-y-4">
