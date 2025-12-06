@@ -41,6 +41,16 @@ function capitalize(s: string): string {
 }
 
 /**
+ * Convert strength label to numeric weight for scoring
+ * Higher weight indicates stronger drift magnitude
+ */
+function strengthWeight(label: TopicDriftBucket['strengthLabel']): number {
+  if (label === 'high') return 3;
+  if (label === 'medium') return 2;
+  return 1; // low
+}
+
+/**
  * Compute contrast pairs from topic drift buckets
  * 
  * This is a PURE FUNCTION - it has no side effects and makes no network calls.
@@ -50,7 +60,7 @@ function capitalize(s: string): string {
  * 1. Filter buckets to only those with count >= 2
  * 2. Split into rising and fading lists
  * 3. For every combination of one rising and one fading topic, build a ContrastPair
- * 4. Score = risingCount + fadingCount (simple additive score)
+ * 4. Score balances frequency (count) and drift intensity (strengthLabel weight)
  * 5. Sort descending by score
  * 6. Return top 3 pairs
  * 
@@ -75,7 +85,15 @@ export function computeContrastPairs(buckets: TopicDriftBucket[]): ContrastPair[
   
   for (const r of rising) {
     for (const f of fading) {
-      const score = r.count + f.count;
+      const weightA = strengthWeight(r.strengthLabel);
+      const weightB = strengthWeight(f.strengthLabel);
+      
+      // base counts
+      const base = r.count + f.count;
+      
+      // final score balances frequency and drift intensity
+      const score = base * (weightA + weightB);
+      
       const summary = `${capitalize(r.topic)} is rising while ${capitalize(f.topic)} is fading over the last month.`;
       
       pairs.push({

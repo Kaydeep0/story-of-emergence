@@ -1042,7 +1042,7 @@ export default function InsightsPage() {
                       // Strength badge styling
                       const strengthStyles = {
                         high: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-                        medium: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+                        medium: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
                         low: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
                       };
                       const strengthLabels = {

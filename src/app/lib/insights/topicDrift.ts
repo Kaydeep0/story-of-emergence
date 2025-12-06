@@ -17,6 +17,11 @@ import type { ReflectionEntry } from './types';
 export type TopicTrend = 'rising' | 'stable' | 'fading';
 
 /**
+ * Strength label indicating magnitude of drift
+ */
+export type TopicStrengthLabel = 'high' | 'medium' | 'low';
+
+/**
  * Represents a bucket of reflections matching a particular topic
  */
 export type TopicDriftBucket = {
@@ -24,6 +29,7 @@ export type TopicDriftBucket = {
   count: number;
   sampleTitles: string[];
   trend: TopicTrend;
+  strengthLabel: TopicStrengthLabel;
 };
 
 /**
@@ -115,6 +121,23 @@ function calculateChangeStrength(olderCount: number, newerCount: number): number
 }
 
 /**
+ * Determine the strength label based on absolute change strength
+ * - High Drift: |strength| >= 3
+ * - Medium Drift: |strength| == 2
+ * - Low Drift: |strength| <= 1
+ */
+function determineStrengthLabel(olderCount: number, newerCount: number): TopicStrengthLabel {
+  const absStrength = Math.abs(newerCount - olderCount);
+  
+  if (absStrength >= 3) {
+    return 'high';
+  } else if (absStrength === 2) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+/**
  * Compute topic drift buckets from decrypted reflection entries
  * 
  * This is a PURE FUNCTION - it has no side effects and makes no network calls.
@@ -198,11 +221,13 @@ export function computeTopicDrift(entries: ReflectionEntry[], now?: Date): Topic
   for (const [topic, data] of Object.entries(topicData)) {
     if (data.totalCount > 0) {
       const trend = determineTrend(data.olderCount, data.newerCount);
+      const strengthLabel = determineStrengthLabel(data.olderCount, data.newerCount);
       buckets.push({
         topic,
         count: data.totalCount,
         sampleTitles: data.sampleTitles,
         trend,
+        strengthLabel,
       });
     }
   }
