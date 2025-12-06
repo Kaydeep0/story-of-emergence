@@ -19,9 +19,10 @@ import { computeContrastPairs } from '../lib/insights/contrastPairs';
 import type { ContrastPair } from '../lib/insights/contrastPairs';
 import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
-import type { TimelineSpikeCard, AlwaysOnSummaryCard, InsightCard, LinkClusterCard, StreakCoachCard } from '../lib/insights/types';
+import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard, StreakCoachCard, InsightCard } from '../lib/insights/types';
 import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 import type { ReflectionEntry } from '../lib/insights/types';
+import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -349,6 +350,11 @@ export default function InsightsPage() {
 
   // Feedback state (backed by localStorage)
   const { getFeedback, toggleFeedback, recipeScores, insightScores, hydrateFromStorage } = useFeedback();
+
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedInsight, setSelectedInsight] = useState<NormalizedInsight | null>(null);
+  const [selectedOriginalCard, setSelectedOriginalCard] = useState<InsightCard | null>(null);
 
   // Hydrate feedback scores from localStorage on mount to ensure stable ordering
   useEffect(() => {
@@ -1189,7 +1195,15 @@ export default function InsightsPage() {
                       return (
                         <div
                           key={bucket.topic}
-                          className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3"
+                          className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3 cursor-pointer hover:bg-teal-500/10 transition-colors"
+                          onClick={(e) => {
+                            // Don't open drawer if clicking on buttons
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            const normalized = normalizeInsight(bucket);
+                            setSelectedInsight(normalized);
+                            setSelectedOriginalCard(null); // Topic drift can't be highlighted
+                            setDrawerOpen(true);
+                          }}
                         >
                           {/* Topic header */}
                           <div className="flex items-start justify-between gap-3">
@@ -1276,7 +1290,15 @@ export default function InsightsPage() {
                       return (
                         <div
                           key={insightId}
-                          className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-4"
+                          className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-4 cursor-pointer hover:bg-orange-500/10 transition-colors"
+                          onClick={(e) => {
+                            // Don't open drawer if clicking on buttons
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            const normalized = normalizeInsight(pair, index);
+                            setSelectedInsight(normalized);
+                            setSelectedOriginalCard(null); // Contrast pairs can't be highlighted
+                            setDrawerOpen(true);
+                          }}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="space-y-1">
@@ -1293,12 +1315,14 @@ export default function InsightsPage() {
                               </div>
                             </div>
 
-                            <FeedbackButtons
-                              insightId={insightId}
-                              recipeId="contrastPairs"
-                              getFeedback={getFeedback}
-                              toggleFeedback={toggleFeedback}
-                            />
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <FeedbackButtons
+                                insightId={insightId}
+                                recipeId="contrastPairs"
+                                getFeedback={getFeedback}
+                                toggleFeedback={toggleFeedback}
+                              />
+                            </div>
                           </div>
 
                           <p className="text-sm text-white/70">
@@ -1586,12 +1610,20 @@ export default function InsightsPage() {
                         return (
                           <div
                             key={insight.id}
-                            className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-3"
+                            className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-3 cursor-pointer hover:bg-emerald-500/10 transition-colors"
+                            onClick={(e) => {
+                              // Don't open drawer if clicking on buttons
+                              if ((e.target as HTMLElement).closest('button')) return;
+                              const normalized = normalizeInsight(insight);
+                              setSelectedInsight(normalized);
+                              setSelectedOriginalCard(insight);
+                              setDrawerOpen(true);
+                            }}
                           >
                             {/* Card header */}
                             <div className="flex items-start justify-between">
                               <h3 className="font-medium text-emerald-200">{insight.title}</h3>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <FeedbackButtons
                                   insightId={insight.id}
                                   recipeId={insight.kind}
@@ -1831,6 +1863,20 @@ export default function InsightsPage() {
           </>
         )}
       </section>
+
+      {/* Insight Detail Drawer */}
+      <InsightDrawer
+        insight={selectedInsight}
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedInsight(null);
+          setSelectedOriginalCard(null);
+        }}
+        originalCard={selectedOriginalCard ?? undefined}
+        isHighlighted={selectedOriginalCard ? isHighlighted : undefined}
+        toggleHighlight={selectedOriginalCard ? toggleHighlight : undefined}
+      />
     </main>
   );
 }
