@@ -329,6 +329,7 @@ export default function InsightsPage() {
   const [spikeInsights, setSpikeInsights] = useState<TimelineSpikeCard[]>([]);
   const [reflectionsLoading, setReflectionsLoading] = useState(false);
   const [reflectionsError, setReflectionsError] = useState<string | null>(null);
+  const [timelineReflectionEntries, setTimelineReflectionEntries] = useState<ReflectionEntry[]>([]);
 
   // Link clusters state (computed from decrypted reflections)
   const [clusterInsights, setClusterInsights] = useState<LinkClusterCard[]>([]);
@@ -649,6 +650,7 @@ export default function InsightsPage() {
           setCoachInsights(coach);
           setTopicDrift(drift);
           setContrastPairs(contrasts);
+          setTimelineReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
         if (err?.message === 'PENDING_SIG') return;
@@ -1876,6 +1878,13 @@ export default function InsightsPage() {
         originalCard={selectedOriginalCard ?? undefined}
         isHighlighted={selectedOriginalCard ? isHighlighted : undefined}
         toggleHighlight={selectedOriginalCard ? toggleHighlight : undefined}
+        reflectionEntries={
+          mode === 'timeline'
+            ? timelineReflectionEntries
+            : mode === 'summary'
+            ? summaryReflectionEntries
+            : []
+        }
       />
     </main>
   );

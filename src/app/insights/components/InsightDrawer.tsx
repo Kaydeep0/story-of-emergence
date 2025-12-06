@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard } from '../../lib/insights/types';
+import { useEffect, useState } from 'react';
+import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
 
@@ -18,6 +18,16 @@ export type NormalizedInsight = {
   confidence?: number;
   strength?: string;
 };
+
+/**
+ * Generate a text snippet from a reflection entry (first 100 characters)
+ */
+function generateReflectionSnippet(entry: ReflectionEntry, maxLength = 100): string {
+  const text = entry.plaintext || '';
+  const cleaned = text.trim().replace(/\s+/g, ' ');
+  if (cleaned.length <= maxLength) return cleaned;
+  return cleaned.slice(0, maxLength).trim() + '…';
+}
 
 /**
  * Helper to normalize Always On Summary insights
@@ -142,22 +152,17 @@ export function normalizeInsight(source: InsightSource, index?: number): Normali
 }
 
 /**
- * Insight Detail Drawer Component
+ * Reflection Preview Panel Component
+ * Shows full reflection text in a lightweight preview panel
  */
-export function InsightDrawer({
-  insight,
+function ReflectionPreviewPanel({
+  entry,
   isOpen,
   onClose,
-  originalCard,
-  isHighlighted,
-  toggleHighlight,
 }: {
-  insight: NormalizedInsight | null;
+  entry: ReflectionEntry | null;
   isOpen: boolean;
   onClose: () => void;
-  originalCard?: InsightCard;
-  isHighlighted?: (card: InsightCard) => boolean;
-  toggleHighlight?: (card: InsightCard) => void;
 }) {
   // Close on Escape key
   useEffect(() => {
@@ -170,6 +175,177 @@ export function InsightDrawer({
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
+
+  if (!entry) return null;
+
+  const date = new Date(entry.createdAt);
+  const formattedDate = date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const formattedTime = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[60] transition-opacity duration-[220ms] ease-out ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+        aria-hidden={!isOpen}
+      />
+
+      {/* Mobile panel: slide from bottom */}
+      <div
+        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[85vh] overflow-y-auto z-[70] shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        }`}
+        aria-hidden={!isOpen}
+      >
+        <div className="p-6 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">Reflection</h3>
+              <p className="text-xs text-white/60 mt-1">
+                {formattedDate} at {formattedTime}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+              aria-label="Close preview"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Full reflection text */}
+          <div className="prose prose-invert max-w-none">
+            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop panel: side panel */}
+      <div
+        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-[70] flex-col shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+        }`}
+        aria-hidden={!isOpen}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-semibold">Reflection</h3>
+            <p className="text-xs text-white/60 mt-1">
+              {formattedDate} at {formattedTime}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+            aria-label="Close preview"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto flex-1">
+          <div className="prose prose-invert max-w-none">
+            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Insight Detail Drawer Component
+ */
+export function InsightDrawer({
+  insight,
+  isOpen,
+  onClose,
+  originalCard,
+  isHighlighted,
+  toggleHighlight,
+  reflectionEntries = [],
+}: {
+  insight: NormalizedInsight | null;
+  isOpen: boolean;
+  onClose: () => void;
+  originalCard?: InsightCard;
+  isHighlighted?: (card: InsightCard) => boolean;
+  toggleHighlight?: (card: InsightCard) => void;
+  reflectionEntries?: ReflectionEntry[];
+}) {
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  // Close preview when drawer closes
+  useEffect(() => {
+    if (!isOpen) {
+      setPreviewOpen(false);
+      setSelectedReflection(null);
+    }
+  }, [isOpen]);
+
+  // Helper to find reflection by entryId
+  function getReflectionByEntryId(entryId: string): ReflectionEntry | null {
+    return reflectionEntries.find(entry => entry.id === entryId) || null;
+  }
+
+  // Helper to get preview text for evidence
+  function getEvidencePreview(ev: InsightEvidence): string {
+    // If preview already exists, use it
+    if (ev.preview) return ev.preview;
+    
+    // Try to find reflection and generate snippet
+    const reflection = getReflectionByEntryId(ev.entryId);
+    if (reflection) {
+      return generateReflectionSnippet(reflection);
+    }
+    
+    return '(no preview)';
+  }
+
+  // Handle evidence click
+  function handleEvidenceClick(ev: InsightEvidence) {
+    const reflection = getReflectionByEntryId(ev.entryId);
+    if (reflection) {
+      setSelectedReflection(reflection);
+      setPreviewOpen(true);
+    }
+  }
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (previewOpen) {
+          setPreviewOpen(false);
+          setSelectedReflection(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose, previewOpen]);
 
   // Lock body scroll when drawer is open
   useEffect(() => {
@@ -318,8 +494,20 @@ export function InsightDrawer({
               <ul className="space-y-2">
                 {insight.evidence.map((ev, idx) => {
                   const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
+                  const preview = getEvidencePreview(ev);
+                  const reflection = getReflectionByEntryId(ev.entryId);
+                  const isClickable = !!reflection;
+                  
                   return (
-                    <li key={ev.entryId || idx} className="flex items-start gap-3 text-sm">
+                    <li
+                      key={ev.entryId || idx}
+                      className={`flex items-start gap-3 text-sm ${
+                        isClickable
+                          ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                          : ''
+                      }`}
+                      onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
+                    >
                       {hasTimestamp ? (
                         <span className="text-white/40 min-w-[80px] text-xs">
                           {formatEvidenceDate(ev.timestamp)}
@@ -328,7 +516,7 @@ export function InsightDrawer({
                       ) : (
                         <span className="text-white/40 min-w-[80px] text-xs">•</span>
                       )}
-                      <span className="text-white/70 flex-1">{ev.preview || '(no preview)'}</span>
+                      <span className="text-white/70 flex-1">{preview}</span>
                     </li>
                   );
                 })}
@@ -424,8 +612,20 @@ export function InsightDrawer({
               <ul className="space-y-2">
                 {insight.evidence.map((ev, idx) => {
                   const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
+                  const preview = getEvidencePreview(ev);
+                  const reflection = getReflectionByEntryId(ev.entryId);
+                  const isClickable = !!reflection;
+                  
                   return (
-                    <li key={ev.entryId || idx} className="flex items-start gap-3 text-sm">
+                    <li
+                      key={ev.entryId || idx}
+                      className={`flex items-start gap-3 text-sm ${
+                        isClickable
+                          ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                          : ''
+                      }`}
+                      onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
+                    >
                       {hasTimestamp ? (
                         <span className="text-white/40 min-w-[80px] text-xs">
                           {formatEvidenceDate(ev.timestamp)}
@@ -434,7 +634,7 @@ export function InsightDrawer({
                       ) : (
                         <span className="text-white/40 min-w-[80px] text-xs">•</span>
                       )}
-                      <span className="text-white/70 flex-1">{ev.preview || '(no preview)'}</span>
+                      <span className="text-white/70 flex-1">{preview}</span>
                     </li>
                   );
                 })}
@@ -453,6 +653,16 @@ export function InsightDrawer({
           )}
         </div>
       </div>
+
+      {/* Reflection Preview Panel */}
+      <ReflectionPreviewPanel
+        entry={selectedReflection}
+        isOpen={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setSelectedReflection(null);
+        }}
+      />
     </>
   );
 }
