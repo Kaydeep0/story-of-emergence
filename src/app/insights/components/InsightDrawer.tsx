@@ -171,7 +171,21 @@ export function InsightDrawer({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  if (!isOpen || !insight) return null;
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      // Store original overflow value
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        // Restore original overflow value
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  // Don't render if no insight, but keep in DOM when closed for smooth transitions
+  if (!insight) return null;
 
   // Determine if this insight can be highlighted and its current state
   const canHighlight = originalCard && isHighlighted && toggleHighlight;
@@ -222,18 +236,19 @@ export function InsightDrawer({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity ${
+        className={`fixed inset-0 bg-black/60 backdrop-blur-md z-40 transition-opacity duration-[220ms] ease-out ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
-        aria-hidden="true"
+        aria-hidden={!isOpen}
       />
 
       {/* Mobile drawer: slide from bottom */}
       <div
-        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[80vh] overflow-y-auto z-50 shadow-2xl transform transition-transform duration-300 ease-out ${
-          isOpen ? 'translate-y-0' : 'translate-y-full'
+        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[80vh] overflow-y-auto z-50 shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
         }`}
+        aria-hidden={!isOpen}
       >
         <div className="p-6 space-y-6">
           {/* Mobile header */}
@@ -335,9 +350,10 @@ export function InsightDrawer({
 
       {/* Desktop drawer: slide from right */}
       <div
-        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-50 flex-col shadow-2xl transform transition-transform duration-300 ease-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-50 flex-col shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
         }`}
+        aria-hidden={!isOpen}
       >
         {/* Header */}
         <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
