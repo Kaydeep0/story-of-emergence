@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcListAcceptedShares, rpcDeleteAcceptedShare } from '../lib/shares';
@@ -376,13 +375,14 @@ export default function SharedPage() {
     }
   }
 
-  // Load shares when connected
+  // Load shares when connected and encryption ready
   useEffect(() => {
     if (!mounted) return;
     if (!connected) return;
+    if (!encryptionReady) return;
     loadShares();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, connected, address]);
+  }, [mounted, connected, address, encryptionReady]);
 
   // Handle delete from drawer
   async function handleDelete() {
@@ -498,34 +498,11 @@ export default function SharedPage() {
           Private content shared with you from trusted contacts.
         </p>
 
-        {/* Not connected state */}
-        {!connected && (
-          <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
-            <h2 className="text-lg font-medium">Connect your wallet</h2>
-            <p className="text-sm text-white/60">
-              Connect your wallet to view shared content and open capsule links.
-            </p>
-            <div className="flex justify-center">
-              <ConnectButton />
-            </div>
-          </div>
-        )}
-
-        {/* Encryption not ready state */}
-        {connected && !encryptionReady && (
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-center space-y-4">
-            <h2 className="text-lg font-medium text-amber-200">Preparing encryption key</h2>
-            <p className="text-sm text-white/60">
-              {encryptionError || 'Please sign the message in your wallet to continue.'}
-            </p>
-          </div>
-        )}
-
         {/* Loading state */}
-        {connected && loading && <SharedSkeleton />}
+        {connected && encryptionReady && loading && <SharedSkeleton />}
 
         {/* Error state */}
-        {connected && !loading && error && (
+        {connected && encryptionReady && !loading && error && (
           <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6 text-center space-y-3">
             <p className="text-sm text-rose-400">{error}</p>
             <button
@@ -538,10 +515,10 @@ export default function SharedPage() {
         )}
 
         {/* Empty state */}
-        {connected && !loading && !error && shares.length === 0 && <EmptySharedState />}
+        {connected && encryptionReady && !loading && !error && shares.length === 0 && <EmptySharedState />}
 
         {/* Shares list */}
-        {connected && !loading && !error && shares.length > 0 && (
+        {connected && encryptionReady && !loading && !error && shares.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm text-white/50">
               <span>{shares.length} shared item{shares.length !== 1 ? 's' : ''}</span>

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { rpcListInternalEvents } from '../lib/internalEvents';
 import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
@@ -418,13 +417,14 @@ export default function InsightsPage() {
     }
   }
 
-  // Load insights on mount when connected
+  // Load insights on mount when connected and encryption ready
   useEffect(() => {
     if (!mounted) return;
     if (!connected) return;
+    if (!encryptionReady) return;
     loadInsights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, connected, address]);
+  }, [mounted, connected, address, encryptionReady]);
 
   // Load timeline events when Timeline mode is active
   useEffect(() => {
@@ -655,11 +655,6 @@ export default function InsightsPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur px-4 py-2 flex items-center justify-between">
-        <span className="font-semibold">Story of Emergence</span>
-        <ConnectButton />
-      </header>
-
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Insights</h1>
         <p className="text-center text-sm text-white/60 mb-6">
@@ -716,31 +711,8 @@ export default function InsightsPage() {
         {/* Timeline view */}
         {mode === 'timeline' && (
           <div className="mt-8 space-y-8">
-            {/* Not connected state */}
-            {!connected && (
-              <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
-                <h2 className="text-lg font-medium">Connect your wallet</h2>
-                <p className="text-sm text-white/60">
-                  Connect your wallet to view your activity timeline.
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              </div>
-            )}
-
-            {/* Encryption not ready state */}
-            {connected && !encryptionReady && (
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-center space-y-4">
-                <h2 className="text-lg font-medium text-amber-200">Preparing encryption key</h2>
-                <p className="text-sm text-white/60">
-                  {encryptionError || 'Please sign the message in your wallet to continue.'}
-                </p>
-              </div>
-            )}
-
             {/* Timeline Spikes Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -868,7 +840,7 @@ export default function InsightsPage() {
             )}
 
             {/* Streak Coach Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -979,7 +951,7 @@ export default function InsightsPage() {
             )}
 
             {/* Link Clusters Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -1117,7 +1089,7 @@ export default function InsightsPage() {
             })()}
 
             {/* Topic Drift Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -1227,7 +1199,7 @@ export default function InsightsPage() {
             )}
 
             {/* Contrast Pairs Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -1308,7 +1280,7 @@ export default function InsightsPage() {
             )}
 
             {/* Activity Timeline Section */}
-            {connected && (
+            {connected && encryptionReady && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -1409,21 +1381,9 @@ export default function InsightsPage() {
         {/* Summary view */}
         {mode === 'summary' && (
           <div className="mt-8 space-y-6">
-            {/* Not connected state */}
-            {!connected && (
-              <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
-                <h2 className="text-lg font-medium">Connect your wallet</h2>
-                <p className="text-sm text-white/60">
-                  Connect your wallet to view your summary statistics.
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              </div>
-            )}
 
             {/* Loading state */}
-            {connected && summaryLoading && (
+            {connected && encryptionReady && summaryLoading && (
               <div className="rounded-2xl border border-white/10 p-6 space-y-4">
                 <div className="h-6 bg-white/10 animate-pulse rounded w-48 mb-4" />
                 <div className="grid grid-cols-2 gap-4">
@@ -1434,14 +1394,14 @@ export default function InsightsPage() {
             )}
 
             {/* Error state */}
-            {connected && !summaryLoading && summaryError && (
+            {connected && encryptionReady && !summaryLoading && summaryError && (
               <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
                 <p className="text-sm text-rose-400">{summaryError}</p>
               </div>
             )}
 
             {/* Summary data */}
-            {connected && !summaryLoading && !summaryError && summaryData && (
+            {connected && encryptionReady && !summaryLoading && !summaryError && summaryData && (
               <>
                 <div className="rounded-2xl border border-white/10 p-6 space-y-4">
                   <h2 className="text-lg font-semibold text-zinc-50">
@@ -1716,21 +1676,9 @@ export default function InsightsPage() {
         {/* Weekly view (existing content) */}
         {mode === 'weekly' && (
           <>
-            {/* Not connected state */}
-            {!connected && (
-              <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
-                <h2 className="text-lg font-medium">Connect your wallet</h2>
-                <p className="text-sm text-white/60">
-                  Connect the same wallet you use on the Reflections tab to view your weekly insights.
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              </div>
-            )}
 
             {/* Loading state */}
-            {connected && loading && (
+            {connected && encryptionReady && loading && (
               <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
                 <div className="h-6 bg-white/10 animate-pulse rounded w-48" />
                 <SummaryStatsSkeleton />
@@ -1751,7 +1699,7 @@ export default function InsightsPage() {
             )}
 
             {/* Empty state */}
-            {connected && !loading && insights.length === 0 && (
+            {connected && encryptionReady && !loading && insights.length === 0 && (
               <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
                 <h2 className="text-lg font-medium">No internal events yet</h2>
                 <p className="text-sm text-white/60">
@@ -1767,7 +1715,7 @@ export default function InsightsPage() {
             )}
 
             {/* Main insight card */}
-            {connected && !loading && latest && (
+            {connected && encryptionReady && !loading && latest && (
               <>
                 <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
                   <h2 className="text-lg font-medium">

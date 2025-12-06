@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useLogEvent } from '../lib/useLogEvent';
 
 export default function SourcesPage() {
@@ -28,11 +27,6 @@ export default function SourcesPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur px-4 py-2 flex items-center justify-between">
-        <span className="font-semibold">Story of Emergence</span>
-        <ConnectButton />
-      </header>
-
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Sources</h1>
         <p className="text-center text-sm text-white/60 mb-8">

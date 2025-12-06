@@ -37,7 +37,6 @@ import { useLogEvent } from "./lib/useLogEvent";
 // react + ui
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from "sonner";
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
 import { baseSepolia } from 'viem/chains';
 import { incSaveCount, messageForSave } from '@/app/lib/toast';
@@ -197,13 +196,14 @@ const [loadingMore, setLoadingMore] = useState(false);
 
 
 
-// reload when wallet or Trash toggle changes
+// reload when wallet, encryption ready, or Trash toggle changes
 useEffect(() => {
   if (!mounted) return;
   if (!connected) return;
+  if (!encryptionReady) return;
   loadMyReflections();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [mounted, connected, w, showDeleted]);
+}, [mounted, connected, w, showDeleted, encryptionReady]);
 
 
 
@@ -582,11 +582,6 @@ async function copyCapsuleUrl() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur px-4 py-2 flex items-center justify-between">
-        <span className="font-semibold">Story of Emergence</span>
-        <ConnectButton />
-      </header>
-
   <HealthStrip
   showDeleted={showDeleted}
   onToggleDeleted={(v) => {
@@ -690,11 +685,6 @@ async function copyCapsuleUrl() {
             We encrypt in your browser with a key derived from a wallet signature, then store only ciphertext.
           </p>
 
-          {!encryptionReady && connected && (
-            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-200">
-              {encryptionError || 'Preparing encryption key…'}
-            </div>
-          )}
 
           {items.length > 0 && (
   <p className="text-xs text-white/60 mt-1">

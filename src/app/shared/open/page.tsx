@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import {
   isCapsuleExpired,
@@ -312,13 +311,10 @@ function CapsuleOpenContent() {
             />
           </svg>
         </div>
-        <h2 className="text-lg font-medium">Connect your wallet</h2>
+        <h2 className="text-lg font-medium">Wallet connection required</h2>
         <p className="text-sm text-white/60 max-w-sm mx-auto">
-          Connect the wallet that this capsule was shared with to decrypt and view the content.
+          Connect the wallet that this capsule was shared with to decrypt and view the content. Use the Connect button in the header.
         </p>
-        <div className="flex justify-center pt-2">
-          <ConnectButton />
-        </div>
       </div>
     );
   }
