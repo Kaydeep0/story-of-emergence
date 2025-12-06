@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -25,11 +25,6 @@ import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
 
-function humanizeSignError(e: any) {
-  if (e?.code === 4001) return 'Signature request was rejected.';
-  if (e?.code === -32002) return 'A signature request is already pending. Open MetaMask and confirm (or cancel), then try again.';
-  return e?.shortMessage || e?.message || 'Unexpected signing error.';
-}
 
 /**
  * Compute trend summary counts from topic drift buckets

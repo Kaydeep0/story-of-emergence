@@ -93,12 +93,18 @@ export function useEncryptionSession() {
   const currentWallet = address?.toLowerCase() ?? null;
 
   // Initialize session on mount or when wallet changes
+  // This is passive - loads from storage, only requests signature if no valid session exists
   useEffect(() => {
     if (!connected || !currentWallet) {
       setReady(false);
       setAesKey(null);
       setWalletAddress(null);
       setError(null);
+      return;
+    }
+
+    // If already ready with the correct wallet, no need to re-initialize
+    if (ready && aesKey && walletAddress?.toLowerCase() === currentWallet) {
       return;
     }
 
@@ -137,10 +143,10 @@ export function useEncryptionSession() {
         }
       }
 
-      // Need to request signature
+      // No valid session found - request signature automatically
+      // This only happens when wallet first connects or session is missing/expired
       if (signingRef.current) {
-        setError('Signature request already pending');
-        return;
+        return; // Already signing
       }
 
       signingRef.current = true;
@@ -180,7 +186,7 @@ export function useEncryptionSession() {
     }
 
     initializeSession();
-  }, [connected, currentWallet, signMessageAsync]);
+  }, [connected, currentWallet, ready, aesKey, walletAddress, signMessageAsync]);
 
   // Clear session when wallet disconnects
   useEffect(() => {
@@ -242,12 +248,100 @@ export function useEncryptionSession() {
     }
   }, [connected, currentWallet, signMessageAsync]);
 
+  /**
+   * Unified handler for ensuring encryption session is active.
+   * Returns status indicating what action (if any) is needed.
+   * This function is idempotent and safe to call from multiple places.
+   */
+  const ensureEncryptionSession = useCallback(async (): Promise<{
+    needsWallet: boolean;
+    needsConsent: boolean;
+    isReady: boolean;
+  }> => {
+    // If wallet not connected, caller should open RainbowKit modal
+    if (!connected || !currentWallet) {
+      return { needsWallet: true, needsConsent: false, isReady: false };
+    }
+
+    // If already ready, no action needed
+    if (ready && aesKey) {
+      return { needsWallet: false, needsConsent: false, isReady: true };
+    }
+
+    // If signing is already in progress, wait
+    if (signingRef.current) {
+      return { needsWallet: false, needsConsent: true, isReady: false };
+    }
+
+    // Check if we have a valid session in storage
+    const session = loadSessionFromStorage();
+    if (session && session.walletAddress.toLowerCase() === currentWallet) {
+      if (!isConsentExpired(session.consentTimestamp)) {
+        // Session is valid, derive key if not already done
+        if (!aesKey) {
+          try {
+            const key = await keyFromSignatureHex(session.signature);
+            setAesKey(key);
+            setWalletAddress(currentWallet);
+            setReady(true);
+            setError(null);
+            return { needsWallet: false, needsConsent: false, isReady: true };
+          } catch (e) {
+            console.error('Failed to derive key from stored signature:', e);
+            // Fall through to request new signature
+          }
+        } else {
+          return { needsWallet: false, needsConsent: false, isReady: true };
+        }
+      }
+    }
+
+    // Need to request consent signature
+    signingRef.current = true;
+    setReady(false);
+    setError(null);
+
+    try {
+      const msg = `Story of Emergence — encryption key consent for ${currentWallet}`;
+      const signature = await signMessageAsync({ message: msg });
+      
+      // Save session
+      const newSession: EncryptionSession = {
+        signature,
+        consentTimestamp: new Date().toISOString(),
+        walletAddress: currentWallet,
+      };
+      saveSessionToStorage(newSession);
+
+      // Derive key
+      const key = await keyFromSignatureHex(signature);
+      setAesKey(key);
+      setWalletAddress(currentWallet);
+      setReady(true);
+      setError(null);
+      return { needsWallet: false, needsConsent: false, isReady: true };
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      const errorMsg = err?.message === 'PENDING_SIG' 
+        ? 'Signature request already pending'
+        : humanizeSignError(e);
+      setError(errorMsg);
+      setReady(false);
+      setAesKey(null);
+      setWalletAddress(null);
+      return { needsWallet: false, needsConsent: true, isReady: false };
+    } finally {
+      signingRef.current = false;
+    }
+  }, [connected, currentWallet, ready, aesKey, signMessageAsync]);
+
   return {
     ready,
     aesKey,
     walletAddress,
     error,
     refreshSession,
+    ensureEncryptionSession,
   };
 }
 
