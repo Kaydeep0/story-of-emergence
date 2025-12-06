@@ -1,11 +1,25 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 
 export function EncryptionStatus() {
   const { isConnected } = useAccount();
   const { ready, error } = useEncryptionSession();
+  const [shouldPulse, setShouldPulse] = useState(false);
+  const wasReadyRef = useRef(ready);
+
+  // Detect transition to ready state and trigger pulse
+  useEffect(() => {
+    if (ready && !wasReadyRef.current) {
+      // Just transitioned to ready - trigger pulse
+      setShouldPulse(true);
+      const timer = setTimeout(() => setShouldPulse(false), 1000);
+      return () => clearTimeout(timer);
+    }
+    wasReadyRef.current = ready;
+  }, [ready]);
 
   // Determine status
   let status: 'active' | 'locked' | 'disconnected';
@@ -34,12 +48,14 @@ export function EncryptionStatus() {
       title={error || label}
     >
       <div
-        className={`w-1.5 h-1.5 rounded-full ${
+        className={`w-1.5 h-1.5 rounded-full transition-transform ${
           status === 'active'
             ? 'bg-emerald-400'
             : status === 'locked'
             ? 'bg-amber-400'
             : 'bg-zinc-400'
+        } ${
+          shouldPulse ? 'animate-[keyPulse_0.6s_ease-in-out]' : ''
         }`}
       />
       <span className="hidden sm:inline">{label}</span>

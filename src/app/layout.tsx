@@ -3,6 +3,7 @@ import './globals.css';
 import ClientToaster from '@/components/ClientToaster';
 import Providers from './providers';
 import { AppHeader } from './components/AppHeader';
+import { VaultUnlockOverlay } from './components/VaultUnlockOverlay';
 
 export const metadata: Metadata = {
   title: 'Story of Emergence',
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <ClientToaster />
           <AppHeader />
+          <VaultUnlockOverlay />
           <main className="mx-auto max-w-4xl px-4 py-8">{children}</main>
         </Providers>
       </body>
