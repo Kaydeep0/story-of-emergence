@@ -40,7 +40,23 @@ export function VaultUnlockOverlay() {
   const [state, setState] = useState<EncryptionState>('idle');
   const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasShownOverlayRef = useRef(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
+
+  // Check for reduced motion preference
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   // Track previous ready state to detect transitions
   useEffect(() => {
@@ -76,10 +92,10 @@ export function VaultUnlockOverlay() {
         clearTimeout(unlockTimeoutRef.current);
       }
       
-      // Wait for unlock animation (~600ms), then fade out (220ms), then hide
+      // Wait for success pulse animation (~900ms), then fade out (220ms), then hide
       unlockTimeoutRef.current = setTimeout(() => {
         setShowOverlay(false);
-      }, 600 + 220); // Unlock animation + fade-out duration
+      }, 900 + 220); // Success pulse (600ms + 300ms delay) + fade-out duration
     }
     
     // Hide overlay on error after showing error animation
@@ -113,29 +129,53 @@ export function VaultUnlockOverlay() {
   const isUnlocking = state === 'unlocking';
   const isUnlocked = state === 'unlocked';
   const isError = state === 'error';
+  const isActive = isUnlocking || isUnlocked || state === 'awaiting_signature';
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm ${
+      className={`fixed inset-0 z-50 flex items-center justify-center ${
         isUnlocked ? 'animate-[fadeOut_220ms_ease-out_forwards]' : 'opacity-100'
       }`}
     >
+      {/* Background zoom and blur layer */}
+      <div
+        className={`absolute inset-0 bg-black/80 ${
+          isActive && !prefersReducedMotion
+            ? 'animate-[backgroundZoom_300ms_ease-out_forwards]'
+            : ''
+        }`}
+        style={{
+          backdropFilter: isActive && !prefersReducedMotion ? 'blur(4px)' : isActive && prefersReducedMotion ? 'blur(2px)' : 'blur(0px)',
+          transform: isActive && prefersReducedMotion ? 'scale(0.97)' : undefined,
+          transition: prefersReducedMotion ? 'all 300ms ease-out' : 'backdrop-filter 300ms ease-out',
+        }}
+      />
       
-      <div className="relative">
+      {/* Vault container with parallax float */}
+      <div
+        className={`relative z-10 ${
+          isActive && !prefersReducedMotion
+            ? 'animate-[parallaxFloat_3s_ease-in-out_infinite]'
+            : ''
+        }`}
+      >
         {/* Outer rotating ring */}
         <div
           className={`absolute inset-0 rounded-full border-4 ${
             isError
               ? 'border-rose-500/60'
               : 'border-zinc-600/40'
-          }`}
-          className={
+          } ${
             isError
               ? 'animate-[shake_0.5s_ease-in-out,errorPulse_1.5s_ease-in-out_infinite]'
               : isUnlocking || isUnlocked
-              ? 'transition-transform duration-300 ease-out'
+              ? prefersReducedMotion
+                ? 'transition-transform duration-300 ease-out'
+                : isUnlocked
+                ? 'animate-[hapticBumpStart_150ms_ease-out,successRingExpand_600ms_ease-out_0.3s] transition-transform duration-300 ease-out'
+                : 'animate-[hapticBumpStart_150ms_ease-out] transition-transform duration-300 ease-out'
               : 'animate-[rotateRing_3s_linear_infinite]'
-          }
+          }`}
           style={{
             width: '200px',
             height: '200px',
@@ -157,14 +197,17 @@ export function VaultUnlockOverlay() {
               : isUnlocking || isUnlocked
               ? 'border-emerald-500/50'
               : 'border-zinc-600/50'
-          }`}
-          className={
+          } ${
             isError
               ? 'animate-[shake_0.5s_ease-in-out]'
               : isUnlocking || isUnlocked
-              ? 'animate-[unlockPlate_0.6s_ease-out,glow_1s_ease-in-out_0.3s] transition-[box-shadow,background] duration-300 ease-out'
+              ? prefersReducedMotion
+                ? 'animate-[unlockPlate_0.6s_ease-out,glow_1s_ease-in-out_0.3s] transition-[box-shadow,background] duration-300 ease-out'
+                : isUnlocked
+                ? 'animate-[hapticBumpStart_150ms_ease-out,hapticBumpSuccess_600ms_ease-out_0.3s,unlockPlate_0.6s_ease-out,glow_1s_ease-in-out_0.3s] transition-[box-shadow,background] duration-300 ease-out'
+                : 'animate-[hapticBumpStart_150ms_ease-out,unlockPlate_0.6s_ease-out] transition-[box-shadow,background] duration-300 ease-out'
               : undefined
-          }
+          }`}
           style={{
             width: '160px',
             height: '160px',
@@ -208,7 +251,11 @@ export function VaultUnlockOverlay() {
               </svg>
             ) : isUnlocking || isUnlocked ? (
               <svg
-                className="w-12 h-12 text-emerald-400"
+                className={`w-12 h-12 text-emerald-400 ${
+                  isUnlocked && !prefersReducedMotion
+                    ? 'animate-[keyIconPulse_400ms_ease-out_0.3s]'
+                    : ''
+                }`}
                 fill="none"
                 viewBox="0 0 24 24"
                 strokeWidth={2}

@@ -96,3 +96,78 @@ body {
     opacity: 0.8;
   }
 }
+
+/* Vault unlock v1 animations */
+@keyframes backgroundZoom {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(0.95);
+  }
+}
+
+@keyframes parallaxFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.01);
+  }
+}
+
+@keyframes parallaxBackground {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+
+@keyframes hapticBumpStart {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+}
+
+@keyframes hapticBumpSuccess {
+  0%, 100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.05);
+  }
+  60% {
+    transform: scale(0.98);
+  }
+}
+
+@keyframes successRingExpand {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes keyIconPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
