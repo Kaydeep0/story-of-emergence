@@ -28,6 +28,33 @@ function humanizeSignError(e: any) {
   return e?.shortMessage || e?.message || 'Unexpected signing error.';
 }
 
+/**
+ * Compute trend summary counts from topic drift buckets
+ * Pure function - no side effects
+ */
+function computeTrendSummary(buckets: TopicDriftBucket[]): {
+  risingCount: number;
+  stableCount: number;
+  fadingCount: number;
+  label: string;
+} {
+  const risingCount = buckets.filter(b => b.trend === 'rising').length;
+  const stableCount = buckets.filter(b => b.trend === 'stable').length;
+  const fadingCount = buckets.filter(b => b.trend === 'fading').length;
+  
+  const parts: string[] = [];
+  parts.push(`${risingCount} topic${risingCount === 1 ? '' : 's'} rising`);
+  parts.push(`${stableCount} stable`);
+  parts.push(`${fadingCount} fading`);
+  
+  return {
+    risingCount,
+    stableCount,
+    fadingCount,
+    label: parts.join(' · '),
+  };
+}
+
 // Icon component for timeline events
 function EventIcon({ eventType }: { eventType: string }) {
   const className = "w-4 h-4 text-white/60";
@@ -952,6 +979,25 @@ export default function InsightsPage() {
               </div>
             )}
 
+            {/* Trend Summary Strip */}
+            {connected && !reflectionsLoading && topicDrift.length > 0 && (() => {
+              const trendSummary = computeTrendSummary(topicDrift);
+              return (
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-4 h-4 text-white/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+                    </svg>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-white/60">Trend summary</span>
+                      <span className="text-white/20">·</span>
+                      <span className="text-xs text-white/50">{trendSummary.label}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Topic Drift Section */}
             {connected && (
               <div className="space-y-4">
@@ -992,6 +1038,18 @@ export default function InsightsPage() {
                         stable: 'Stable',
                         fading: 'Fading',
                       };
+                      
+                      // Strength badge styling
+                      const strengthStyles = {
+                        high: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+                        medium: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+                        low: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+                      };
+                      const strengthLabels = {
+                        high: 'High Drift',
+                        medium: 'Medium Drift',
+                        low: 'Low Drift',
+                      };
 
                       return (
                         <div
@@ -1000,12 +1058,17 @@ export default function InsightsPage() {
                         >
                           {/* Topic header */}
                           <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="font-medium text-teal-200 capitalize">{bucket.topic}</h3>
                               <span
                                 className={`text-xs px-2 py-0.5 rounded-full border ${trendStyles[bucket.trend]}`}
                               >
                                 {trendLabels[bucket.trend]}
+                              </span>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full border ${strengthStyles[bucket.strengthLabel]}`}
+                              >
+                                {strengthLabels[bucket.strengthLabel]}
                               </span>
                             </div>
                             <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
