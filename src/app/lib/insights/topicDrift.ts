@@ -30,6 +30,12 @@ export type TopicDriftBucket = {
   sampleTitles: string[];
   trend: TopicTrend;
   strengthLabel: TopicStrengthLabel;
+  /**
+   * 28-day daily counts array for sparkline visualization
+   * Index 0 = 28 days ago, index 27 = today
+   * Each value is the count of entries matching this topic on that day
+   */
+  dailyCounts: number[];
 };
 
 /**
@@ -73,6 +79,16 @@ const RISING_THRESHOLD = 1.5;
  * Threshold for fading trend: newer count must be <= this fraction of older count
  */
 const FADING_THRESHOLD = 2 / 3;
+
+/**
+ * Get the calendar date key (YYYY-MM-DD) for a given date in local timezone
+ */
+function getDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 /**
  * Create a short title preview from entry plaintext
@@ -138,6 +154,27 @@ function determineStrengthLabel(olderCount: number, newerCount: number): TopicSt
 }
 
 /**
+ * Build a 28-day daily counts array from a map of dateKey -> count
+ * Returns an array where index 0 = 28 days ago, index 27 = today
+ */
+function buildDailyCountsArray(
+  dailyCountsMap: Map<string, number>,
+  startDate: Date
+): number[] {
+  const counts: number[] = [];
+  
+  // Generate all 28 date keys in order
+  for (let i = 0; i < LOOKBACK_DAYS; i++) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + i);
+    const dateKey = getDateKey(date);
+    counts.push(dailyCountsMap.get(dateKey) || 0);
+  }
+  
+  return counts;
+}
+
+/**
  * Compute topic drift buckets from decrypted reflection entries
  * 
  * This is a PURE FUNCTION - it has no side effects and makes no network calls.
@@ -174,13 +211,14 @@ export function computeTopicDrift(entries: ReflectionEntry[], now?: Date): Topic
     newerCount: number;  // entries in newer half (midpoint to now)
     totalCount: number;
     sampleTitles: string[];
+    dailyCounts: Map<string, number>; // dateKey -> count for that day
   };
   
   const topicData: Record<string, TopicAccumulator> = {};
   
   // Initialize all topics
   for (const topic of Object.keys(TOPIC_KEYWORDS)) {
-    topicData[topic] = { olderCount: 0, newerCount: 0, totalCount: 0, sampleTitles: [] };
+    topicData[topic] = { olderCount: 0, newerCount: 0, totalCount: 0, sampleTitles: [], dailyCounts: new Map() };
   }
   
   // Scan each entry for topic matches
@@ -205,6 +243,11 @@ export function computeTopicDrift(entries: ReflectionEntry[], now?: Date): Topic
           } else if (isOlder) {
             topicData[topic].olderCount += 1;
           }
+          
+          // Track daily counts for sparkline (only within lookback window)
+          const dateKey = getDateKey(entryDate);
+          const currentCount = topicData[topic].dailyCounts.get(dateKey) || 0;
+          topicData[topic].dailyCounts.set(dateKey, currentCount + 1);
         }
         
         // Add sample title if we haven't reached the limit
@@ -222,12 +265,14 @@ export function computeTopicDrift(entries: ReflectionEntry[], now?: Date): Topic
     if (data.totalCount > 0) {
       const trend = determineTrend(data.olderCount, data.newerCount);
       const strengthLabel = determineStrengthLabel(data.olderCount, data.newerCount);
+      const dailyCounts = buildDailyCountsArray(data.dailyCounts, startDate);
       buckets.push({
         topic,
         count: data.totalCount,
         sampleTitles: data.sampleTitles,
         trend,
         strengthLabel,
+        dailyCounts,
       });
     }
   }

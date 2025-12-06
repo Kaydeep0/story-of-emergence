@@ -95,6 +95,63 @@ function formatWeekDate(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/**
+ * Sparkline component - renders a 28-day mini chart
+ */
+function Sparkline({ dailyCounts }: { dailyCounts: number[] }) {
+  if (!dailyCounts || dailyCounts.length === 0) {
+    return null;
+  }
+
+  // Find max value for scaling (min is always 0)
+  const maxValue = Math.max(...dailyCounts, 1); // Ensure at least 1 to avoid division by zero
+  
+  const width = 100; // SVG viewBox width
+  const height = 28; // SVG viewBox height
+  const padding = 2; // Small padding to prevent clipping
+  
+  // Build path data for the line
+  const points: string[] = [];
+  const count = dailyCounts.length;
+  
+  for (let i = 0; i < count; i++) {
+    const x = count > 1 
+      ? padding + (i / (count - 1)) * (width - 2 * padding)
+      : width / 2; // Center if only one point
+    const normalizedValue = maxValue > 0 ? dailyCounts[i] / maxValue : 0;
+    // Flip Y coordinate (SVG y=0 is at top, but we want 0 at bottom)
+    const y = height - padding - normalizedValue * (height - 2 * padding);
+    points.push(`${x},${y}`);
+  }
+  
+  // Only render path if we have at least one point
+  if (points.length === 0) {
+    return null;
+  }
+  
+  const pathData = count > 1 ? `M ${points.join(' L ')}` : `M ${points[0]} L ${points[0]}`;
+  
+  return (
+    <svg
+      className="flex-shrink-0"
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height="28"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path
+        d={pathData}
+        fill="none"
+        stroke="rgb(113 113 122 / 0.4)" // zinc-500/40
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Feedback buttons component for insight cards
 function FeedbackButtons({
   insightId,
@@ -1057,21 +1114,26 @@ export default function InsightsPage() {
                           className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3"
                         >
                           {/* Topic header */}
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-medium text-teal-200 capitalize">{bucket.topic}</h3>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-1 min-w-0 sm:flex-nowrap">
+                                <h3 className="font-medium text-teal-200 capitalize flex-shrink-0">{bucket.topic}</h3>
+                                <div className="flex-1 min-w-0 max-w-[100px] sm:max-w-[180px] h-7">
+                                  <Sparkline dailyCounts={bucket.dailyCounts} />
+                                </div>
+                              </div>
                               <span
-                                className={`text-xs px-2 py-0.5 rounded-full border ${trendStyles[bucket.trend]}`}
+                                className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${trendStyles[bucket.trend]}`}
                               >
                                 {trendLabels[bucket.trend]}
                               </span>
                               <span
-                                className={`text-xs px-2 py-0.5 rounded-full border ${strengthStyles[bucket.strengthLabel]}`}
+                                className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${strengthStyles[bucket.strengthLabel]}`}
                               >
                                 {strengthLabels[bucket.strengthLabel]}
                               </span>
                             </div>
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full flex-shrink-0">
                               {bucket.count} reflection{bucket.count === 1 ? '' : 's'}
                             </span>
                           </div>
