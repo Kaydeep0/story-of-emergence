@@ -69,12 +69,19 @@ export type TimelineSpikeCard = InsightCard & {
  * Always-on summary specific data
  */
 export type AlwaysOnSummaryData = {
-  summaryType: 'writing_change' | 'consistency';
+  summaryType: 'writing_change' | 'consistency' | 'weekly_pattern' | 'activity_spike';
   currentWeekEntries: number;
   previousWeekEntries: number;
   currentWeekActiveDays: number;
   percentChange?: number;
   activeDayNames?: string[];
+  // For weekly_pattern
+  patternDays?: string[]; // e.g., ['Monday', 'Thursday']
+  // For activity_spike
+  spikeDate?: string; // YYYY-MM-DD
+  spikeDayName?: string; // e.g., 'Wednesday'
+  spikeCount?: number;
+  baselineCount?: number;
 };
 
 /**

@@ -1615,7 +1615,13 @@ export default function InsightsPage() {
                                   )}
                                 </button>
                                 <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
-                                  {insight.data.summaryType === 'writing_change' ? 'Trend' : 'Consistency'}
+                                  {insight.data.summaryType === 'writing_change'
+                                    ? 'Trend'
+                                    : insight.data.summaryType === 'consistency'
+                                    ? 'Consistency'
+                                    : insight.data.summaryType === 'weekly_pattern'
+                                    ? 'Pattern'
+                                    : 'Spike'}
                                 </span>
                               </div>
                             </div>

@@ -293,6 +293,172 @@ export function computeAlwaysOnSummary(
     });
   }
 
+  // Card 3: Weekly Pattern Insight
+  // Detect if user consistently writes on certain days by analyzing last 4-6 weeks
+  if (activeEntries.length >= 10) {
+    // Look at last 42 days (6 weeks) to detect patterns
+    const fortyTwoDaysAgo = new Date(today);
+    fortyTwoDaysAgo.setDate(fortyTwoDaysAgo.getDate() - 41); // 42 days total
+
+    const historicalEntries = getEntriesInRange(activeEntries, fortyTwoDaysAgo, tomorrow);
+
+    if (historicalEntries.length >= 10) {
+      // Count entries by day of week (0 = Sunday, 6 = Saturday)
+      const dayOfWeekCounts = new Map<number, number>();
+      const dayOfWeekEntries = new Map<number, ReflectionEntry[]>();
+
+      for (const entry of historicalEntries) {
+        const date = new Date(entry.createdAt);
+        const dayOfWeek = date.getDay();
+        dayOfWeekCounts.set(dayOfWeek, (dayOfWeekCounts.get(dayOfWeek) || 0) + 1);
+        
+        if (!dayOfWeekEntries.has(dayOfWeek)) {
+          dayOfWeekEntries.set(dayOfWeek, []);
+        }
+        dayOfWeekEntries.get(dayOfWeek)!.push(entry);
+      }
+
+      // Find days that appear in at least 50% of weeks and have at least 2 entries per week on average
+      const totalWeeks = 6;
+      const minWeeksWithActivity = Math.ceil(totalWeeks * 0.5); // At least 50% of weeks
+      const minAvgEntriesPerWeek = 2;
+
+      const patternDays: string[] = [];
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        const count = dayOfWeekCounts.get(dayOfWeek) || 0;
+        const avgPerWeek = count / totalWeeks;
+        
+        // Check if this day appears frequently enough
+        // We'll consider it a pattern if:
+        // 1. Average entries per week >= 2
+        // 2. Total count suggests it appears in at least 50% of weeks
+        if (avgPerWeek >= minAvgEntriesPerWeek && count >= minWeeksWithActivity) {
+          patternDays.push(dayNames[dayOfWeek]);
+        }
+      }
+
+      // Only show if we found at least 1 pattern day and not all 7 days
+      if (patternDays.length > 0 && patternDays.length < 7) {
+        const patternDaysFormatted =
+          patternDays.length === 1
+            ? patternDays[0]
+            : patternDays.length === 2
+            ? `${patternDays[0]} and ${patternDays[1]}`
+            : patternDays.slice(0, -1).join(', ') + ', and ' + patternDays[patternDays.length - 1];
+
+        const title = `You tend to write most on ${patternDaysFormatted}.`;
+
+        // Get evidence from pattern days
+        const evidence: InsightEvidence[] = [];
+        for (const dayName of patternDays) {
+          const dayIndex = dayNames.indexOf(dayName);
+          const entries = dayOfWeekEntries.get(dayIndex) || [];
+          // Take up to 2 entries per pattern day
+          const sampleEntries = entries
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 2);
+          evidence.push(...sampleEntries.map((entry) => ({
+            entryId: entry.id,
+            timestamp: entry.createdAt,
+          })));
+        }
+        // Limit to 6 evidence items total
+        const limitedEvidence = evidence.slice(0, 6);
+
+        const data: AlwaysOnSummaryData = {
+          summaryType: 'weekly_pattern',
+          currentWeekEntries: currentCount,
+          previousWeekEntries: previousCount,
+          currentWeekActiveDays: currentActiveDays,
+          patternDays,
+        };
+
+        cards.push({
+          id: generateInsightId('always_on_summary', 'weekly_pattern'),
+          kind: 'always_on_summary',
+          title,
+          explanation: title,
+          evidence: limitedEvidence,
+          computedAt,
+          data,
+        });
+      }
+    }
+  }
+
+  // Card 4: Activity Spike Insight
+  // Detect if the last 7 days include a day where activity is 2× above baseline
+  if (currentCount > 0 && activeEntries.length >= 7) {
+    // Calculate baseline: average entries per calendar day over last 14 days
+    const baselineEntries = getEntriesInRange(activeEntries, fourteenDaysAgo, tomorrow);
+    const baselineCalendarDays = 14; // Last 14 calendar days
+    const baselineAvgPerDay = baselineEntries.length / baselineCalendarDays;
+
+    // Check each day in the last 7 days for spikes
+    let spikeFound = false;
+    let spikeDate: string | undefined;
+    let spikeDayName: string | undefined;
+    let spikeCount = 0;
+    let spikeEntries: ReflectionEntry[] = [];
+
+    for (let i = 0; i < 7; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const checkDateKey = getDateKey(checkDate);
+      const checkDateEnd = new Date(checkDate);
+      checkDateEnd.setDate(checkDateEnd.getDate() + 1);
+
+      const dayEntries = getEntriesInRange(activeEntries, checkDate, checkDateEnd);
+      const dayCount = dayEntries.length;
+
+      // A spike is when a day has at least 2× the baseline average AND at least 2 entries
+      // baselineAvgPerDay is entries per calendar day, so we compare dayCount (entries on that day) to 2× baseline
+      if (dayCount >= 2 && baselineAvgPerDay > 0 && dayCount >= baselineAvgPerDay * 2) {
+        spikeFound = true;
+        spikeDate = checkDateKey;
+        spikeDayName = getDayName(checkDate);
+        spikeCount = dayCount;
+        spikeEntries = dayEntries;
+        break; // Take the most recent spike
+      }
+    }
+
+    if (spikeFound && spikeDate && spikeDayName) {
+      const title = `You had a spike in writing activity on ${spikeDayName}.`;
+
+      const evidence = spikeEntries
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5)
+        .map((entry) => ({
+          entryId: entry.id,
+          timestamp: entry.createdAt,
+        }));
+
+      const data: AlwaysOnSummaryData = {
+        summaryType: 'activity_spike',
+        currentWeekEntries: currentCount,
+        previousWeekEntries: previousCount,
+        currentWeekActiveDays: currentActiveDays,
+        spikeDate,
+        spikeDayName,
+        spikeCount,
+        baselineCount: Math.round(baselineAvgPerDay * 10) / 10, // Round to 1 decimal
+      };
+
+      cards.push({
+        id: generateInsightId('always_on_summary', 'activity_spike'),
+        kind: 'always_on_summary',
+        title,
+        explanation: title,
+        evidence,
+        computedAt,
+        data,
+      });
+    }
+  }
+
   return cards;
 }
 
