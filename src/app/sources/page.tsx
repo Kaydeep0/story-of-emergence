@@ -18,9 +18,10 @@ export default function SourcesPage() {
   }, []);
 
   // Log navigation event when page loads (connected wallet only)
+  // source_kind: ui, event_type: navigate_sources
   useEffect(() => {
     if (!mounted || !connected) return;
-    logEvent('page_sources');
+    logEvent('navigate_sources');
   }, [mounted, connected, logEvent]);
 
   if (!mounted) return null;
@@ -34,11 +35,50 @@ export default function SourcesPage() {
 
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Sources</h1>
-        <p className="text-center text-sm text-white/60 mb-6">
-          Connected feeds and external activity will appear here in a future phase.
+        <p className="text-center text-sm text-white/60 mb-8">
+          Import external content and connect feeds to enrich your reflections.
         </p>
 
-        {/* Empty state card */}
+        {/* Import file panel */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+              <svg
+                className="w-5 h-5 text-white/50"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h2 className="font-medium text-white/90">Import file</h2>
+              <p className="text-xs text-white/50">Upload notes, bookmarks, or exported data</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-white/60">
+            Soon you&apos;ll be able to import files directly into your encrypted vault. 
+            Supported formats will include JSON exports from popular apps, markdown notes, 
+            and browser bookmark exports.
+          </p>
+
+          <button
+            type="button"
+            disabled
+            className="cursor-not-allowed rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white/40 w-full transition-colors"
+          >
+            Import file (coming soon)
+          </button>
+        </div>
+
+        {/* Empty state / no sources connected */}
         <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
           <div className="mx-auto w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
             <svg

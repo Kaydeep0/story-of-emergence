@@ -11,6 +11,7 @@ export type EventType =
   | 'page_insights'
   | 'page_sources'
   | 'page_shared'
+  | 'navigate_sources'
   | 'reflection_saved'
   | 'reflection_deleted'
   | 'reflection_restored'

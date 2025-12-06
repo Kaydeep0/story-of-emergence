@@ -15,9 +15,12 @@ import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
 import { computeLinkClusters } from '../lib/insights/linkClusters';
 import { computeStreakCoach } from '../lib/insights/streakCoach';
 import { computeTopicDrift } from '../lib/insights/topicDrift';
+import { computeContrastPairs } from '../lib/insights/contrastPairs';
+import type { ContrastPair } from '../lib/insights/contrastPairs';
 import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
 import type { TimelineSpikeCard, AlwaysOnSummaryCard, InsightCard, LinkClusterCard, StreakCoachCard } from '../lib/insights/types';
+import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 
 function humanizeSignError(e: any) {
   if (e?.code === 4001) return 'Signature request was rejected.';
@@ -170,6 +173,12 @@ export default function InsightsPage() {
 
   // Streak coach state (computed from decrypted reflections)
   const [coachInsights, setCoachInsights] = useState<StreakCoachCard[]>([]);
+
+  // Topic drift state (computed from decrypted reflections)
+  const [topicDrift, setTopicDrift] = useState<TopicDriftBucket[]>([]);
+
+  // Contrast pairs state (computed from decrypted reflections)
+  const [contrastPairs, setContrastPairs] = useState<ContrastPair[]>([]);
 
   // Expansion state for spike cards (tracks which dates are expanded)
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
@@ -398,8 +407,12 @@ export default function InsightsPage() {
         // Compute always-on summary insights (pure function, no network calls)
         const insights = computeAlwaysOnSummary(reflectionEntries);
 
+        // Compute topic drift for "Top topics this month" section
+        const drift = computeTopicDrift(reflectionEntries);
+
         if (!cancelled) {
           setSummaryInsights(insights);
+          setTopicDrift(drift);
         }
       } catch (err: any) {
         if (err?.message === 'PENDING_SIG') return;
@@ -454,15 +467,15 @@ export default function InsightsPage() {
         const spikes = computeTimelineSpikes(reflectionEntries);
         const clusters = computeLinkClusters(reflectionEntries);
         const coach = computeStreakCoach(reflectionEntries);
-        
-        // Topic drift debug (Phase Four scaffolding - console only for now)
         const drift = computeTopicDrift(reflectionEntries);
-        console.log('Topic drift debug', drift);
+        const contrasts = computeContrastPairs(reflectionEntries);
 
         if (!cancelled) {
           setSpikeInsights(spikes);
           setClusterInsights(clusters);
           setCoachInsights(coach);
+          setTopicDrift(drift);
+          setContrastPairs(contrasts);
         }
       } catch (err: any) {
         if (err?.message === 'PENDING_SIG') return;
@@ -934,6 +947,153 @@ export default function InsightsPage() {
               </div>
             )}
 
+            {/* Topic Drift Section */}
+            {connected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
+                  </svg>
+                  Topic Drift
+                </h2>
+
+                {reflectionsLoading && (
+                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
+                    <div className="h-5 bg-white/10 rounded w-1/2" />
+                    <div className="h-4 bg-white/5 rounded w-3/4" />
+                  </div>
+                )}
+
+                {!reflectionsLoading && topicDrift.length === 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                    <p className="text-sm text-white/60">
+                      Write a few more reflections and we&apos;ll start showing how your topics move over time.
+                    </p>
+                  </div>
+                )}
+
+                {!reflectionsLoading && topicDrift.length > 0 && (
+                  <div className="space-y-4">
+                    {topicDrift.map((bucket) => (
+                      <div
+                        key={bucket.topic}
+                        className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3"
+                      >
+                        {/* Topic header */}
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-medium text-teal-200 capitalize">{bucket.topic}</h3>
+                          <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                            {bucket.count} reflection{bucket.count === 1 ? '' : 's'} in this topic
+                          </span>
+                        </div>
+
+                        {/* Sample titles */}
+                        {bucket.sampleTitles.length > 0 && (
+                          <ul className="space-y-1.5">
+                            {bucket.sampleTitles.map((title, idx) => (
+                              <li
+                                key={idx}
+                                className="flex items-center gap-2 text-xs"
+                              >
+                                <span className="text-teal-400/60">•</span>
+                                <span className="text-white/60 truncate">{title}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Contrast Pairs Section */}
+            {connected && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                  </svg>
+                  Contrast Pairs
+                </h2>
+
+                {reflectionsLoading && (
+                  <div className="rounded-2xl border border-white/10 p-6 animate-pulse space-y-3">
+                    <div className="h-5 bg-white/10 rounded w-1/2" />
+                    <div className="h-4 bg-white/5 rounded w-3/4" />
+                  </div>
+                )}
+
+                {!reflectionsLoading && contrastPairs.length === 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white/60">
+                    Not enough data yet. Keep writing and we will show where your themes pull in opposite directions.
+                  </div>
+                )}
+
+                {!reflectionsLoading && contrastPairs.length > 0 && (
+                  <div className="space-y-4">
+                    {contrastPairs.map((pair, index) => {
+                      const insightId = `contrastPairs-${pair.leftLabel}-${pair.rightLabel}-${index}`;
+                      return (
+                        <div
+                          key={insightId}
+                          className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold text-white">
+                                {pair.title}
+                              </p>
+                              <p className="text-xs text-white/60">
+                                A simple comparison of where you write more and where you write less.
+                              </p>
+                            </div>
+
+                            <FeedbackButtons
+                              insightId={insightId}
+                              recipeId="contrastPairs"
+                              getFeedback={getFeedback}
+                              toggleFeedback={toggleFeedback}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <p className="mb-1 font-semibold text-white capitalize">
+                                {pair.leftLabel} • {pair.leftCount} entries
+                              </p>
+                              <ul className="space-y-1 text-white/70">
+                                {pair.sampleLeftTitles.map((title, i) => (
+                                  <li key={i} className="truncate">
+                                    {title}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div>
+                              <p className="mb-1 font-semibold text-white capitalize">
+                                {pair.rightLabel} • {pair.rightCount} entries
+                              </p>
+                              <ul className="space-y-1 text-white/70">
+                                {pair.sampleRightTitles.map((title, i) => (
+                                  <li key={i} className="truncate">
+                                    {title}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Activity Timeline Section */}
             {connected && (
               <div className="space-y-4">
@@ -1098,6 +1258,34 @@ export default function InsightsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Top topics this month */}
+                <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+                  <p className="text-xs font-semibold text-white">
+                    Top topics this month
+                  </p>
+                  {summaryReflectionsLoading ? (
+                    <div className="mt-3 flex gap-2">
+                      <div className="h-6 w-20 bg-white/10 rounded-full animate-pulse" />
+                      <div className="h-6 w-16 bg-white/10 rounded-full animate-pulse" />
+                    </div>
+                  ) : topicDrift.length === 0 ? (
+                    <p className="mt-2 text-xs text-white/60">
+                      Keep writing. When we see clear themes, your top topics will appear here.
+                    </p>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {topicDrift.slice(0, 3).map((bucket) => (
+                        <span
+                          key={bucket.topic}
+                          className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs text-white/80"
+                        >
+                          {bucket.topic} · {bucket.count} entries
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </section>
 
                 {/* Always On Summary Section */}
                 <div className="space-y-4">
