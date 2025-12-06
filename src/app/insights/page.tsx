@@ -473,7 +473,7 @@ export default function InsightsPage() {
         const clusters = computeLinkClusters(reflectionEntries);
         const coach = computeStreakCoach(reflectionEntries);
         const drift = computeTopicDrift(reflectionEntries);
-        const contrasts = computeContrastPairs(reflectionEntries);
+        const contrasts = computeContrastPairs(drift);
 
         if (!cancelled) {
           setSpikeInsights(spikes);
@@ -980,35 +980,56 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && topicDrift.length > 0 && (
                   <div className="space-y-4">
-                    {topicDrift.map((bucket) => (
-                      <div
-                        key={bucket.topic}
-                        className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3"
-                      >
-                        {/* Topic header */}
-                        <div className="flex items-start justify-between">
-                          <h3 className="font-medium text-teal-200 capitalize">{bucket.topic}</h3>
-                          <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
-                            {bucket.count} reflection{bucket.count === 1 ? '' : 's'} in this topic
-                          </span>
-                        </div>
+                    {topicDrift.map((bucket) => {
+                      // Trend badge styling
+                      const trendStyles = {
+                        rising: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                        stable: 'bg-white/10 text-white/60 border-white/20',
+                        fading: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                      };
+                      const trendLabels = {
+                        rising: 'Rising',
+                        stable: 'Stable',
+                        fading: 'Fading',
+                      };
 
-                        {/* Sample titles */}
-                        {bucket.sampleTitles.length > 0 && (
-                          <ul className="space-y-1.5">
-                            {bucket.sampleTitles.map((title, idx) => (
-                              <li
-                                key={idx}
-                                className="flex items-center gap-2 text-xs"
+                      return (
+                        <div
+                          key={bucket.topic}
+                          className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3"
+                        >
+                          {/* Topic header */}
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-teal-200 capitalize">{bucket.topic}</h3>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full border ${trendStyles[bucket.trend]}`}
                               >
-                                <span className="text-teal-400/60">•</span>
-                                <span className="text-white/60 truncate">{title}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
+                                {trendLabels[bucket.trend]}
+                              </span>
+                            </div>
+                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                              {bucket.count} reflection{bucket.count === 1 ? '' : 's'}
+                            </span>
+                          </div>
+
+                          {/* Sample titles */}
+                          {bucket.sampleTitles.length > 0 && (
+                            <ul className="space-y-1.5">
+                              {bucket.sampleTitles.map((title, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-center gap-2 text-xs"
+                                >
+                                  <span className="text-teal-400/60">•</span>
+                                  <span className="text-white/60 truncate">{title}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1039,21 +1060,34 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && contrastPairs.length > 0 && (
                   <div className="space-y-4">
-                    {contrastPairs.map((pair, index) => {
-                      const insightId = `contrastPairs-${pair.leftLabel}-${pair.rightLabel}-${index}`;
+                    {contrastPairs.slice(0, 2).map((pair, index) => {
+                      const insightId = `contrastPairs-${pair.topicA}-${pair.topicB}-${index}`;
+                      
+                      // Trend badge styling
+                      const trendStyles = {
+                        rising: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                        stable: 'bg-white/10 text-white/60 border-white/20',
+                        fading: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                      };
+                      
                       return (
                         <div
                           key={insightId}
-                          className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4"
+                          className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-4"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-xs font-semibold text-white">
-                                {pair.title}
-                              </p>
-                              <p className="text-xs text-white/60">
-                                A simple comparison of where you write more and where you write less.
-                              </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-orange-200 capitalize">{pair.topicA}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full border ${trendStyles[pair.trendA]}`}>
+                                  Rising
+                                </span>
+                                <span className="text-white/30">vs</span>
+                                <span className="font-medium text-orange-200 capitalize">{pair.topicB}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full border ${trendStyles[pair.trendB]}`}>
+                                  Fading
+                                </span>
+                              </div>
                             </div>
 
                             <FeedbackButtons
@@ -1064,33 +1098,9 @@ export default function InsightsPage() {
                             />
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4 text-xs">
-                            <div>
-                              <p className="mb-1 font-semibold text-white capitalize">
-                                {pair.leftLabel} • {pair.leftCount} entries
-                              </p>
-                              <ul className="space-y-1 text-white/70">
-                                {pair.sampleLeftTitles.map((title, i) => (
-                                  <li key={i} className="truncate">
-                                    {title}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 font-semibold text-white capitalize">
-                                {pair.rightLabel} • {pair.rightCount} entries
-                              </p>
-                              <ul className="space-y-1 text-white/70">
-                                {pair.sampleRightTitles.map((title, i) => (
-                                  <li key={i} className="truncate">
-                                    {title}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
+                          <p className="text-sm text-white/70">
+                            {pair.summary}
+                          </p>
                         </div>
                       );
                     })}
