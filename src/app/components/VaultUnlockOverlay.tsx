@@ -6,6 +6,8 @@ import { useEncryptionSession } from '../lib/useEncryptionSession';
 
 type EncryptionState = 'idle' | 'awaiting_signature' | 'unlocking' | 'unlocked' | 'error';
 
+type VaultPhase = 'APPROACH' | 'TRAVEL' | 'UNLOCK' | 'RESOLVE' | 'ERROR';
+
 function deriveEncryptionState(
   isConnected: boolean,
   ready: boolean,
@@ -38,7 +40,9 @@ export function VaultUnlockOverlay() {
   const [wasReady, setWasReady] = useState(ready);
   const [showOverlay, setShowOverlay] = useState(false);
   const [state, setState] = useState<EncryptionState>('idle');
+  const [phase, setPhase] = useState<VaultPhase>('APPROACH');
   const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const phaseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasShownOverlayRef = useRef(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -70,6 +74,36 @@ export function VaultUnlockOverlay() {
       setWasReady(false);
     }
   }, [isConnected, ready, error, wasReady]);
+
+  // Map encryption state to vault phase and handle phase transitions
+  useEffect(() => {
+    // Clear any existing phase timeout
+    if (phaseTimeoutRef.current) {
+      clearTimeout(phaseTimeoutRef.current);
+      phaseTimeoutRef.current = null;
+    }
+
+    // Map state to phase
+    if (state === 'awaiting_signature') {
+      setPhase('APPROACH');
+    } else if (state === 'unlocking') {
+      setPhase('TRAVEL');
+    } else if (state === 'unlocked') {
+      setPhase('UNLOCK');
+      // Transition to RESOLVE after a short delay (200ms)
+      phaseTimeoutRef.current = setTimeout(() => {
+        setPhase('RESOLVE');
+      }, 200);
+    } else if (state === 'error') {
+      setPhase('ERROR');
+    }
+
+    return () => {
+      if (phaseTimeoutRef.current) {
+        clearTimeout(phaseTimeoutRef.current);
+      }
+    };
+  }, [state]);
 
   // Control overlay visibility based on state
   useEffect(() => {
@@ -133,7 +167,9 @@ export function VaultUnlockOverlay() {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center ${
+      data-vault-overlay
+      data-phase={phase}
+      className={`soe-vault-overlay fixed inset-0 z-50 flex items-center justify-center ${
         isUnlocked ? 'animate-[fadeOut_220ms_ease-out_forwards]' : 'opacity-100'
       }`}
     >
@@ -161,7 +197,7 @@ export function VaultUnlockOverlay() {
       >
         {/* Outer rotating ring */}
         <div
-          className={`absolute inset-0 rounded-full border-4 ${
+          className={`soe-vault-ring absolute inset-0 rounded-full border-4 ${
             isError
               ? 'border-rose-500/60'
               : 'border-zinc-600/40'
@@ -185,7 +221,7 @@ export function VaultUnlockOverlay() {
         
         {/* Inner vault plate */}
         <div
-          className={`relative rounded-full ${
+          className={`soe-vault-core relative rounded-full ${
             isError
               ? 'bg-gradient-to-br from-rose-900/80 to-rose-700/60'
               : isUnlocking || isUnlocked
