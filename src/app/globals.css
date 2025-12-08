@@ -172,177 +172,40 @@ body {
   }
 }
 
-/* Vault unlock state machine phase classes */
-[data-phase="APPROACH"] {
+/* Vault unlock overlay state machine base styles */
+[data-vault-phase] {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+[data-vault-phase="APPROACH"] {
+  opacity: 1;
+  transform: scale(1.0);
+}
+
+[data-vault-phase="TRAVEL"] {
+  opacity: 0.9;
   transform: scale(0.98);
-  opacity: 0.95;
-  transition: transform 200ms ease-out, opacity 200ms ease-out;
 }
 
-[data-phase="TRAVEL"] {
-  transform: translateY(-2px);
-  opacity: 0.98;
-  transition: transform 300ms ease-out, opacity 300ms ease-out;
+[data-vault-phase="UNLOCK"] {
+  opacity: 0.85;
+  transform: scale(1.02);
 }
 
-[data-phase="UNLOCK"] {
-  filter: drop-shadow(0 0 15px rgba(34, 197, 94, 0.6));
-  transition: filter 200ms ease-out;
-}
-
-[data-phase="RESOLVE"] {
+[data-vault-phase="RESOLVE"] {
   opacity: 0;
-  transition: opacity 220ms ease-out;
+  transform: scale(1.0);
 }
 
-[data-phase="ERROR"] {
-  transform: translateX(4px);
-  transition: transform 150ms ease-in-out;
-  animation: phase-error-shake 300ms ease-in-out;
-}
-
-@keyframes phase-error-shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-4px);
-  }
-  75% {
-    transform: translateX(4px);
-  }
+[data-vault-phase="ERROR"] {
+  opacity: 1;
+  transform: scale(1.0);
 }
 
 /* Respect prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  [data-phase="APPROACH"],
-  [data-phase="TRAVEL"],
-  [data-phase="UNLOCK"],
-  [data-phase="RESOLVE"],
-  [data-phase="ERROR"] {
-    transform: none;
-    animation: none;
-    transition: opacity 150ms ease-out;
-  }
-}
-
-/* Vault unlock overlay base styles */
-[data-vault-overlay] {
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Vault ring with soft border and glow */
-.soe-vault-ring {
-  border-width: 4px;
-  box-shadow: 
-    0 0 20px rgba(0, 0, 0, 0.5),
-    inset 0 0 15px rgba(0, 0, 0, 0.3);
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out, opacity 300ms ease-out;
-}
-
-/* Vault core with gentle glow */
-.soe-vault-core {
-  box-shadow: 
-    0 0 25px rgba(0, 0, 0, 0.6),
-    inset 0 0 20px rgba(0, 0, 0, 0.4),
-    0 0 40px rgba(100, 100, 100, 0.1);
-  transition: box-shadow 300ms ease-out, transform 300ms ease-out, opacity 300ms ease-out;
-}
-
-/* Phase-specific adjustments */
-[data-vault-overlay][data-phase="APPROACH"] .soe-vault-ring {
-  box-shadow: 
-    0 0 15px rgba(0, 0, 0, 0.4),
-    inset 0 0 12px rgba(0, 0, 0, 0.25);
-  opacity: 0.9;
-}
-
-[data-vault-overlay][data-phase="APPROACH"] .soe-vault-core {
-  box-shadow: 
-    0 0 20px rgba(0, 0, 0, 0.5),
-    inset 0 0 18px rgba(0, 0, 0, 0.35),
-    0 0 30px rgba(100, 100, 100, 0.08);
-  opacity: 0.92;
-  transform: scale(0.98);
-}
-
-[data-vault-overlay][data-phase="TRAVEL"] .soe-vault-ring {
-  box-shadow: 
-    0 0 22px rgba(0, 0, 0, 0.55),
-    inset 0 0 16px rgba(0, 0, 0, 0.32),
-    0 0 35px rgba(150, 150, 150, 0.12);
-  opacity: 0.95;
-}
-
-[data-vault-overlay][data-phase="TRAVEL"] .soe-vault-core {
-  box-shadow: 
-    0 0 28px rgba(0, 0, 0, 0.6),
-    inset 0 0 22px rgba(0, 0, 0, 0.4),
-    0 0 45px rgba(150, 150, 150, 0.15);
-  opacity: 0.96;
-  transform: scale(1.01);
-}
-
-[data-vault-overlay][data-phase="UNLOCK"] .soe-vault-ring {
-  box-shadow: 
-    0 0 30px rgba(34, 197, 94, 0.3),
-    0 0 25px rgba(0, 0, 0, 0.6),
-    inset 0 0 18px rgba(34, 197, 94, 0.15),
-    inset 0 0 20px rgba(0, 0, 0, 0.45);
-  opacity: 1;
-}
-
-[data-vault-overlay][data-phase="UNLOCK"] .soe-vault-core {
-  box-shadow: 
-    0 0 50px rgba(34, 197, 94, 0.5),
-    0 0 35px rgba(0, 0, 0, 0.7),
-    inset 0 0 25px rgba(34, 197, 94, 0.25),
-    inset 0 0 22px rgba(0, 0, 0, 0.5);
-  opacity: 1;
-  transform: scale(1.02);
-}
-
-[data-vault-overlay][data-phase="RESOLVE"] .soe-vault-ring {
-  opacity: 0;
-  transition: opacity 220ms ease-out, box-shadow 220ms ease-out;
-}
-
-[data-vault-overlay][data-phase="RESOLVE"] .soe-vault-core {
-  opacity: 0;
-  transition: opacity 220ms ease-out, box-shadow 220ms ease-out;
-}
-
-[data-vault-overlay][data-phase="ERROR"] .soe-vault-ring {
-  box-shadow: 
-    0 0 25px rgba(239, 68, 68, 0.25),
-    0 0 20px rgba(0, 0, 0, 0.5),
-    inset 0 0 15px rgba(239, 68, 68, 0.12),
-    inset 0 0 18px rgba(0, 0, 0, 0.4);
-}
-
-[data-vault-overlay][data-phase="ERROR"] .soe-vault-core {
-  box-shadow: 
-    0 0 40px rgba(239, 68, 68, 0.3),
-    0 0 30px rgba(0, 0, 0, 0.6),
-    inset 0 0 22px rgba(239, 68, 68, 0.15),
-    inset 0 0 20px rgba(0, 0, 0, 0.45);
-  opacity: 0.98;
-}
-
-/* Respect prefers-reduced-motion for vault overlay */
-@media (prefers-reduced-motion: reduce) {
-  [data-vault-overlay] .soe-vault-ring,
-  [data-vault-overlay] .soe-vault-core {
-    transform: none;
-    transition: opacity 150ms ease-out, box-shadow 150ms ease-out;
-  }
-  
-  [data-vault-overlay][data-phase="TRAVEL"] .soe-vault-core,
-  [data-vault-overlay][data-phase="UNLOCK"] .soe-vault-core {
+  [data-vault-phase] {
+    transition: opacity 0.4s ease;
     transform: none;
   }
 }
