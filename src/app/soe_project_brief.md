@@ -50,3 +50,20 @@ Next steps (Phase Two):
 3. Evolution views (Summary, Timeline, Topics)
 4. Prepare for Insight Engine step zero (topic drift, spikes)
 
+## Cursor Agent Golden Rule
+
+Agents must obey these rules at all times.
+
+• They may only modify the files explicitly listed in the task description.
+• They must never touch encryption logic, Supabase code, or RPC definitions.
+• They must never change hook order inside React components except where the task explicitly says to.
+• They must not edit README.md or soe_project_brief.md.
+• They must keep each task scoped to one subsystem only:
+  • Encryption and wallet
+  • UI overlays and animation
+  • Insights engine
+  • External sources and sharing
+• If a change produces new runtime errors or hook warnings, the task must stop and revert that file.
+• Any animation work must respect a simple state sequence:
+  • APPROACH → TRAVEL → UNLOCK → RESOLVE → ERROR
+• Before finishing, agents must run `pnpm lint` and confirm there are no new errors.
