@@ -565,6 +565,31 @@ export function InsightDrawer({
     'Contrast Pair': 'bg-orange-500/20 text-orange-300 border-orange-500/30',
   };
 
+  // Strength badge colors for Topic Drift - High drift is more vivid, Low/Medium are calmer
+  function getStrengthBadgeClass(strength: string): string {
+    const lower = strength.toLowerCase();
+    if (lower.includes('high')) {
+      // High drift: brighter, more vivid
+      return 'bg-rose-500/25 text-rose-300 border-rose-500/40';
+    } else if (lower.includes('medium')) {
+      // Medium drift: moderate
+      return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+    } else {
+      // Low drift or Stable: calmer, softer
+      return 'bg-white/10 text-white/60 border-white/20';
+    }
+  }
+
+  // Format strength label to be short and neutral
+  function formatStrengthLabel(strength: string): string {
+    const lower = strength.toLowerCase();
+    if (lower.includes('high')) return 'High drift';
+    if (lower.includes('medium')) return 'Medium drift';
+    if (lower.includes('low')) return 'Low drift';
+    if (lower.includes('stable')) return 'Stable';
+    return strength;
+  }
+
   return (
     <>
       {/* Backdrop */}
@@ -594,6 +619,7 @@ export function InsightDrawer({
           
           {/* Content state */}
           {!isLoading && insight && (
+            <div className="insight-drawer-content">
             <>
               {/* Mobile header */}
               <div className="flex items-start justify-between mb-4 gap-2">
@@ -645,8 +671,8 @@ export function InsightDrawer({
                   {insight.type}
                 </span>
                 {insight.strength && (
-                  <span className="text-xs text-white/60 bg-white/5 px-2 py-1 rounded-full">
-                    {insight.strength}
+                  <span className={`text-xs px-2 py-1 rounded-full border ${getStrengthBadgeClass(insight.strength)}`}>
+                    {formatStrengthLabel(insight.strength)}
                   </span>
                 )}
               </div>
@@ -663,9 +689,9 @@ export function InsightDrawer({
               </div>
 
               {/* Evidence */}
-              {insight.evidence.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
+                {insight.evidence.length > 0 ? (
                   <ul className="space-y-2">
                     {!evidenceRevealed ? (
                       // Show shimmer placeholders while loading
@@ -681,14 +707,14 @@ export function InsightDrawer({
                         const preview = getEvidencePreview(ev);
                         const reflection = getReflectionByEntryId(ev.entryId);
                         const isClickable = !!reflection;
-                        const delayMs = 70; // Stagger delay in milliseconds
+                        const delayMs = 75; // Stagger delay in milliseconds (60-80ms range)
                         
                         return (
                           <li
                             key={ev.entryId || idx}
-                            className={`insight-evidence-row flex items-start gap-3 text-sm ${
+                            className={`insight-evidence-pill insight-evidence-row ${
                               isClickable
-                                ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                                ? 'cursor-pointer'
                                 : ''
                             }`}
                             onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
@@ -697,32 +723,37 @@ export function InsightDrawer({
                             }}
                           >
                             {hasTimestamp ? (
-                              <span className="text-white/40 min-w-[80px] text-xs">
+                              <span className="insight-evidence-date text-white/40 text-xs">
                                 {formatEvidenceDate(ev.timestamp)}
                                 <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
                               </span>
                             ) : (
-                              <span className="text-white/40 min-w-[80px] text-xs">•</span>
+                              <span className="insight-evidence-date text-white/40 text-xs">•</span>
                             )}
-                            <span className="text-white/70 flex-1">{preview}</span>
+                            <span className="insight-evidence-text text-white/70 text-sm flex-1">{preview}</span>
                           </li>
                         );
                       })
                     )}
                   </ul>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-white/50 italic">No specific entries highlighted yet.</p>
+                )}
+              </div>
 
-              {/* Confidence/Strength indicator */}
+              {/* Confidence */}
               {insight.confidence !== undefined && (
                 <div className="pt-4 border-t border-white/10">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-white/60">Confidence</span>
-                    <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
+                    <span className="text-white/80">
+                      {Math.round(insight.confidence * 100)}%
+                    </span>
                   </div>
                 </div>
               )}
             </>
+            </div>
           )}
         </div>
       </div>
@@ -794,18 +825,19 @@ export function InsightDrawer({
           
           {/* Content state */}
           {!isLoading && insight && (
+            <div className="insight-drawer-content">
             <>
-          {/* Type badge */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs px-2 py-1 rounded-full border ${typeColors[insight.type]}`}>
-              {insight.type}
-            </span>
-            {insight.strength && (
-              <span className="text-xs text-white/60 bg-white/5 px-2 py-1 rounded-full">
-                {insight.strength}
-              </span>
-            )}
-          </div>
+              {/* Type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs px-2 py-1 rounded-full border ${typeColors[insight.type]}`}>
+                  {insight.type}
+                </span>
+                {insight.strength && (
+                  <span className={`text-xs px-2 py-1 rounded-full border ${getStrengthBadgeClass(insight.strength)}`}>
+                    {formatStrengthLabel(insight.strength)}
+                  </span>
+                )}
+              </div>
 
           {/* Summary */}
           <div>
@@ -819,9 +851,9 @@ export function InsightDrawer({
           </div>
 
           {/* Evidence */}
-          {insight.evidence.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
+            {insight.evidence.length > 0 ? (
               <ul className="space-y-2">
                 {!evidenceRevealed ? (
                   // Show shimmer placeholders while loading
@@ -837,14 +869,14 @@ export function InsightDrawer({
                     const preview = getEvidencePreview(ev);
                     const reflection = getReflectionByEntryId(ev.entryId);
                     const isClickable = !!reflection;
-                    const delayMs = 70; // Stagger delay in milliseconds
+                    const delayMs = 75; // Stagger delay in milliseconds (60-80ms range)
                     
                     return (
                       <li
                         key={ev.entryId || idx}
-                        className={`insight-evidence-row flex items-start gap-3 text-sm ${
+                        className={`insight-evidence-pill insight-evidence-row ${
                           isClickable
-                            ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                            ? 'cursor-pointer'
                             : ''
                         }`}
                         onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
@@ -853,32 +885,37 @@ export function InsightDrawer({
                         }}
                       >
                         {hasTimestamp ? (
-                          <span className="text-white/40 min-w-[80px] text-xs">
+                          <span className="insight-evidence-date text-white/40 text-xs">
                             {formatEvidenceDate(ev.timestamp)}
                             <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
                           </span>
                         ) : (
-                          <span className="text-white/40 min-w-[80px] text-xs">•</span>
+                          <span className="insight-evidence-date text-white/40 text-xs">•</span>
                         )}
-                        <span className="text-white/70 flex-1">{preview}</span>
+                        <span className="insight-evidence-text text-white/70 text-sm flex-1">{preview}</span>
                       </li>
                     );
                   })
                 )}
               </ul>
-            </div>
-          )}
+            ) : (
+              <p className="text-sm text-white/50 italic">No specific entries highlighted yet.</p>
+            )}
+          </div>
 
-              {/* Confidence/Strength indicator */}
+              {/* Confidence */}
               {insight.confidence !== undefined && (
                 <div className="pt-4 border-t border-white/10">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-white/60">Confidence</span>
-                    <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
+                    <span className="text-white/80">
+                      {Math.round(insight.confidence * 100)}%
+                    </span>
                   </div>
                 </div>
               )}
             </>
+            </div>
           )}
         </div>
       </div>
@@ -895,4 +932,5 @@ export function InsightDrawer({
     </>
   );
 }
+
 

@@ -1324,3 +1324,55 @@ body {
     background-size: 100% 100%;
   }
 }
+
+/* Insight Drawer Content Animation (for Topic Drift cards) */
+@keyframes drawerContentFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.insight-drawer-content {
+  animation: drawerContentFadeIn 0.24s ease-out;
+}
+
+/* Evidence Pills - More pill-like styling */
+.insight-evidence-pill {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.insight-evidence-pill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.insight-evidence-date {
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.insight-evidence-text {
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Reduced motion support for drawer content */
+@media (prefers-reduced-motion: reduce) {
+  .insight-drawer-content {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
