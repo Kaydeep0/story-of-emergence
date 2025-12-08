@@ -1376,3 +1376,62 @@ body {
     transform: none;
   }
 }
+
+/* Sparkline Animations */
+@keyframes sparklineFadeIn {
+  from {
+    opacity: 0;
+    transform: scaleY(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.sparkline-svg {
+  animation: sparklineFadeIn 0.35s ease-out;
+}
+
+.sparkline-path {
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.sparkline-hover-segment {
+  animation: sparklineFadeIn 0.15s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sparkline-tooltip {
+  animation: tooltipFadeIn 0.2s ease-out;
+  pointer-events: none;
+}
+
+/* Reduced motion support for sparkline */
+@media (prefers-reduced-motion: reduce) {
+  .sparkline-svg {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  
+  .sparkline-hover-segment {
+    animation: none;
+  }
+  
+  .sparkline-tooltip {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

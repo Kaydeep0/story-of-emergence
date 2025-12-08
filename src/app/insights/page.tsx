@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -168,9 +168,27 @@ function computeStatsForLast30Days(entries: ReflectionEntry[]): {
 }
 
 /**
- * Sparkline component - renders a 28-day mini chart
+ * Sparkline component - renders a 28-day mini chart with animations and hover tooltips
  */
-function Sparkline({ dailyCounts }: { dailyCounts: number[] }) {
+function Sparkline({ 
+  dailyCounts, 
+  dates,
+  isLoading = false 
+}: { 
+  dailyCounts: number[]; 
+  dates?: Date[];
+  isLoading?: boolean;
+}) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
+
+  if (isLoading) {
+    // Show shimmer placeholder
+    return (
+      <div className="flex-shrink-0 w-full h-7 bg-white/5 rounded shimmer-placeholder" />
+    );
+  }
+
   if (!dailyCounts || dailyCounts.length === 0) {
     return null;
   }
@@ -182,8 +200,9 @@ function Sparkline({ dailyCounts }: { dailyCounts: number[] }) {
   const height = 28; // SVG viewBox height
   const padding = 2; // Small padding to prevent clipping
   
-  // Build path data for the line
+  // Build path data for the line and points for hover
   const points: string[] = [];
+  const pointData: Array<{ x: number; y: number; value: number; date?: Date }> = [];
   const count = dailyCounts.length;
   
   for (let i = 0; i < count; i++) {
@@ -194,6 +213,12 @@ function Sparkline({ dailyCounts }: { dailyCounts: number[] }) {
     // Flip Y coordinate (SVG y=0 is at top, but we want 0 at bottom)
     const y = height - padding - normalizedValue * (height - 2 * padding);
     points.push(`${x},${y}`);
+    pointData.push({
+      x,
+      y,
+      value: dailyCounts[i],
+      date: dates?.[i],
+    });
   }
   
   // Only render path if we have at least one point
@@ -203,24 +228,106 @@ function Sparkline({ dailyCounts }: { dailyCounts: number[] }) {
   
   const pathData = count > 1 ? `M ${points.join(' L ')}` : `M ${points[0]} L ${points[0]}`;
   
+  // Calculate average for hint text
+  const avgValue = dailyCounts.reduce((a, b) => a + b, 0) / dailyCounts.length;
+  const hoveredPoint = hoveredIndex !== null ? pointData[hoveredIndex] : null;
+  
+  // Determine hint text based on value vs average
+  function getHintText(value: number): string {
+    if (value === 0) return 'no activity';
+    if (value > avgValue * 1.5) return 'heavier writing';
+    if (value < avgValue * 0.5) return 'quieter day';
+    return 'normal activity';
+  }
+
   return (
-    <svg
-      className="flex-shrink-0"
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height="28"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path
-        d={pathData}
-        fill="none"
-        stroke="rgb(113 113 122 / 0.4)" // zinc-500/40
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className="relative flex-shrink-0 w-full h-7">
+      <svg
+        className="w-full h-full sparkline-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        onMouseLeave={() => {
+          setHoveredIndex(null);
+          setHoverPosition(null);
+        }}
+      >
+        <path
+          d={pathData}
+          fill="none"
+          stroke="rgb(113 113 122 / 0.4)" // zinc-500/40
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="sparkline-path"
+        />
+        {/* Invisible hover areas for each point */}
+        {pointData.map((point, idx) => {
+          const segmentWidth = count > 1 ? (width - 2 * padding) / (count - 1) : width;
+          const hoverWidth = Math.max(segmentWidth * 0.3, 4);
+          
+          return (
+            <rect
+              key={idx}
+              x={point.x - hoverWidth / 2}
+              y={0}
+              width={hoverWidth}
+              height={height}
+              fill="transparent"
+              className="cursor-pointer"
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setHoveredIndex(idx);
+                setHoverPosition({
+                  x: rect.left + rect.width / 2,
+                  y: rect.top - 8,
+                });
+              }}
+            />
+          );
+        })}
+        {/* Highlighted segment on hover */}
+        {hoveredIndex !== null && hoveredIndex < pointData.length - 1 && (
+          <path
+            d={`M ${pointData[hoveredIndex].x},${pointData[hoveredIndex].y} L ${pointData[hoveredIndex + 1].x},${pointData[hoveredIndex + 1].y}`}
+            fill="none"
+            stroke="rgb(113 113 122 / 0.7)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            className="sparkline-hover-segment"
+          />
+        )}
+      </svg>
+      
+      {/* Tooltip */}
+      {hoveredPoint && hoverPosition && (
+        <div
+          className="fixed z-50 sparkline-tooltip"
+          style={{
+            left: `${hoverPosition.x}px`,
+            top: `${hoverPosition.y}px`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <div className="bg-black/90 backdrop-blur-sm border border-white/20 rounded-lg px-3 py-2 text-xs space-y-1 min-w-[120px] shadow-lg">
+            {hoveredPoint.date ? (
+              <div className="text-white/90 font-medium">
+                {hoveredPoint.date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </div>
+            ) : null}
+            <div className="text-white/70">
+              {hoveredPoint.value} reflection{hoveredPoint.value === 1 ? '' : 's'}
+            </div>
+            <div className="text-white/50 italic">
+              {getHintText(hoveredPoint.value)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -648,6 +755,38 @@ export default function InsightsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, connected, address, encryptionReady, sessionKey]);
 
+  // Compute daily counts for timeline overview (last 28 days)
+  // This hook MUST be called before any early returns to maintain hook order
+  const timelineDailyData = useMemo(() => {
+    const hasTimelineData = timelineReflectionEntries && timelineReflectionEntries.length > 0;
+    if (!hasTimelineData) {
+      return { dailyCounts: [], dates: [], hasData: false };
+    }
+
+    const now = new Date();
+    const days: Date[] = [];
+    const counts: number[] = [];
+    
+    // Generate last 28 days
+    for (let i = 27; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      days.push(date);
+      
+      const dateKey = getDateKey(date);
+      const count = timelineReflectionEntries.filter(entry => {
+        if (entry.deletedAt) return false;
+        const entryDate = new Date(entry.createdAt);
+        return getDateKey(entryDate) === dateKey;
+      }).length;
+      counts.push(count);
+    }
+    
+    const hasData = counts.some(count => count > 0);
+    return { dailyCounts: counts, dates: days, hasData };
+  }, [timelineReflectionEntries]);
+
   if (!mounted) return null;
 
   // Derive latest insight if available
@@ -711,6 +850,50 @@ export default function InsightsPage() {
         {/* Timeline view */}
         {mode === 'timeline' && (
           <div className="mt-8 space-y-8">
+            {/* Timeline Overview with Sparkline */}
+            {connected && encryptionReady && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  Timeline Overview
+                </h2>
+
+                {reflectionsLoading ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+                    <Sparkline dailyCounts={[]} isLoading={true} />
+                  </div>
+                ) : !timelineDailyData.hasData ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                    <svg
+                      className="w-12 h-12 text-white/40 mx-auto mb-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    <h3 className="text-sm font-medium text-white/90 mb-2">
+                      No activity yet in this window
+                    </h3>
+                    <p className="text-sm text-white/60">
+                      New entries here will start drawing your timeline
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+                    <Sparkline 
+                      dailyCounts={timelineDailyData.dailyCounts} 
+                      dates={timelineDailyData.dates}
+                      isLoading={false}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Timeline Spikes Section */}
             {connected && encryptionReady && (
               <div className="space-y-4">
@@ -1157,7 +1340,7 @@ export default function InsightsPage() {
                               <div className="flex items-center gap-2 flex-1 min-w-0 sm:flex-nowrap">
                                 <h3 className="font-medium text-teal-200 capitalize flex-shrink-0">{bucket.topic}</h3>
                                 <div className="flex-1 min-w-0 max-w-[100px] sm:max-w-[180px] h-7">
-                                  <Sparkline dailyCounts={bucket.dailyCounts} />
+                                  <Sparkline dailyCounts={bucket.dailyCounts} isLoading={false} />
                                 </div>
                               </div>
                               <span
