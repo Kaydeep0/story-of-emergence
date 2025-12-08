@@ -88,6 +88,7 @@ export function useEncryptionSession() {
   const [aesKey, setAesKey] = useState<CryptoKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
 
   const connected = isConnected && !!address;
   const currentWallet = address?.toLowerCase() ?? null;
@@ -150,6 +151,7 @@ export function useEncryptionSession() {
       }
 
       signingRef.current = true;
+      setSigning(true);
       setReady(false);
       setError(null);
 
@@ -182,6 +184,7 @@ export function useEncryptionSession() {
         setWalletAddress(null);
       } finally {
         signingRef.current = false;
+        setSigning(false);
       }
     }
 
@@ -209,6 +212,7 @@ export function useEncryptionSession() {
     }
 
     signingRef.current = true;
+    setSigning(true);
     setReady(false);
     setError(null);
 
@@ -245,6 +249,7 @@ export function useEncryptionSession() {
       throw new Error(errorMsg);
     } finally {
       signingRef.current = false;
+      setSigning(false);
     }
   }, [connected, currentWallet, signMessageAsync]);
 
@@ -298,6 +303,7 @@ export function useEncryptionSession() {
 
     // Need to request consent signature
     signingRef.current = true;
+    setSigning(true);
     setReady(false);
     setError(null);
 
@@ -332,6 +338,7 @@ export function useEncryptionSession() {
       return { needsWallet: false, needsConsent: true, isReady: false };
     } finally {
       signingRef.current = false;
+      setSigning(false);
     }
   }, [connected, currentWallet, ready, aesKey, signMessageAsync]);
 
@@ -340,6 +347,7 @@ export function useEncryptionSession() {
     aesKey,
     walletAddress,
     error,
+    signing,
     refreshSession,
     ensureEncryptionSession,
   };

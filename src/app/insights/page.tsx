@@ -1807,6 +1807,31 @@ export default function InsightsPage() {
             ? summaryReflectionEntries
             : []
         }
+        isLoading={
+          mode === 'timeline'
+            ? reflectionsLoading
+            : mode === 'summary'
+            ? summaryReflectionsLoading
+            : false
+        }
+        isEmpty={
+          mode === 'timeline'
+            ? !reflectionsLoading && !reflectionsError && spikeInsights.length === 0 && clusterInsights.length === 0 && coachInsights.length === 0 && topicDrift.length === 0 && contrastPairs.length === 0
+            : mode === 'summary'
+            ? !summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length === 0
+            : false
+        }
+        onNewReflection={() => {
+          router.push('/');
+          // Small delay to ensure page has loaded before focusing
+          setTimeout(() => {
+            const textarea = document.querySelector('textarea[ref]') as HTMLTextAreaElement;
+            if (textarea) {
+              textarea.focus();
+              textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 100);
+        }}
       />
     </main>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
@@ -272,6 +272,104 @@ function ReflectionPreviewPanel({
 }
 
 /**
+ * Skeleton loading component for insight cards
+ */
+function InsightSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Title skeleton */}
+      <div className="h-7 bg-white/10 rounded w-3/4" />
+      
+      {/* Badges skeleton */}
+      <div className="flex gap-2">
+        <div className="h-6 bg-white/10 rounded-full w-20" />
+        <div className="h-6 bg-white/10 rounded-full w-24" />
+      </div>
+      
+      {/* Summary skeleton */}
+      <div className="space-y-2">
+        <div className="h-4 bg-white/10 rounded w-full" />
+        <div className="h-4 bg-white/10 rounded w-5/6" />
+        <div className="h-4 bg-white/10 rounded w-4/6" />
+      </div>
+      
+      {/* Why this matters skeleton */}
+      <div className="space-y-2">
+        <div className="h-4 bg-white/10 rounded w-32" />
+        <div className="h-4 bg-white/10 rounded w-full" />
+        <div className="h-4 bg-white/10 rounded w-full" />
+        <div className="h-4 bg-white/10 rounded w-3/4" />
+      </div>
+      
+      {/* Evidence skeleton */}
+      <div className="space-y-3">
+        <div className="h-4 bg-white/10 rounded w-24" />
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex gap-3">
+              <div className="h-4 bg-white/10 rounded w-20" />
+              <div className="h-4 bg-white/10 rounded flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shimmer placeholder for evidence rows
+ * Matches the layout of actual evidence rows with timestamp and preview
+ */
+function EvidenceShimmerPlaceholder() {
+  return (
+    <div className="flex items-start gap-3 text-sm">
+      {/* Timestamp placeholder */}
+      <div className="min-w-[80px] h-10 bg-white/5 rounded shimmer-placeholder" />
+      {/* Preview text placeholder */}
+      <div className="flex-1 h-10 bg-white/5 rounded shimmer-placeholder" />
+    </div>
+  );
+}
+
+/**
+ * Empty state component
+ */
+function EmptyState({ onNewReflection }: { onNewReflection: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center space-y-4 py-12 px-6">
+      <svg
+        className="w-12 h-12 text-white/40"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={1.5}
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+        />
+      </svg>
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-white/90">
+          No insights yet
+        </p>
+        <p className="text-sm text-white/60 max-w-sm">
+          Add a few reflections and I will start connecting the dots.
+        </p>
+      </div>
+      <button
+        onClick={onNewReflection}
+        className="mt-4 px-4 py-2 text-sm font-medium text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
+      >
+        New reflection
+      </button>
+    </div>
+  );
+}
+
+/**
  * Insight Detail Drawer Component
  */
 export function InsightDrawer({
@@ -282,6 +380,9 @@ export function InsightDrawer({
   isHighlighted,
   toggleHighlight,
   reflectionEntries = [],
+  isLoading = false,
+  isEmpty = false,
+  onNewReflection,
 }: {
   insight: NormalizedInsight | null;
   isOpen: boolean;
@@ -290,17 +391,61 @@ export function InsightDrawer({
   isHighlighted?: (card: InsightCard) => boolean;
   toggleHighlight?: (card: InsightCard) => void;
   reflectionEntries?: ReflectionEntry[];
+  isLoading?: boolean;
+  isEmpty?: boolean;
+  onNewReflection?: () => void;
 }) {
   const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState(false);
+  const [evidenceRevealed, setEvidenceRevealed] = useState(false);
+  const saveFeedbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const evidenceRevealTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Close preview when drawer closes
   useEffect(() => {
     if (!isOpen) {
       setPreviewOpen(false);
       setSelectedReflection(null);
+      setSaveFeedback(false);
+      setEvidenceRevealed(false);
+      if (saveFeedbackTimeoutRef.current) {
+        clearTimeout(saveFeedbackTimeoutRef.current);
+        saveFeedbackTimeoutRef.current = null;
+      }
+      if (evidenceRevealTimeoutRef.current) {
+        clearTimeout(evidenceRevealTimeoutRef.current);
+        evidenceRevealTimeoutRef.current = null;
+      }
+    } else {
+      // When drawer opens, reset evidence revealed state and trigger reveal after a short delay
+      setEvidenceRevealed(false);
+      if (insight && insight.evidence.length > 0) {
+        // Small delay to show shimmer briefly, then reveal evidence
+        evidenceRevealTimeoutRef.current = setTimeout(() => {
+          setEvidenceRevealed(true);
+        }, 300);
+      } else {
+        // If no evidence, mark as revealed immediately
+        setEvidenceRevealed(true);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, insight]);
+
+  // Handle save feedback
+  const handleToggleHighlight = (card: InsightCard) => {
+    if (toggleHighlight) {
+      toggleHighlight(card);
+      setSaveFeedback(true);
+      if (saveFeedbackTimeoutRef.current) {
+        clearTimeout(saveFeedbackTimeoutRef.current);
+      }
+      saveFeedbackTimeoutRef.current = setTimeout(() => {
+        setSaveFeedback(false);
+        saveFeedbackTimeoutRef.current = null;
+      }, 2000);
+    }
+  };
 
   // Helper to find reflection by entryId
   function getReflectionByEntryId(entryId: string): ReflectionEntry | null {
@@ -360,8 +505,20 @@ export function InsightDrawer({
     }
   }, [isOpen]);
 
-  // Don't render if no insight, but keep in DOM when closed for smooth transitions
-  if (!insight) return null;
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (saveFeedbackTimeoutRef.current) {
+        clearTimeout(saveFeedbackTimeoutRef.current);
+      }
+      if (evidenceRevealTimeoutRef.current) {
+        clearTimeout(evidenceRevealTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Don't render if drawer is closed and no insight/loading/empty state
+  if (!isOpen && !insight && !isLoading && !isEmpty) return null;
 
   // Determine if this insight can be highlighted and its current state
   const canHighlight = originalCard && isHighlighted && toggleHighlight;
@@ -412,7 +569,7 @@ export function InsightDrawer({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 bg-black/60 backdrop-blur-md z-40 transition-opacity duration-[220ms] ease-out ${
+        className={`fixed inset-0 bg-black/60 backdrop-blur-md z-40 transition-opacity duration-300 ease-out ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
@@ -421,23 +578,178 @@ export function InsightDrawer({
 
       {/* Mobile drawer: slide from bottom */}
       <div
-        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[80vh] overflow-y-auto z-50 shadow-2xl transform transition-transform duration-[220ms] ease-out ${
-          isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[85vh] overflow-y-auto z-50 shadow-2xl transform transition-all duration-300 ease-out insight-drawer-mobile ${
+          isOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
         }`}
         aria-hidden={!isOpen}
       >
-        <div className="p-6 space-y-6">
-          {/* Mobile header */}
-          <div className="flex items-start justify-between mb-4 gap-2">
-            <h2 className="text-xl font-semibold flex-1">{insight.title}</h2>
-            <div className="flex items-center gap-2">
-              {canHighlight && originalCard && (
+        <div className="p-6 space-y-6 min-h-[200px]">
+          {/* Loading state */}
+          {isLoading && !insight && <InsightSkeleton />}
+          
+          {/* Empty state */}
+          {!isLoading && !insight && isEmpty && onNewReflection && (
+            <EmptyState onNewReflection={onNewReflection} />
+          )}
+          
+          {/* Content state */}
+          {!isLoading && insight && (
+            <>
+              {/* Mobile header */}
+              <div className="flex items-start justify-between mb-4 gap-2">
+                <h2 className="text-xl font-semibold flex-1">{insight.title}</h2>
+                <div className="flex items-center gap-2">
+                  {canHighlight && originalCard && (
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleHighlight(originalCard);
+                        }}
+                        className="p-2 rounded-full transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
+                        title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
+                        aria-label={highlighted ? 'Remove from highlights' : 'Add to highlights'}
+                      >
+                        {highlighted ? (
+                          <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                          </svg>
+                        )}
+                      </button>
+                      {saveFeedback && (
+                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-yellow-400 bg-black/80 px-2 py-1 rounded animate-fade-in">
+                          {highlighted ? 'Saved to Highlights' : 'Removed from Highlights'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-full hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
+                    aria-label="Close drawer"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs px-2 py-1 rounded-full border ${typeColors[insight.type]}`}>
+                  {insight.type}
+                </span>
+                {insight.strength && (
+                  <span className="text-xs text-white/60 bg-white/5 px-2 py-1 rounded-full">
+                    {insight.strength}
+                  </span>
+                )}
+              </div>
+
+              {/* Summary */}
+              <div>
+                <p className="text-sm text-white/80 leading-relaxed">{insight.summary}</p>
+              </div>
+
+              {/* Why this matters */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-white/90">Why this matters</h3>
+                <p className="text-sm text-white/70 leading-relaxed">{insight.whyThisMatters}</p>
+              </div>
+
+              {/* Evidence */}
+              {insight.evidence.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
+                  <ul className="space-y-2">
+                    {!evidenceRevealed ? (
+                      // Show shimmer placeholders while loading
+                      Array.from({ length: Math.min(insight.evidence.length, 5) }).map((_, idx) => (
+                        <li key={`shimmer-${idx}`} className="insight-evidence-placeholder">
+                          <EvidenceShimmerPlaceholder />
+                        </li>
+                      ))
+                    ) : (
+                      // Show real evidence with staggered animation
+                      insight.evidence.map((ev, idx) => {
+                        const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
+                        const preview = getEvidencePreview(ev);
+                        const reflection = getReflectionByEntryId(ev.entryId);
+                        const isClickable = !!reflection;
+                        const delayMs = 70; // Stagger delay in milliseconds
+                        
+                        return (
+                          <li
+                            key={ev.entryId || idx}
+                            className={`insight-evidence-row flex items-start gap-3 text-sm ${
+                              isClickable
+                                ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                                : ''
+                            }`}
+                            onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
+                            style={{
+                              animationDelay: `${idx * delayMs}ms`,
+                            }}
+                          >
+                            {hasTimestamp ? (
+                              <span className="text-white/40 min-w-[80px] text-xs">
+                                {formatEvidenceDate(ev.timestamp)}
+                                <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
+                              </span>
+                            ) : (
+                              <span className="text-white/40 min-w-[80px] text-xs">•</span>
+                            )}
+                            <span className="text-white/70 flex-1">{preview}</span>
+                          </li>
+                        );
+                      })
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Confidence/Strength indicator */}
+              {insight.confidence !== undefined && (
+                <div className="pt-4 border-t border-white/10">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/60">Confidence</span>
+                    <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop drawer: slide from right */}
+      <div
+        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-50 flex-col shadow-2xl transform transition-all duration-300 ease-out insight-drawer-desktop ${
+          isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
+        }`}
+        aria-hidden={!isOpen}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2 z-10">
+          {isLoading || isEmpty ? (
+            <h2 className="text-xl font-semibold pr-4 flex-1">Insights</h2>
+          ) : (
+            <h2 className="text-xl font-semibold pr-4 flex-1">{insight?.title || ''}</h2>
+          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!isLoading && !isEmpty && canHighlight && originalCard && (
+              <div className="relative">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleHighlight(originalCard);
+                    handleToggleHighlight(originalCard);
                   }}
-                  className="p-2 rounded-full transition-colors hover:bg-white/10"
+                  className="p-2 rounded-full transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
                   title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
                   aria-label={highlighted ? 'Remove from highlights' : 'Add to highlights'}
                 >
@@ -451,126 +763,16 @@ export function InsightDrawer({
                     </svg>
                   )}
                 </button>
-              )}
-              <button
-                onClick={onClose}
-                className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                aria-label="Close drawer"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Type badge */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs px-2 py-1 rounded-full border ${typeColors[insight.type]}`}>
-              {insight.type}
-            </span>
-            {insight.strength && (
-              <span className="text-xs text-white/60 bg-white/5 px-2 py-1 rounded-full">
-                {insight.strength}
-              </span>
-            )}
-          </div>
-
-          {/* Summary */}
-          <div>
-            <p className="text-sm text-white/80 leading-relaxed">{insight.summary}</p>
-          </div>
-
-          {/* Why this matters */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-white/90">Why this matters</h3>
-            <p className="text-sm text-white/70 leading-relaxed">{insight.whyThisMatters}</p>
-          </div>
-
-          {/* Evidence */}
-          {insight.evidence.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
-              <ul className="space-y-2">
-                {insight.evidence.map((ev, idx) => {
-                  const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
-                  const preview = getEvidencePreview(ev);
-                  const reflection = getReflectionByEntryId(ev.entryId);
-                  const isClickable = !!reflection;
-                  
-                  return (
-                    <li
-                      key={ev.entryId || idx}
-                      className={`flex items-start gap-3 text-sm ${
-                        isClickable
-                          ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
-                          : ''
-                      }`}
-                      onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
-                    >
-                      {hasTimestamp ? (
-                        <span className="text-white/40 min-w-[80px] text-xs">
-                          {formatEvidenceDate(ev.timestamp)}
-                          <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
-                        </span>
-                      ) : (
-                        <span className="text-white/40 min-w-[80px] text-xs">•</span>
-                      )}
-                      <span className="text-white/70 flex-1">{preview}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
-          {/* Confidence/Strength indicator */}
-          {insight.confidence !== undefined && (
-            <div className="pt-4 border-t border-white/10">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-white/60">Confidence</span>
-                <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Desktop drawer: slide from right */}
-      <div
-        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-50 flex-col shadow-2xl transform transition-transform duration-[220ms] ease-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
-        }`}
-        aria-hidden={!isOpen}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
-          <h2 className="text-xl font-semibold pr-4 flex-1">{insight.title}</h2>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {canHighlight && originalCard && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleHighlight(originalCard);
-                }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
-                title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-                aria-label={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-              >
-                {highlighted ? (
-                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                  </svg>
+                {saveFeedback && (
+                  <span className="absolute -bottom-6 right-0 whitespace-nowrap text-xs text-yellow-400 bg-black/80 px-2 py-1 rounded animate-fade-in">
+                    {highlighted ? 'Saved to Highlights' : 'Removed from Highlights'}
+                  </span>
                 )}
-              </button>
+              </div>
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+              className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
               aria-label="Close drawer"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -582,6 +784,17 @@ export function InsightDrawer({
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {/* Loading state */}
+          {isLoading && !insight && <InsightSkeleton />}
+          
+          {/* Empty state */}
+          {!isLoading && !insight && isEmpty && onNewReflection && (
+            <EmptyState onNewReflection={onNewReflection} />
+          )}
+          
+          {/* Content state */}
+          {!isLoading && insight && (
+            <>
           {/* Type badge */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs px-2 py-1 rounded-full border ${typeColors[insight.type]}`}>
@@ -610,46 +823,62 @@ export function InsightDrawer({
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-white/90">Evidence</h3>
               <ul className="space-y-2">
-                {insight.evidence.map((ev, idx) => {
-                  const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
-                  const preview = getEvidencePreview(ev);
-                  const reflection = getReflectionByEntryId(ev.entryId);
-                  const isClickable = !!reflection;
-                  
-                  return (
-                    <li
-                      key={ev.entryId || idx}
-                      className={`flex items-start gap-3 text-sm ${
-                        isClickable
-                          ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
-                          : ''
-                      }`}
-                      onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
-                    >
-                      {hasTimestamp ? (
-                        <span className="text-white/40 min-w-[80px] text-xs">
-                          {formatEvidenceDate(ev.timestamp)}
-                          <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
-                        </span>
-                      ) : (
-                        <span className="text-white/40 min-w-[80px] text-xs">•</span>
-                      )}
-                      <span className="text-white/70 flex-1">{preview}</span>
+                {!evidenceRevealed ? (
+                  // Show shimmer placeholders while loading
+                  Array.from({ length: Math.min(insight.evidence.length, 5) }).map((_, idx) => (
+                    <li key={`shimmer-${idx}`} className="insight-evidence-placeholder">
+                      <EvidenceShimmerPlaceholder />
                     </li>
-                  );
-                })}
+                  ))
+                ) : (
+                  // Show real evidence with staggered animation
+                  insight.evidence.map((ev, idx) => {
+                    const hasTimestamp = ev.timestamp && formatEvidenceDate(ev.timestamp);
+                    const preview = getEvidencePreview(ev);
+                    const reflection = getReflectionByEntryId(ev.entryId);
+                    const isClickable = !!reflection;
+                    const delayMs = 70; // Stagger delay in milliseconds
+                    
+                    return (
+                      <li
+                        key={ev.entryId || idx}
+                        className={`insight-evidence-row flex items-start gap-3 text-sm ${
+                          isClickable
+                            ? 'cursor-pointer hover:bg-white/5 rounded-lg p-2 -mx-2 transition-colors'
+                            : ''
+                        }`}
+                        onClick={isClickable ? () => handleEvidenceClick(ev) : undefined}
+                        style={{
+                          animationDelay: `${idx * delayMs}ms`,
+                        }}
+                      >
+                        {hasTimestamp ? (
+                          <span className="text-white/40 min-w-[80px] text-xs">
+                            {formatEvidenceDate(ev.timestamp)}
+                            <span className="block text-white/30">{formatEvidenceTime(ev.timestamp)}</span>
+                          </span>
+                        ) : (
+                          <span className="text-white/40 min-w-[80px] text-xs">•</span>
+                        )}
+                        <span className="text-white/70 flex-1">{preview}</span>
+                      </li>
+                    );
+                  })
+                )}
               </ul>
             </div>
           )}
 
-          {/* Confidence/Strength indicator */}
-          {insight.confidence !== undefined && (
-            <div className="pt-4 border-t border-white/10">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-white/60">Confidence</span>
-                <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
-              </div>
-            </div>
+              {/* Confidence/Strength indicator */}
+              {insight.confidence !== undefined && (
+                <div className="pt-4 border-t border-white/10">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-white/60">Confidence</span>
+                    <span className="text-white/80">{Math.round(insight.confidence * 100)}%</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

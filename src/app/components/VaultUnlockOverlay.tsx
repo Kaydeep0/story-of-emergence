@@ -4,10 +4,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 
-type VaultPhase = 'APPROACH' | 'TRAVEL' | 'UNLOCK' | 'RESOLVE' | 'ERROR';
+type VaultPhase = 'APPROACH' | 'TRAVEL' | 'UNLOCK' | 'RESOLVE' | 'AWARENESS' | 'ERROR';
 
 // Phase duration constants
-const RESOLVE_DURATION_MS = 2400; // RESOLVE phase displays awareness message for ~2.4 seconds before overlay hides
+const UNLOCK_DURATION_MS = 900; // UNLOCK phase duration
+const RESOLVE_DURATION_MS = 1600; // RESOLVE phase duration
+const AWARENESS_DURATION_MS = 2200; // AWARENESS phase displays "Raising to awareness…" message before overlay hides
 
 // Audio context singleton
 let soeAudioContext: AudioContext | null = null;
@@ -135,6 +137,7 @@ export function VaultUnlockOverlay() {
     let timeoutId1: NodeJS.Timeout | null = null;
     let timeoutId2: NodeJS.Timeout | null = null;
     let timeoutId3: NodeJS.Timeout | null = null;
+    let timeoutId4: NodeJS.Timeout | null = null;
 
     // Clear any existing timeouts
     const clearExistingTimeouts = () => {
@@ -149,6 +152,10 @@ export function VaultUnlockOverlay() {
       if (timeoutId3) {
         clearTimeout(timeoutId3);
         timeoutId3 = null;
+      }
+      if (timeoutId4) {
+        clearTimeout(timeoutId4);
+        timeoutId4 = null;
       }
     };
 
@@ -189,7 +196,7 @@ export function VaultUnlockOverlay() {
         setShowOverlay(true);
       }
     } else if (encryptionState === 'unlocked') {
-      // Slower timing for testing: TRAVEL lasts 1500ms before transitioning to UNLOCK
+      // TRAVEL lasts 1500ms before transitioning to UNLOCK
       if (phase === 'TRAVEL' && timeSincePhaseEntry < 1500) {
         // Wait for minimum TRAVEL duration
         const remainingTime = 1500 - timeSincePhaseEntry;
@@ -205,14 +212,19 @@ export function VaultUnlockOverlay() {
               setPhase('RESOLVE');
               phaseEntryTimeRef.current = Date.now();
               timeoutId3 = setTimeout(() => {
-                setShowOverlay(false);
+                phaseRef.current = 'AWARENESS';
+                setPhase('AWARENESS');
+                phaseEntryTimeRef.current = Date.now();
+                timeoutId4 = setTimeout(() => {
+                  setShowOverlay(false);
+                }, AWARENESS_DURATION_MS);
               }, RESOLVE_DURATION_MS);
-            }, 1500); // Slower timing for testing: UNLOCK stays visible for 1500ms before transitioning to RESOLVE
+            }, UNLOCK_DURATION_MS);
           }, remainingTime);
         }
       } else {
         clearExistingTimeouts();
-        // Transition: UNLOCK → RESOLVE → hide overlay
+        // Transition: UNLOCK → RESOLVE → AWARENESS → hide overlay
         phaseRef.current = 'UNLOCK';
         setPhase('UNLOCK');
         phaseEntryTimeRef.current = now;
@@ -223,12 +235,17 @@ export function VaultUnlockOverlay() {
           setPhase('RESOLVE');
           phaseEntryTimeRef.current = Date.now();
           timeoutId2 = setTimeout(() => {
-            setShowOverlay(false);
+            phaseRef.current = 'AWARENESS';
+            setPhase('AWARENESS');
+            phaseEntryTimeRef.current = Date.now();
+            timeoutId3 = setTimeout(() => {
+              setShowOverlay(false);
+            }, AWARENESS_DURATION_MS);
           }, RESOLVE_DURATION_MS);
-        }, 1500); // Slower timing for testing: UNLOCK stays visible for 1500ms before transitioning to RESOLVE
+        }, UNLOCK_DURATION_MS);
       }
     } else if (encryptionState === 'error') {
-      // Slower timing for testing: TRAVEL lasts 1500ms before transitioning to ERROR
+      // TRAVEL lasts 1500ms before transitioning to ERROR
       if (phase === 'TRAVEL' && timeSincePhaseEntry < 1500) {
         // Wait for minimum TRAVEL duration
         const remainingTime = 1500 - timeSincePhaseEntry;
@@ -246,12 +263,12 @@ export function VaultUnlockOverlay() {
               timeoutId3 = setTimeout(() => {
                 setShowOverlay(false);
               }, RESOLVE_DURATION_MS);
-            }, 1500); // Slower timing for testing: ERROR stays visible for 1500ms before transitioning to RESOLVE
+            }, 1500); // ERROR stays visible for 1500ms before transitioning to RESOLVE
           }, remainingTime);
         }
       } else {
         clearExistingTimeouts();
-        // Transition: ERROR → RESOLVE → hide overlay
+        // Transition: ERROR → RESOLVE → hide overlay (error path does not go to AWARENESS)
         phaseRef.current = 'ERROR';
         setPhase('ERROR');
         phaseEntryTimeRef.current = now;
@@ -264,7 +281,7 @@ export function VaultUnlockOverlay() {
           timeoutId2 = setTimeout(() => {
             setShowOverlay(false);
           }, RESOLVE_DURATION_MS);
-        }, 1500); // Slower timing for testing: ERROR stays visible for 1500ms before transitioning to RESOLVE
+        }, 1500); // ERROR stays visible for 1500ms before transitioning to RESOLVE
       }
     }
 
@@ -295,6 +312,11 @@ export function VaultUnlockOverlay() {
         playTone(440, 120, 0.12);
         tryVibrate(20);
       }
+    } else if (current === 'AWARENESS') {
+      if (!muted) {
+        // Subtle tone for awareness phase (330-370 Hz, 90ms)
+        playTone(350, 90, 0.15);
+      }
     } else if (current === 'ERROR') {
       if (!muted) {
         playTone(220, 220, 0.18);
@@ -315,6 +337,7 @@ export function VaultUnlockOverlay() {
       TRAVEL: 'Passing threshold…',
       UNLOCK: 'Unlocking…',
       RESOLVE: 'Returning to awareness…',
+      AWARENESS: 'Raising to awareness…',
       ERROR: 'Vault access failed',
     };
     return phaseText[phase];
