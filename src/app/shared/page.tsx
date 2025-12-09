@@ -390,6 +390,43 @@ export default function SharedPage() {
     }
   }
 
+  async function handleCopyLink(shareId: string, e: React.MouseEvent) {
+    e.stopPropagation(); // Prevent opening the modal
+
+    const link = `${window.location.origin}/shared/open/${shareId}`;
+
+    try {
+      // Try using the Clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(link);
+        toast.success('Share link copied to clipboard');
+      } else {
+        // Fallback: create a temporary textarea and select the text
+        const textarea = document.createElement('textarea');
+        textarea.value = link;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            toast.success('Share link copied to clipboard');
+          } else {
+            throw new Error('execCommand failed');
+          }
+        } finally {
+          document.body.removeChild(textarea);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to copy link', error);
+      toast.error('Could not copy link');
+    }
+  }
+
   if (!mounted) return null;
 
   return (
@@ -512,13 +549,21 @@ export default function SharedPage() {
                       <div className="flex items-start gap-2">
                         <KindBadge kind={kind} />
                         {isOwner && item.revoked_at === null && (
-                          <button
-                            onClick={(e) => handleRevokeShare(item, e)}
-                            disabled={isRevoking}
-                            className="text-xs text-white/60 hover:text-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-2 py-1"
-                          >
-                            {isRevoking ? 'Revoking...' : 'Revoke'}
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => handleCopyLink(item.id, e)}
+                              className="text-xs text-white/60 hover:text-white/90 transition-colors px-2 py-1"
+                            >
+                              Copy link
+                            </button>
+                            <button
+                              onClick={(e) => handleRevokeShare(item, e)}
+                              disabled={isRevoking}
+                              className="text-xs text-white/60 hover:text-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-2 py-1"
+                            >
+                              {isRevoking ? 'Revoking...' : 'Revoke'}
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
