@@ -14,7 +14,7 @@ import {
   type CapsulePayload,
   type SliceKind,
 } from '../../../lib/sharing';
-import { rpcGetShare, rpcInsertAcceptedShare } from '../../lib/shares';
+import { rpcGetShare } from '../../lib/shares';
 import { useLogEvent } from '../../lib/useLogEvent';
 
 /**
@@ -160,20 +160,36 @@ function CapsuleOpenContent() {
 
         // Fetch share from Supabase
         const share = await rpcGetShare(address!, capsule.shareId);
-        if (!share) {
+
+        // Note: This old capsule flow with wrapped keys is not supported by the new schema
+        // The new schema uses direct encryption. This code path is kept for backward compatibility
+        // but may not work correctly with shares created using the new schema.
+        const capsuleData = share.capsule || {};
+        const payload = (capsuleData.payload as { title?: string; ciphertext?: string }) || {};
+        const ciphertext = payload.ciphertext;
+
+        if (!ciphertext) {
           setState({
             status: 'error',
-            message: 'This shared capsule cannot be opened. The link may be expired or you may be on a different wallet than the intended recipient.',
+            message: 'This capsule format is not supported. Please use the new share opening flow.',
           });
           logEvent('capsule_open_failed');
           return;
         }
 
-        // Unwrap the content key
-        const contentKey = await unwrapKeyForRecipient(capsule.wrappedKey, sessionKey);
-
-        // Decrypt the slice
-        const decryptedPayload = await decryptSlice(share.ciphertext, contentKey);
+        // For old capsule flow, try to unwrap and decrypt
+        // Note: This may not work with new schema shares
+        let decryptedPayload: unknown;
+        try {
+          const contentKey = await unwrapKeyForRecipient(capsule.wrappedKey, sessionKey);
+          decryptedPayload = await decryptSlice(ciphertext, contentKey);
+        } catch (e) {
+          // If unwrapping fails, the share might be in the new format (direct encryption)
+          // Try direct decryption instead
+          const { aesGcmDecryptText } = await import('../../../lib/crypto');
+          const plain = await aesGcmDecryptText(sessionKey, ciphertext);
+          decryptedPayload = JSON.parse(plain);
+        }
 
         // Generate preview
         let preview = '';
@@ -194,8 +210,8 @@ function CapsuleOpenContent() {
         setState({
           status: 'preview',
           capsule,
-          title: share.title,
-          sliceKind: share.slice_kind as SliceKind,
+          title: payload.title || 'Untitled',
+          sliceKind: (capsuleData.kind || 'reflection') as SliceKind,
           preview,
           decryptedPayload,
         });
@@ -216,52 +232,10 @@ function CapsuleOpenContent() {
   }, [connected, address, searchParams, encryptionReady, sessionKey]);
 
   async function handleAccept() {
-    if (state.status !== 'preview') return;
-    if (!connected || !address) return;
-
-    setAccepting(true);
-    try {
-      if (!encryptionReady || !sessionKey) {
-        if (encryptionError) {
-          toast.error(encryptionError);
-        } else {
-          toast.error('Encryption key not ready');
-        }
-        return;
-      }
-      const sourceLabel = createSourceLabel(state.capsule.senderWallet, new Date());
-
-      // Ensure senderWallet is included in the payload for contact labeling
-      const payloadWithSender =
-        typeof state.decryptedPayload === 'object' && state.decryptedPayload !== null
-          ? { ...(state.decryptedPayload as Record<string, unknown>), senderWallet: state.capsule.senderWallet }
-          : { content: state.decryptedPayload, senderWallet: state.capsule.senderWallet };
-
-      await rpcInsertAcceptedShare(
-        address,
-        sessionKey,
-        state.capsule.shareId,
-        state.sliceKind,
-        state.title,
-        payloadWithSender,
-        sourceLabel
-      );
-
-      toast.success('Shared content accepted!');
-      logEvent('share_accepted');
-      setState({ status: 'accepted' });
-
-      // Redirect to shared page after brief delay
-      setTimeout(() => {
-        router.push('/shared');
-      }, 1500);
-    } catch (e: unknown) {
-      const err = e as { message?: string };
-      console.error('Accept error:', e);
-      toast.error(err?.message ?? 'Failed to accept share');
-    } finally {
-      setAccepting(false);
-    }
+    // Note: Accept functionality removed - shares are now accessed directly via /shared/open/[id]
+    // This page is kept for backward compatibility with old capsule links
+    toast.info('Please use the new share opening flow at /shared/open/[id]');
+    router.push('/shared');
   }
 
   function handleDismiss() {

@@ -44,10 +44,6 @@ import { incSaveCount, messageForSave } from '@/app/lib/toast';
 import { getSupabaseForWallet } from './lib/supabase';
 import { useEncryptionSession } from './lib/useEncryptionSession';
 import { rpcInsertShare } from './lib/shares';
-import {
-  generateContentKey,
-  encryptSlice,
-} from '../lib/sharing';
 
 type Item = {
   id: string;
@@ -506,30 +502,24 @@ async function createShare() {
       return;
     }
 
-    // Generate a content key for this share
-    const contentKey = await generateContentKey();
-
-    // Create the payload to encrypt
-    const payload = {
-      content: sharingItem.note,
-      preview: sharingItem.note.slice(0, 200),
-      createdAt: sharingItem.ts,
-      reflectionId: sharingItem.id,
-    };
-
-    // Encrypt the payload with the content key
-    const ciphertextString = await encryptSlice(payload, contentKey);
-
     // Generate title from reflection (first 40 chars or fallback)
     const reflectionTitleOrFallback = sharingItem.note.slice(0, 40).trim() || 'Shared reflection';
 
+    // Prepare plaintext JSON payload (same format as reflection entries)
+    const plaintextPayload = JSON.stringify({
+      text: sharingItem.note,
+      ts: sharingItem.ts,
+    });
+
     // Insert the share in Supabase using the new shares table
+    // rpcInsertShare will encrypt the plaintext using the sessionKey
     await rpcInsertShare(
       w, // ownerWalletAddress (lowercase)
       recipientWalletAddress, // recipientWalletAddress (lowercase)
       'reflection',
       reflectionTitleOrFallback,
-      ciphertextString
+      plaintextPayload,
+      sessionKey
     );
 
     // Log the share event

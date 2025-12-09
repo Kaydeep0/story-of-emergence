@@ -111,3 +111,66 @@ export async function aesGcmDecryptText(key: CryptoKey, packed: string): Promise
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
   return new TextDecoder().decode(new Uint8Array(pt));
 }
+
+// --- Encryption envelope format (for shares) ---
+
+/**
+ * Encryption envelope structure
+ */
+export type EncryptionEnvelope = {
+  ciphertext: string; // base64-encoded ciphertext+tag
+  iv: string; // base64-encoded IV (12 bytes)
+  tag?: string; // base64-encoded tag (16 bytes) - included in ciphertext for AES-GCM
+  version: string; // encryption version, e.g., "v1"
+};
+
+/**
+ * Encrypt plaintext and return envelope with separate fields
+ * @param key - AES-GCM key
+ * @param plaintext - text to encrypt
+ * @returns Encryption envelope with ciphertext, iv, and version
+ */
+export async function encryptText(key: CryptoKey, plaintext: string): Promise<EncryptionEnvelope> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(plaintext);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  
+  // For AES-GCM, the tag is appended to the ciphertext
+  // The ciphertext includes: actual ciphertext + 16-byte authentication tag
+  const ciphertextWithTag = new Uint8Array(ct);
+  
+  // Encode IV and ciphertext+tag as base64
+  const ivB64 = btoa(String.fromCharCode(...iv));
+  const ciphertextB64 = btoa(String.fromCharCode(...ciphertextWithTag));
+  
+  return {
+    ciphertext: ciphertextB64,
+    iv: ivB64,
+    version: 'v1',
+  };
+}
+
+/**
+ * Decrypt using envelope format
+ * @param key - AES-GCM key
+ * @param envelope - encryption envelope with ciphertext, iv, and optional tag
+ * @returns decrypted plaintext
+ */
+export async function decryptText(key: CryptoKey, envelope: EncryptionEnvelope): Promise<string> {
+  if (envelope.version !== 'v1') {
+    throw new Error(`Unsupported encryption version: ${envelope.version}`);
+  }
+  
+  // Decode IV and ciphertext from base64
+  const iv = Uint8Array.from(atob(envelope.iv), (c) => c.charCodeAt(0));
+  const ciphertextWithTag = Uint8Array.from(atob(envelope.ciphertext), (c) => c.charCodeAt(0));
+  
+  // Decrypt (AES-GCM automatically handles the tag)
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    ciphertextWithTag
+  );
+  
+  return new TextDecoder().decode(new Uint8Array(pt));
+}

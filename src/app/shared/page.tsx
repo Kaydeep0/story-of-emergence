@@ -5,6 +5,9 @@ import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { useLogEvent } from '../lib/useLogEvent';
 import { listSharesByRecipient, type ShareRow } from '../lib/shares';
+import { useEncryptionSession } from '../lib/useEncryptionSession';
+import { UnlockBanner } from '../components/UnlockBanner';
+import { decryptText, type EncryptionEnvelope } from '../../lib/crypto';
 
 function KindBadge({ kind }: { kind: string }) {
   const colors: Record<string, string> = {
@@ -62,6 +65,234 @@ function EmptySharedState() {
   );
 }
 
+// Helper to decrypt using envelope format
+async function decryptShareContent(sessionKey: CryptoKey, payload: EncryptionEnvelope & { title?: string }): Promise<unknown> {
+  if (!payload.ciphertext || !payload.iv || !payload.version) {
+    throw new Error('Invalid encryption envelope format');
+  }
+  
+  const envelope: EncryptionEnvelope = {
+    ciphertext: payload.ciphertext,
+    iv: payload.iv,
+    version: payload.version,
+  };
+  
+  const plaintext = await decryptText(sessionKey, envelope);
+  return JSON.parse(plaintext);
+}
+
+// Share Preview Modal Component
+function SharePreviewModal({
+  share,
+  isOpen,
+  onClose,
+  sessionKey,
+}: {
+  share: ShareRow | null;
+  isOpen: boolean;
+  onClose: () => void;
+  sessionKey: CryptoKey | null;
+}) {
+  const [decrypting, setDecrypting] = useState(false);
+  const [decryptedContent, setDecryptedContent] = useState<{ title: string; text: string } | null>(null);
+  const [decryptError, setDecryptError] = useState<string | null>(null);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
+  // Decrypt content when share is selected and session key is available
+  useEffect(() => {
+    if (!isOpen || !share || !sessionKey) {
+      setDecryptedContent(null);
+      setDecryptError(null);
+      return;
+    }
+
+    const capsule = share.capsule || {};
+    const kind = capsule.kind || 'unknown';
+    const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
+
+    // Only decrypt reflection kind
+    if (kind !== 'reflection') {
+      setDecryptedContent(null);
+      setDecryptError(null);
+      return;
+    }
+
+    if (!payload.ciphertext || !payload.iv || !payload.version) {
+      setDecryptError('Invalid encryption envelope format');
+      return;
+    }
+
+    setDecrypting(true);
+    setDecryptError(null);
+
+    decryptShareContent(sessionKey, payload)
+      .then((decrypted) => {
+        // Extract text from decrypted object (same format as entries)
+        let text = '';
+        if (typeof decrypted === 'object' && decrypted !== null) {
+          if ('text' in decrypted && typeof decrypted.text === 'string') {
+            text = decrypted.text;
+          } else if ('note' in decrypted && typeof decrypted.note === 'string') {
+            text = decrypted.note;
+          } else {
+            text = JSON.stringify(decrypted);
+          }
+        } else if (typeof decrypted === 'string') {
+          text = decrypted;
+        } else {
+          text = String(decrypted);
+        }
+
+        setDecryptedContent({
+          title: payload.title || 'Untitled',
+          text,
+        });
+      })
+      .catch((err) => {
+        console.error('Decryption failed:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to decrypt content';
+        setDecryptError(errorMsg);
+        toast.error('Failed to decrypt shared content');
+      })
+      .finally(() => {
+        setDecrypting(false);
+      });
+  }, [isOpen, share, sessionKey]);
+
+  if (!share) return null;
+
+  const capsule = share.capsule || {};
+  const kind = capsule.kind || 'unknown';
+  const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
+  const title = payload.title || 'Untitled';
+  const createdDate = new Date(share.created_at).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const senderShort = `${share.owner_wallet.slice(0, 6)}…${share.owner_wallet.slice(-4)}`;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[60] transition-opacity duration-[220ms] ease-out ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+        aria-hidden={!isOpen}
+      />
+
+      {/* Mobile panel: slide from bottom */}
+      <div
+        className={`sm:hidden fixed bottom-0 left-0 right-0 bg-black border-t border-white/10 rounded-t-2xl max-h-[85vh] overflow-y-auto z-[70] shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        }`}
+        aria-hidden={!isOpen}
+      >
+        <div className="p-6 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">{title}</h3>
+              <p className="text-xs text-white/60 mt-1">
+                From {senderShort} · {createdDate}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+              aria-label="Close preview"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          {kind !== 'reflection' ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-white/60">This share type is not supported yet</p>
+            </div>
+          ) : decrypting ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30"></div>
+            </div>
+          ) : decryptError ? (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4">
+              <p className="text-sm text-rose-400">{decryptError}</p>
+            </div>
+          ) : decryptedContent ? (
+            <div className="prose prose-invert max-w-none">
+              <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{decryptedContent.text}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Desktop panel: side panel */}
+      <div
+        className={`hidden sm:flex fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-[70] flex-col shadow-2xl transform transition-transform duration-[220ms] ease-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+        }`}
+        aria-hidden={!isOpen}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-semibold truncate">{title}</h3>
+            <p className="text-xs text-white/60 mt-1">
+              From {senderShort} · {createdDate}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+            aria-label="Close preview"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {kind !== 'reflection' ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-white/60">This share type is not supported yet</p>
+            </div>
+          ) : decrypting ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30"></div>
+            </div>
+          ) : decryptError ? (
+            <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4">
+              <p className="text-sm text-rose-400">{decryptError}</p>
+            </div>
+          ) : decryptedContent ? (
+            <div className="prose prose-invert max-w-none">
+              <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{decryptedContent.text}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function SharedPage() {
   const { address, isConnected } = useAccount();
 
@@ -69,8 +300,10 @@ export default function SharedPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shares, setShares] = useState<ShareRow[]>([]);
+  const [selectedShare, setSelectedShare] = useState<ShareRow | null>(null);
 
   const { logEvent } = useLogEvent();
+  const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
   const connected = isConnected && !!address;
   const wallet = address ? address.toLowerCase() : '';
 
@@ -119,6 +352,9 @@ export default function SharedPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
+      {/* Unlock banner if encryption session is missing */}
+      {connected && !encryptionReady && <UnlockBanner />}
+
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Shared</h1>
         <p className="text-center text-sm text-white/60 mb-8">
@@ -160,7 +396,7 @@ export default function SharedPage() {
             {shares.map((item) => {
               // Access capsule fields safely
               const capsule = item.capsule || {};
-              const payload = (capsule.payload as { title?: string; ciphertext?: string }) || {};
+              const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
               const title = payload.title || 'Untitled';
               const kind = capsule.kind || 'unknown';
               const createdDate = new Date(item.created_at).toLocaleDateString('en-US', {
@@ -170,9 +406,10 @@ export default function SharedPage() {
               });
 
               return (
-                <div
+                <button
                   key={item.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3"
+                  onClick={() => setSelectedShare(item)}
+                  className="w-full text-left rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3 hover:bg-white/[0.04] transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 flex-1">
@@ -182,12 +419,20 @@ export default function SharedPage() {
                     </div>
                     <KindBadge kind={kind} />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         )}
       </section>
+
+      {/* Share Preview Modal */}
+      <SharePreviewModal
+        share={selectedShare}
+        isOpen={!!selectedShare}
+        onClose={() => setSelectedShare(null)}
+        sessionKey={sessionKey}
+      />
     </main>
   );
 }
