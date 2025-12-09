@@ -46,10 +46,7 @@ import { useEncryptionSession } from './lib/useEncryptionSession';
 import { rpcInsertShare } from './lib/shares';
 import {
   generateContentKey,
-  wrapKeyForRecipient,
   encryptSlice,
-  encodeCapsule,
-  type CapsulePayload,
 } from '../lib/sharing';
 
 type Item = {
@@ -116,7 +113,6 @@ const [renameValue, setRenameValue] = useState('');
 const [sharingItem, setSharingItem] = useState<Item | null>(null);
 const [shareRecipient, setShareRecipient] = useState('');
 const [shareCreating, setShareCreating] = useState(false);
-const [shareCapsuleUrl, setShareCapsuleUrl] = useState<string | null>(null);
 
 
 
@@ -478,14 +474,12 @@ async function deleteForever(id: string) {
 function openShareModal(item: Item) {
   setSharingItem(item);
   setShareRecipient('');
-  setShareCapsuleUrl(null);
 }
 
 // Close share modal
 function closeShareModal() {
   setSharingItem(null);
   setShareRecipient('');
-  setShareCapsuleUrl(null);
   setShareCreating(false);
 }
 
@@ -494,8 +488,8 @@ async function createShare() {
   if (!sharingItem || !address || !shareRecipient.trim()) return;
 
   // Validate recipient wallet address format
-  const recipient = shareRecipient.trim().toLowerCase();
-  if (!recipient.startsWith('0x') || recipient.length !== 42) {
+  const recipientWalletAddress = shareRecipient.trim().toLowerCase();
+  if (!recipientWalletAddress.startsWith('0x') || recipientWalletAddress.length !== 42) {
     toast.error('Please enter a valid wallet address (0x...)');
     return;
   }
@@ -524,58 +518,34 @@ async function createShare() {
     };
 
     // Encrypt the payload with the content key
-    const ciphertext = await encryptSlice(payload, contentKey);
-
-    // Wrap the content key for the recipient (using sender's key for now)
-    // Note: In production, this would use recipient's public key
-    const wrappedKey = await wrapKeyForRecipient(contentKey, sessionKey);
+    const ciphertextString = await encryptSlice(payload, contentKey);
 
     // Generate title from reflection (first 40 chars or fallback)
-    const title = sharingItem.note.slice(0, 40).trim() || 'Shared Reflection';
+    const reflectionTitleOrFallback = sharingItem.note.slice(0, 40).trim() || 'Shared reflection';
 
-    // Insert the share in Supabase
-    const shareId = await rpcInsertShare(
-      address,
-      recipient,
+    // Insert the share in Supabase using the new shares table
+    await rpcInsertShare(
+      w, // ownerWalletAddress (lowercase)
+      recipientWalletAddress, // recipientWalletAddress (lowercase)
       'reflection',
-      title,
-      ciphertext
+      reflectionTitleOrFallback,
+      ciphertextString
     );
-
-    // Build the capsule payload
-    const capsule: CapsulePayload = {
-      shareId,
-      wrappedKey,
-      senderWallet: address.toLowerCase(),
-    };
-
-    // Build the capsule URL (URL-encode the base64url string for safety)
-    const capsuleUrl = `${window.location.origin}/shared/open?capsule=${encodeURIComponent(encodeCapsule(capsule))}`;
-    setShareCapsuleUrl(capsuleUrl);
 
     // Log the share event
     logEvent('share_created');
 
-    toast.success('Share created! Copy the link below.');
+    // Success: show toast and close modal
+    toast.success('Share created successfully!');
+    closeShareModal();
   } catch (err: any) {
     console.error('Share creation failed:', err);
-    const msg = err?.message ?? 'Failed to create share';
-    toast.error(msg);
+    toast.error('Share failed. Please try again.');
   } finally {
     setShareCreating(false);
   }
 }
 
-// Copy capsule URL to clipboard
-async function copyCapsuleUrl() {
-  if (!shareCapsuleUrl) return;
-  try {
-    await navigator.clipboard.writeText(shareCapsuleUrl);
-    toast.success('Link copied to clipboard!');
-  } catch {
-    toast.error('Failed to copy link');
-  }
-}
 
 
   if (!mounted) return null;
@@ -1026,85 +996,39 @@ async function copyCapsuleUrl() {
               </p>
             </div>
 
-            {!shareCapsuleUrl ? (
-              <>
-                {/* Recipient input */}
-                <div className="space-y-2">
-                  <label className="text-sm text-white/60">Recipient wallet address</label>
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={shareRecipient}
-                    onChange={(e) => setShareRecipient(e.target.value)}
-                    className="w-full rounded-xl bg-black border border-white/10 px-3 py-2 text-sm focus:border-white/30 focus:outline-none font-mono"
-                  />
-                  <p className="text-xs text-white/40">
-                    Enter the wallet address of the person you want to share with.
-                  </p>
-                </div>
+            {/* Recipient input */}
+            <div className="space-y-2">
+              <label className="text-sm text-white/60">Recipient wallet address</label>
+              <input
+                type="text"
+                placeholder="0x..."
+                value={shareRecipient}
+                onChange={(e) => setShareRecipient(e.target.value)}
+                className="w-full rounded-xl bg-black border border-white/10 px-3 py-2 text-sm focus:border-white/30 focus:outline-none font-mono"
+                disabled={shareCreating}
+              />
+              <p className="text-xs text-white/40">
+                Enter the wallet address of the person you want to share with.
+              </p>
+            </div>
 
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={createShare}
-                    disabled={shareCreating || !shareRecipient.trim()}
-                    className="flex-1 rounded-xl bg-sky-600 text-white py-2.5 font-medium hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {shareCreating ? 'Creating…' : 'Create Share'}
-                  </button>
-                  <button
-                    onClick={closeShareModal}
-                    disabled={shareCreating}
-                    className="flex-1 rounded-xl border border-white/20 py-2.5 font-medium hover:bg-white/5 disabled:opacity-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Success state with capsule URL */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-emerald-400">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                    <span className="text-sm font-medium">Share created!</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm text-white/60">Capsule link</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={shareCapsuleUrl}
-                        className="flex-1 rounded-xl bg-black border border-white/10 px-3 py-2 text-xs font-mono text-white/70 focus:outline-none"
-                      />
-                      <button
-                        onClick={copyCapsuleUrl}
-                        className="rounded-xl bg-white text-black px-4 py-2 text-sm font-medium hover:bg-white/90 transition-colors"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                    <p className="text-xs text-white/40">
-                      Send this link to the recipient. They can open it to accept the shared reflection.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Done button */}
-                <div className="pt-2">
-                  <button
-                    onClick={closeShareModal}
-                    className="w-full rounded-xl border border-white/20 py-2.5 font-medium hover:bg-white/5 transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </>
-            )}
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={createShare}
+                disabled={shareCreating || !shareRecipient.trim()}
+                className="flex-1 rounded-xl bg-sky-600 text-white py-2.5 font-medium hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {shareCreating ? 'Creating…' : 'Create Share'}
+              </button>
+              <button
+                onClick={closeShareModal}
+                disabled={shareCreating}
+                className="flex-1 rounded-xl border border-white/20 py-2.5 font-medium hover:bg-white/5 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
