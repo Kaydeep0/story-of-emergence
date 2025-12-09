@@ -183,3 +183,26 @@ export async function rpcGetShare(
   return data as ShareRow;
 }
 
+/**
+ * Revoke a share by setting revoked_at timestamp
+ * @param wallet - wallet address of the owner
+ * @param shareId - the share ID to revoke
+ * @throws Error if the update fails
+ */
+export async function rpcRevokeShare(
+  wallet: string,
+  shareId: string
+): Promise<void> {
+  const supabase = getSupabaseForWallet(wallet);
+
+  const { error } = await supabase
+    .from("shares")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", shareId);
+
+  if (error) {
+    console.error("Failed to revoke share:", error);
+    throw error;
+  }
+}
+

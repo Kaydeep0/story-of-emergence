@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { useLogEvent } from '../lib/useLogEvent';
-import { listSharesByRecipient, type ShareRow } from '../lib/shares';
+import { listSharesByRecipient, listSharesByOwner, rpcRevokeShare, type ShareRow } from '../lib/shares';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { UnlockBanner } from '../components/UnlockBanner';
 import { decryptText, type EncryptionEnvelope } from '../../lib/crypto';
@@ -39,7 +39,7 @@ function SharedSkeleton() {
   );
 }
 
-function EmptySharedState() {
+function EmptySharedState({ isOwnedView }: { isOwnedView: boolean }) {
   return (
     <div className="rounded-2xl border border-white/10 p-8 text-center space-y-4">
       <div className="mx-auto w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
@@ -59,7 +59,9 @@ function EmptySharedState() {
       </div>
       <h2 className="text-lg font-medium">No shared content yet</h2>
       <p className="text-sm text-white/60 max-w-md mx-auto">
-        When someone shares content with you, it will appear here.
+        {isOwnedView
+          ? 'You have not shared anything yet'
+          : 'When someone shares content with you, it will appear here.'}
       </p>
     </div>
   );
@@ -299,8 +301,11 @@ export default function SharedPage() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [shares, setShares] = useState<ShareRow[]>([]);
+  const [view, setView] = useState<'received' | 'owned'>('received');
+  const [sharesReceived, setSharesReceived] = useState<ShareRow[]>([]);
+  const [sharesOwned, setSharesOwned] = useState<ShareRow[]>([]);
   const [selectedShare, setSelectedShare] = useState<ShareRow | null>(null);
+  const [revokingShareId, setRevokingShareId] = useState<string | null>(null);
 
   const { logEvent } = useLogEvent();
   const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
@@ -324,11 +329,24 @@ export default function SharedPage() {
     setError(null);
 
     try {
-      const items = await listSharesByRecipient(wallet, {
-        limit: 50,
-        offset: 0,
-      });
-      setShares(items);
+      // Fetch both lists in parallel
+      const [receivedItems, ownedItems] = await Promise.all([
+        listSharesByRecipient(wallet, {
+          limit: 50,
+          offset: 0,
+        }),
+        listSharesByOwner(wallet, {
+          limit: 50,
+          offset: 0,
+        }),
+      ]);
+
+      // Filter out revoked shares for both lists
+      const filteredReceived = receivedItems.filter((item) => item.revoked_at === null);
+      const filteredOwned = ownedItems.filter((item) => item.revoked_at === null);
+
+      setSharesReceived(filteredReceived);
+      setSharesOwned(filteredOwned);
     } catch (e: unknown) {
       const err = e as { message?: string };
       console.error('Failed to load shares', e);
@@ -348,6 +366,30 @@ export default function SharedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, connected, wallet]);
 
+  async function handleRevokeShare(share: ShareRow, e: React.MouseEvent) {
+    e.stopPropagation(); // Prevent opening the modal
+
+    if (!wallet) return;
+
+    const confirmed = window.confirm('Revoke this share so the recipient can no longer see it');
+    if (!confirmed) return;
+
+    setRevokingShareId(share.id);
+
+    try {
+      await rpcRevokeShare(wallet, share.id);
+      toast.success('Share revoked successfully');
+      // Refresh both lists - the revoked share will be filtered out
+      await loadShares();
+    } catch (error) {
+      console.error('Failed to revoke share', error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed to revoke share';
+      toast.error(errorMsg);
+    } finally {
+      setRevokingShareId(null);
+    }
+  }
+
   if (!mounted) return null;
 
   return (
@@ -357,9 +399,32 @@ export default function SharedPage() {
 
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Shared</h1>
-        <p className="text-center text-sm text-white/60 mb-8">
-          Private content shared with you.
-        </p>
+        
+        {/* View Toggle */}
+        {connected && (
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <button
+              onClick={() => setView('received')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                view === 'received'
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              Shared with you
+            </button>
+            <button
+              onClick={() => setView('owned')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                view === 'owned'
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/60 hover:text-white/80 hover:bg-white/5'
+              }`}
+            >
+              Shared with others
+            </button>
+          </div>
+        )}
 
         {/* Loading state */}
         {connected && loading && <SharedSkeleton />}
@@ -378,52 +443,90 @@ export default function SharedPage() {
         )}
 
         {/* Empty state */}
-        {connected && !loading && !error && shares.length === 0 && <EmptySharedState />}
+        {connected &&
+          !loading &&
+          !error &&
+          ((view === 'received' && sharesReceived.length === 0) ||
+            (view === 'owned' && sharesOwned.length === 0)) && (
+            <EmptySharedState isOwnedView={view === 'owned'} />
+          )}
 
         {/* Shares list */}
-        {connected && !loading && !error && shares.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm text-white/50">
-              <span>{shares.length} shared item{shares.length !== 1 ? 's' : ''}</span>
-              <button
-                onClick={() => loadShares()}
-                className="text-white/60 hover:text-white transition-colors"
-              >
-                Refresh
-              </button>
-            </div>
-
-            {shares.map((item) => {
-              // Access capsule fields safely
-              const capsule = item.capsule || {};
-              const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
-              const title = payload.title || 'Untitled';
-              const kind = capsule.kind || 'unknown';
-              const createdDate = new Date(item.created_at).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              });
-
-              return (
+        {connected &&
+          !loading &&
+          !error &&
+          ((view === 'received' && sharesReceived.length > 0) ||
+            (view === 'owned' && sharesOwned.length > 0)) && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-sm text-white/50">
+                <span>
+                  {view === 'received'
+                    ? `${sharesReceived.length} shared item${sharesReceived.length !== 1 ? 's' : ''}`
+                    : `${sharesOwned.length} shared item${sharesOwned.length !== 1 ? 's' : ''}`}
+                </span>
                 <button
-                  key={item.id}
-                  onClick={() => setSelectedShare(item)}
-                  className="w-full text-left rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3 hover:bg-white/[0.04] transition-colors"
+                  onClick={() => loadShares()}
+                  className="text-white/60 hover:text-white transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 flex-1">
-                      <p className="font-medium">{title}</p>
-                      <p className="text-sm text-white/70">From {item.owner_wallet.slice(0, 6)}...{item.owner_wallet.slice(-4)}</p>
-                      <p className="text-xs text-white/40">{createdDate}</p>
-                    </div>
-                    <KindBadge kind={kind} />
-                  </div>
+                  Refresh
                 </button>
-              );
-            })}
-          </div>
-        )}
+              </div>
+
+              {(view === 'received' ? sharesReceived : sharesOwned).map((item) => {
+                // Access capsule fields safely
+                const capsule = item.capsule || {};
+                const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
+                const title = payload.title || 'Untitled';
+                const kind = capsule.kind || 'unknown';
+                const createdDate = new Date(item.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                });
+                const isOwner = wallet && item.owner_wallet.toLowerCase() === wallet.toLowerCase();
+                const isRevoking = revokingShareId === item.id;
+                const recipientShort = `${item.recipient_wallet.slice(0, 6)}…${item.recipient_wallet.slice(-4)}`;
+                const senderShort = `${item.owner_wallet.slice(0, 6)}…${item.owner_wallet.slice(-4)}`;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        onClick={() => setSelectedShare(item)}
+                        className="space-y-1 flex-1 text-left"
+                      >
+                        <p className="font-medium">{title}</p>
+                        {view === 'owned' ? (
+                          <>
+                            <p className="text-xs text-white/50 font-medium">From you</p>
+                            <p className="text-sm text-white/70">To {recipientShort}</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-white/70">From {senderShort}</p>
+                        )}
+                        <p className="text-xs text-white/40">{createdDate}</p>
+                      </button>
+                      <div className="flex items-start gap-2">
+                        <KindBadge kind={kind} />
+                        {isOwner && item.revoked_at === null && (
+                          <button
+                            onClick={(e) => handleRevokeShare(item, e)}
+                            disabled={isRevoking}
+                            className="text-xs text-white/60 hover:text-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-2 py-1"
+                          >
+                            {isRevoking ? 'Revoking...' : 'Revoke'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
       </section>
 
       {/* Share Preview Modal */}
