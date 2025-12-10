@@ -23,7 +23,9 @@ export type EventType =
   | 'share_accepted'
   | 'share_dismissed'
   | 'share_created'
-  | 'share_opened';
+  | 'share_opened'
+  | 'source_imported'
+  | 'insight_viewed';
 
 /**
  * Hook that provides a function to log internal events

@@ -23,6 +23,7 @@ import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
+import DebugInsightStrip from '../components/DebugInsightStrip';
 
 
 /**
@@ -2016,6 +2017,8 @@ export default function InsightsPage() {
           }, 100);
         }}
       />
+
+      <DebugInsightStrip />
     </main>
   );
 }

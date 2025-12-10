@@ -1,7 +1,12 @@
 // src/app/lib/internalEvents.ts
 // Client-side functions for internal_events table (Phase One insight engine)
 
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
 import { getSupabaseForWallet } from "./supabase";
+import { useEncryptionSession } from './useEncryptionSession';
 import type {
   InternalEventRow,
   InternalEvent,
@@ -167,3 +172,33 @@ export async function rpcListInternalEventsByRange(
   return items;
 }
 
+// ----- Hook for debug strip -----
+
+/**
+ * Hook to access internal events for debug purposes
+ * Returns events array
+ */
+export function useInternalEvents() {
+  const { address, isConnected } = useAccount();
+  const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
+  const [events, setEvents] = useState<InternalEvent[]>([]);
+
+  useEffect(() => {
+    if (!isConnected || !address || !encryptionReady || !sessionKey) {
+      setEvents([]);
+      return;
+    }
+
+    // Load events for debug strip
+    rpcListInternalEvents(address, sessionKey, { limit: 500, offset: 0 })
+      .then((result) => {
+        setEvents(result.items);
+      })
+      .catch((err) => {
+        console.error('[useInternalEvents] Failed to load events:', err);
+        setEvents([]);
+      });
+  }, [isConnected, address, encryptionReady, sessionKey]);
+
+  return { events };
+}
