@@ -41,6 +41,7 @@ export default function DebugInsightStrip() {
       <div>Highlights: {highlights?.length ?? 0}</div>
       <div>Engine: {engine?.status ?? 'unknown'}</div>
       <div>Recipes computed: {engine?.recipes?.length ?? 0}</div>
+      <div>Sources: {engine?.external?.length ?? 0}</div>
     </div>
   );
 }

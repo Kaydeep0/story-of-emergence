@@ -3,6 +3,8 @@
 
 import type { InternalEvent } from './types';
 import type { UnifiedInternalEvent } from '../../lib/internalEvents';
+import type { ExternalEntry } from '../../lib/sources';
+import { listExternalEntries } from './useSources';
 
 export type TimelineInsight = {
   id: string;
@@ -21,6 +23,44 @@ export type SummaryInsight = {
   lastActiveAt: Date | null;
   activityHeatmap: Record<string, number>; // day -> count
 };
+
+/**
+ * Insight Engine State
+ * Tracks reflections and external entries for unified processing
+ */
+export type InsightEngineState = {
+  reflections: unknown[]; // Will be typed properly in Phase Two
+  external: ExternalEntry[];
+  status: 'idle' | 'loading' | 'ready' | 'error';
+};
+
+/**
+ * Load external entries and update engine state
+ * This function loads external entries after reflections are loaded
+ * 
+ * @param wallet - wallet address
+ * @param state - current engine state (will be managed by hook in future)
+ * @returns Updated state with external entries
+ */
+export async function loadExternalEntriesForEngine(
+  wallet: string,
+  state: InsightEngineState
+): Promise<InsightEngineState> {
+  try {
+    const external = await listExternalEntries(wallet);
+    return {
+      ...state,
+      external,
+      status: 'ready',
+    };
+  } catch (error) {
+    console.error('[insightEngine] Failed to load external entries:', error);
+    return {
+      ...state,
+      status: 'error',
+    };
+  }
+}
 
 /**
  * Process internal events into timeline insights

@@ -68,3 +68,30 @@ export type InternalEventRangeOptions = {
   start: Date;
   end: Date;
 };
+
+// ---- Event Payload Types ----
+// These represent the possible shapes of the plaintext field in InternalEvent
+
+import type { ExternalSourceKind } from '../../lib/sources';
+
+export type InternalEventPayload =
+  | { type: 'reflection_saved'; id: string }
+  | { type: 'source_imported'; id: string; kind: ExternalSourceKind }
+  | { type: 'insight_viewed'; insight: string }
+  | { type: 'reflection_deleted'; id: string }
+  | { type: 'reflection_restored'; id: string }
+  | { type: 'draft_created'; id: string }
+  | { type: 'draft_deleted'; id: string }
+  | { type: 'export_triggered' }
+  | { type: 'page_reflections' }
+  | { type: 'page_insights' }
+  | { type: 'page_sources' }
+  | { type: 'page_shared' }
+  | { type: 'navigate_sources' }
+  | { type: 'capsule_open_success'; shareId: string }
+  | { type: 'capsule_open_failed'; shareId: string }
+  | { type: 'share_accepted'; shareId: string }
+  | { type: 'share_dismissed'; shareId: string }
+  | { type: 'share_created'; shareId: string }
+  | { type: 'share_opened'; shareId: string }
+  | Record<string, unknown>; // Fallback for unknown event types
