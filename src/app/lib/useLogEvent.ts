@@ -22,7 +22,8 @@ export type EventType =
   | 'capsule_open_failed'
   | 'share_accepted'
   | 'share_dismissed'
-  | 'share_created';
+  | 'share_created'
+  | 'share_opened';
 
 /**
  * Hook that provides a function to log internal events

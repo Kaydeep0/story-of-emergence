@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useLogEvent } from '../lib/useLogEvent';
 import { listSharesByRecipient, listSharesByOwner, rpcRevokeShare, type ShareRow } from '../lib/shares';
@@ -297,6 +298,7 @@ function SharePreviewModal({
 
 export default function SharedPage() {
   const { address, isConnected } = useAccount();
+  const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -532,7 +534,7 @@ export default function SharedPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
-                        onClick={() => setSelectedShare(item)}
+                        onClick={() => router.push(`/shared/open/${item.id}?preview=true`)}
                         className="space-y-1 flex-1 text-left"
                       >
                         <p className="font-medium">{title}</p>
