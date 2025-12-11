@@ -9,6 +9,7 @@ import HealthStrip from "./components/HealthStrip";
 import ReflectionsSkeleton from '../components/ReflectionsSkeleton';
 import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from './components/ExportButton';
+import { SourceLinkMenu } from './components/SourceLinkMenu';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
@@ -29,6 +30,8 @@ import {
 } from "./lib/drafts";
 import { rpcInsertInternalEvent } from "./lib/internalEvents";
 import { useLogEvent } from "./lib/useLogEvent";
+import { useReflectionLinks } from "./lib/reflectionLinks";
+import { listExternalEntries } from "./lib/useSources";
 
 
 
@@ -49,6 +52,7 @@ type Item = {
   id: string;
   ts: string;
   deleted_at: string | null;
+  sourceId?: string | null;
   note: string; // plaintext after decrypt
 };
 
@@ -85,11 +89,32 @@ const w = (address ?? '').toLowerCase();
 // Event logging hook
 const { logEvent } = useLogEvent();
 
+// Reflection links hook
+const { links: reflectionLinks, getSourceIdFor, setLink: setReflectionLink } = useReflectionLinks(address);
+
 // Log navigation event when page loads (connected wallet only)
 useEffect(() => {
   if (!mounted || !connected) return;
   logEvent('page_reflections');
 }, [mounted, connected, logEvent]);
+
+// Load sources for linking
+useEffect(() => {
+  if (!mounted || !connected || !address) return;
+  let cancelled = false;
+  async function loadSourcesList() {
+    try {
+      const data = await listExternalEntries(address);
+      if (!cancelled) setSources(data as any[]);
+    } catch {
+      if (!cancelled) setSources([]);
+    }
+  }
+  loadSourcesList();
+  return () => {
+    cancelled = true;
+  };
+}, [mounted, connected, address]);
 
 // ---- local state ----
 const [status, setStatus] = useState('');
@@ -97,8 +122,19 @@ const [drafts, setDrafts] = useState<Draft[]>([]);
 const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
 const [note, setNote] = useState('');
 const [items, setItems] = useState<Item[]>([]);
+// External sources for linking
+const [sources, setSources] = useState<any[]>([]);
+const sourceMap = useMemo(() => {
+  const map = new Map<string, any>();
+  sources.forEach((s) => {
+    if (s.sourceId) map.set(s.sourceId, s);
+    if (s.source_id) map.set(s.source_id, s);
+  });
+  return map;
+}, [sources]);
 const [showDeleted, setShowDeleted] = useState(false);
 const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); // null = "All sources"
 const trashCount = useMemo(() => items.filter(i => i.deleted_at).length, [items]);
 
 // Inline rename state
@@ -157,13 +193,35 @@ const lastSaved = useMemo(() => {
 // search box state
 const [searchTerm, setSearchTerm] = useState("");
 
-// derive visible items based on Trash toggle and search
+// Create a map of reflectionId -> sourceId from reflectionLinks
+const reflectionIdToSourceId = useMemo(() => {
+  const map = new Map<string, string>();
+  reflectionLinks.forEach((link) => {
+    map.set(link.reflectionId, link.sourceId);
+  });
+  return map;
+}, [reflectionLinks]);
+
+// derive visible items based on Trash toggle, source filter, and search
 const baseItems = useMemo(
-  () =>
-    showDeleted
+  () => {
+    let filtered = showDeleted
       ? items.filter(i => i.deleted_at)    // Trash view
-      : items.filter(i => !i.deleted_at),  // Normal view
-  [items, showDeleted]
+      : items.filter(i => !i.deleted_at);  // Normal view
+
+    // Apply source filter if one is selected
+    if (selectedSourceId !== null) {
+      filtered = filtered.filter((item) => {
+        // Get sourceId from reflectionLinks (supabase) or from item.sourceId (local state)
+        const linkedSourceId = reflectionIdToSourceId.get(item.id);
+        const itemSourceId = item.sourceId;
+        return linkedSourceId === selectedSourceId || itemSourceId === selectedSourceId;
+      });
+    }
+
+    return filtered;
+  },
+  [items, showDeleted, selectedSourceId, reflectionIdToSourceId]
 );
 
 const visibleItems = useMemo(
@@ -177,6 +235,18 @@ const visibleItems = useMemo(
   },
   [baseItems, searchTerm]
 );
+
+async function setSourceLink(reflectionId: string, sourceId: string | null): Promise<void> {
+  try {
+    await setReflectionLink(reflectionId, sourceId);
+    // Only update local state on success (hook handles errors with toast)
+    setItems((prev) =>
+      prev.map((it) => (it.id === reflectionId ? { ...it, sourceId } : it))
+    );
+  } catch {
+    // Error already handled in hook with toast notification
+  }
+}
 
 
 
@@ -278,6 +348,9 @@ async function loadMyReflections(reset = false) {
       id: i.id,
       ts: i.createdAt.toISOString(),
       deleted_at: i.deletedAt ? i.deletedAt.toISOString() : null,
+      sourceId: getSourceIdFor(i.id) ?? (typeof i.plaintext === "object" && i.plaintext !== null && "sourceId" in (i.plaintext as any)
+        ? String((i.plaintext as any).sourceId ?? '')
+        : undefined),
       note:
         typeof i.plaintext === "object" &&
         i.plaintext !== null &&
@@ -340,6 +413,8 @@ async function saveReflection() {
       ts: Date.now(),
     });
 
+    // Record new reflection with no source link initially
+    // (No need to explicitly set null - it will be undefined by default)
     try {
       await rpcInsertInternalEvent(address!, sessionKey, new Date(), {
         source_kind: "journal",
@@ -846,6 +921,55 @@ async function createShare() {
 />
 </div>
 
+{/* Source filter */}
+{connected && sources.length > 0 && (
+  <div className="mb-4 flex items-center gap-3 flex-wrap">
+    <label className="text-xs text-white/60">Filter by source:</label>
+    <select
+      value={selectedSourceId ?? ''}
+      onChange={(e) => setSelectedSourceId(e.target.value || null)}
+      className="rounded-lg border border-white/20 bg-black/40 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
+    >
+      <option value="">All sources</option>
+      {sources.map((source) => {
+        const sid = source.sourceId ?? source.source_id;
+        return (
+          <option key={sid} value={sid}>
+            {source.title || sid} {source.kind ? `(${source.kind})` : ''}
+          </option>
+        );
+      })}
+    </select>
+    {selectedSourceId ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-2.5 py-1 text-xs text-white/80">
+        <span>Filtering by:</span>
+        <span className="font-medium">
+          {sourceMap.get(selectedSourceId)?.title || selectedSourceId}
+        </span>
+        <button
+          onClick={() => setSelectedSourceId(null)}
+          className="ml-1 hover:text-white transition-colors"
+          title="Clear filter"
+        >
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </span>
+    ) : (
+      <span className="inline-flex items-center rounded-full bg-white/5 border border-white/10 px-2.5 py-1 text-xs text-white/60">
+        Filtering by: All sources
+      </span>
+    )}
+  </div>
+)}
+
 
 {/* list area with loading + empty states */}
 {loadingList ? (
@@ -857,7 +981,8 @@ async function createShare() {
 {/* Export toolbar + card count */}
 <div className="mb-3 flex items-center justify-between text-xs text-white/50">
   <span>
-    Showing {visibleItems.length} of {items.length} reflections
+    Showing {visibleItems.length} of {items.length} reflection{items.length !== 1 ? 's' : ''}
+    {selectedSourceId && ` (filtered by source)`}
     {showDeleted ? " in Trash" : ""}
   </span>
 
@@ -930,6 +1055,16 @@ async function createShare() {
           <div className="mt-2 whitespace-pre-wrap break-words">
             {it.note}
           </div>
+
+      <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2">
+        <p className="text-xs text-white/60">Linked Source</p>
+        <SourceLinkMenu
+          reflectionId={it.id}
+          currentSourceId={it.sourceId}
+          sources={sources}
+          onLink={setSourceLink}
+        />
+      </div>
         </div>
       ))}
     </div>

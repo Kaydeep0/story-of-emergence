@@ -191,12 +191,27 @@ export function computeTimelineSpikes(entries: ReflectionEntry[]): TimelineSpike
  * Helper to convert Item (from entries.ts) to ReflectionEntry format
  * This bridges the existing data structures with the insight engine
  */
-export function itemToReflectionEntry(item: {
-  id: string;
-  createdAt: Date;
-  deletedAt: Date | null;
-  plaintext: unknown;
-}): ReflectionEntry {
+export function itemToReflectionEntry(
+  item: {
+    id: string;
+    createdAt: Date;
+    deletedAt: Date | null;
+    plaintext: unknown;
+  },
+  getSourceIdFor?: (reflectionId: string) => string | undefined
+): ReflectionEntry {
+  // Surface a sourceId if it is already present on the plaintext payload
+  // or from the reflection links (if getSourceIdFor is provided)
+  const overrideSource = getSourceIdFor ? getSourceIdFor(item.id) : undefined;
+  const sourceId =
+    overrideSource !== undefined
+      ? overrideSource || undefined
+      : typeof item.plaintext === 'object' &&
+        item.plaintext !== null &&
+        'sourceId' in item.plaintext
+      ? String((item.plaintext as { sourceId?: unknown }).sourceId ?? '')
+      : undefined;
+
   // Extract text from plaintext which could be:
   // - An object with { text: string }
   // - A string directly
@@ -215,7 +230,26 @@ export function itemToReflectionEntry(item: {
     id: item.id,
     createdAt: item.createdAt.toISOString(),
     deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
+    sourceId: sourceId || undefined,
     plaintext: text,
   };
+}
+
+/**
+ * Temporary helper to attach demo source links to a small subset of reflections.
+ * This is UI-only and will be removed when real source links arrive.
+ */
+export function attachDemoSourceLinks(reflections: ReflectionEntry[]): ReflectionEntry[] {
+  const demoSources = ['yt_demo_1', 'article_demo_1', 'book_demo_1'];
+  let assigned = 0;
+
+  return reflections.map((reflection) => {
+    if (reflection.sourceId) return reflection;
+    const sourceId = demoSources[assigned];
+    if (!sourceId) return reflection;
+
+    assigned += 1;
+    return { ...reflection, sourceId };
+  });
 }
 
