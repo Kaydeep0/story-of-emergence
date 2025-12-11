@@ -10,6 +10,7 @@ export type ReflectionEntry = {
   createdAt: string; // ISO string
   updatedAt?: string;
   deletedAt?: string | null;
+  sourceId?: string;
   // Decrypted content - the actual text the user wrote
   plaintext: string;
 };

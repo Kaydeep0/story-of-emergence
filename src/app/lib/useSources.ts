@@ -5,6 +5,7 @@
 
 import type { ExternalEntry } from '../../lib/sources';
 import { getSupabaseForWallet } from '../../lib/supabase';
+import { getLocalExternalEntries } from './sources';
 
 /**
  * Temporary mock function that returns 3 fake external entries for testing
@@ -44,19 +45,26 @@ export function getMockSources(): ExternalEntry[] {
  * This will replace useMockSources once the API is wired
  */
 export async function listExternalEntries(walletAddress: string) {
-  const supabase = getSupabaseForWallet(walletAddress);
-  const { data, error } = await supabase.rpc('list_external_entries', {
-    w: walletAddress,
-    p_limit: 50,
-    p_offset: 0,
-  });
-
-  if (error) {
-    console.error('Error loading external entries', error);
-    return [];
+  let data: any[] = [];
+  try {
+    const supabase = getSupabaseForWallet(walletAddress);
+    const res = await supabase.rpc('list_external_entries', {
+      w: walletAddress,
+      p_limit: 50,
+      p_offset: 0,
+    });
+    if (res.error) {
+      console.error('Error loading external entries', res.error);
+    } else {
+      data = res.data ?? [];
+    }
+  } catch (e) {
+    console.error('Error loading external entries', e);
   }
 
-  return (data ?? []).map((row: any) => {
+  const combined = [...data, ...getLocalExternalEntries(walletAddress)];
+
+  return combined.map((row: any) => {
     // Extract URL and notes from snippet if it contains "URL:"
     let url: string | null = null;
     let notes: string | null = null;

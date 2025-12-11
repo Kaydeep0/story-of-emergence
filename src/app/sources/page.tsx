@@ -1,31 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../lib/useLogEvent';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { listExternalEntries } from '../lib/useSources';
-
-type SourceEntry = {
-  id: string;
-  walletAddress: string;
-  kind: string;
-  sourceId?: string;
-  title?: string;
-  url?: string | null;
-  createdAt: string;
-  notes?: string | null;
-  capturedAt: string;
-};
+import { rpcFetchEntries } from '../lib/entries';
+import { itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
+import type { ReflectionEntry } from '../lib/insights/types';
+import { SourceCard, type SourceEntry } from '../components/SourceCard';
+import { SourceForm } from '../components/SourceForm';
+import { insertExternalSource } from '../lib/sources';
+import { toast } from 'sonner';
+import { useReflectionLinks } from '../lib/reflectionLinks';
 
 export default function SourcesPage() {
   const { address, isConnected } = useAccount();
   const { logEvent } = useLogEvent();
-  const { ready: encryptionReady, error: encryptionError } = useEncryptionSession();
+  const { ready: encryptionReady, error: encryptionError, aesKey: sessionKey } = useEncryptionSession();
+  const { getSourceIdFor } = useReflectionLinks(address);
   const [mounted, setMounted] = useState(false);
   const [sources, setSources] = useState<SourceEntry[]>([]);
+  const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const connected = isConnected && !!address;
 
@@ -59,6 +59,55 @@ export default function SourcesPage() {
 
     loadSources();
   }, [mounted, connected, encryptionReady, address]);
+
+  // Load decrypted reflections for demo linking
+  useEffect(() => {
+    if (!mounted || !connected || !encryptionReady || !address || !sessionKey) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadReflections() {
+      try {
+        const { items } = await rpcFetchEntries(address, sessionKey, {
+          includeDeleted: false,
+          limit: 200,
+          offset: 0,
+        });
+
+        if (cancelled) return;
+
+        const reflectionEntries = attachDemoSourceLinks(items.map(itemToReflectionEntry));
+        setReflections(reflectionEntries);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load reflections for source linking', err);
+          setReflections([]);
+        }
+      } finally {
+        // no-op
+      }
+    }
+
+    loadReflections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, connected, encryptionReady, address, sessionKey, getSourceIdFor]);
+
+  const reflectionsBySource = useMemo(() => {
+    const map = new Map<string, ReflectionEntry[]>();
+    reflections.forEach((reflection) => {
+      if (!reflection.sourceId) return;
+      if (!map.has(reflection.sourceId)) {
+        map.set(reflection.sourceId, []);
+      }
+      map.get(reflection.sourceId)!.push(reflection);
+    });
+    return map;
+  }, [reflections]);
 
   if (!mounted) return null;
 
@@ -95,12 +144,50 @@ export default function SourcesPage() {
     <main className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Sources</h1>
-        
-        {/* Sources count summary */}
-        {!loading && (
-          <p className="text-center text-sm text-white/60 mb-8">
-            You have {sources.length} external source{sources.length === 1 ? '' : 's'} linked to this wallet.
-          </p>
+        <div className="flex items-center justify-between mb-4">
+          {!loading && (
+            <p className="text-sm text-white/60">
+              You have {sources.length} external source{sources.length === 1 ? '' : 's'} linked to this wallet.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setAdding((v) => !v)}
+            className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors"
+          >
+            {adding ? 'Close' : 'Add source'}
+          </button>
+        </div>
+
+        {adding && (
+          <div className="mb-6">
+            <SourceForm
+              onSubmit={async ({ title, kind, sourceId, notes }) => {
+                if (!address) return;
+                const row = await insertExternalSource(address, {
+                  title,
+                  kind,
+                  sourceId,
+                  notes,
+                });
+                const mapped: SourceEntry = {
+                  id: row.id,
+                  walletAddress: row.wallet_address,
+                  kind: row.kind,
+                  sourceId: row.source_id,
+                  title: row.title,
+                  url: row.url,
+                  createdAt: row.created_at,
+                  notes: row.notes,
+                  capturedAt: row.captured_at,
+                };
+                setSources((prev) => [mapped, ...prev]);
+                toast.success('Source added');
+                setAdding(false);
+              }}
+              onCancel={() => setAdding(false)}
+            />
+          </div>
         )}
 
         {/* Loading state */}
@@ -145,62 +232,24 @@ export default function SourcesPage() {
         {/* Sources list */}
         {!loading && !error && sources.length > 0 && (
           <div className="space-y-4">
-            {sources.map((entry) => (
-              <div
-                key={entry.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-3"
-              >
-                {/* Title and kind */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-white/90 mb-2">
-                      {entry.title || 'Untitled'}
-                    </h3>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase bg-white/10 text-white/70">
-                        {entry.kind}
-                      </span>
-                      {entry.sourceId && (
-                        <span className="text-xs text-white/50">
-                          {entry.sourceId}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+            {sources.map((entry) => {
+              const linkedReflections = entry.sourceId
+                ? reflectionsBySource.get(entry.sourceId) ?? []
+                : [];
 
-                {/* Meta line */}
-                <div className="text-xs text-white/50">
-                  {entry.createdAt && (
-                    <span>
-                      added {new Date(entry.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  )}
-                </div>
-
-                {/* Notes */}
-                {entry.notes && (
-                  <p className="text-sm text-white/70">{entry.notes}</p>
-                )}
-
-                {/* Open button */}
-                {entry.url && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.open(entry.url!, '_blank', 'noopener,noreferrer');
-                    }}
-                    className="rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2 text-sm text-white/90 transition-colors"
-                  >
-                    Open
-                  </button>
-                )}
-              </div>
-            ))}
+              return (
+                <SourceCard
+                  key={entry.id}
+                  entry={entry}
+                  linkedReflections={linkedReflections}
+                  expanded={expandedId === entry.id}
+                  detailHref={entry.sourceId ? `/sources/${entry.sourceId}` : undefined}
+                  onToggle={() =>
+                    setExpandedId((prev) => (prev === entry.id ? null : entry.id))
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </section>

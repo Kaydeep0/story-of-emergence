@@ -18,6 +18,51 @@ export type Source = {
   itemCount: number | null;
 };
 
+export type ExternalSourceInput = {
+  title: string;
+  kind: string;
+  sourceId: string;
+  notes?: string | null;
+};
+
+export type ExternalSourceRow = {
+  id: string;
+  wallet_address: string;
+  kind: string;
+  source_id: string;
+  title: string;
+  url: string | null;
+  created_at: string;
+  notes: string | null;
+  captured_at: string;
+};
+
+const localExternalSources: ExternalSourceRow[] = [];
+
+export function getLocalExternalEntries(walletAddress: string): ExternalSourceRow[] {
+  return localExternalSources.filter((e) => e.wallet_address.toLowerCase() === walletAddress.toLowerCase());
+}
+
+export async function insertExternalSource(
+  walletAddress: string,
+  input: ExternalSourceInput
+): Promise<ExternalSourceRow> {
+  const now = new Date().toISOString();
+  const row: ExternalSourceRow = {
+    id: crypto.randomUUID(),
+    wallet_address: walletAddress,
+    kind: input.kind,
+    source_id: input.sourceId,
+    title: input.title,
+    url: null,
+    created_at: now,
+    notes: input.notes ?? null,
+    captured_at: now,
+  };
+  localExternalSources.unshift(row);
+  return row;
+}
+
 // TEMPORARY MOCK LIST
 export const mockSources: Source[] = [
   {

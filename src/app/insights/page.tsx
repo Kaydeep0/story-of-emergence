@@ -9,12 +9,13 @@ import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
-import { computeTimelineSpikes, itemToReflectionEntry } from '../lib/insights/timelineSpikes';
+import { computeTimelineSpikes, itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
 import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
 import { computeLinkClusters } from '../lib/insights/linkClusters';
 import { computeStreakCoach } from '../lib/insights/streakCoach';
 import { computeTopicDrift } from '../lib/insights/topicDrift';
 import { computeContrastPairs } from '../lib/insights/contrastPairs';
+import { computeUnifiedSourceInsights, type UnifiedSourceInsights, type SourceEntryLite, computeSourceWordFreq } from '../lib/insights/fromSources';
 import type { ContrastPair } from '../lib/insights/contrastPairs';
 import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
@@ -24,6 +25,10 @@ import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
 import DebugInsightStrip from '../components/DebugInsightStrip';
+import { InsightsFromSources } from '../components/InsightsFromSources';
+import { listExternalEntries } from '../lib/useSources';
+import { InsightsSourceCard } from '../components/InsightsSourceCard';
+import { useReflectionLinks } from '../lib/reflectionLinks';
 
 
 /**
@@ -398,6 +403,7 @@ export default function InsightsPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
+  const { getSourceIdFor } = useReflectionLinks(address);
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -425,6 +431,8 @@ export default function InsightsPage() {
   const [summaryReflectionsLoading, setSummaryReflectionsLoading] = useState(false);
   const [summaryReflectionsError, setSummaryReflectionsError] = useState<string | null>(null);
   const [summaryReflectionEntries, setSummaryReflectionEntries] = useState<ReflectionEntry[]>([]);
+  const [sources, setSources] = useState<SourceEntryLite[]>([]);
+  const [sourceInsights, setSourceInsights] = useState<UnifiedSourceInsights | null>(null);
 
   // Timeline spikes state (computed from decrypted reflections)
   const [spikeInsights, setSpikeInsights] = useState<TimelineSpikeCard[]>([]);
@@ -493,6 +501,36 @@ export default function InsightsPage() {
     if (!mounted || !connected) return;
     logEvent('page_insights');
   }, [mounted, connected, logEvent]);
+
+  // Load external sources client-side
+  useEffect(() => {
+    if (!mounted || !connected || !address) return;
+    let cancelled = false;
+
+    async function loadSources() {
+      try {
+        const data = await listExternalEntries(address);
+        if (cancelled) return;
+        setSources(
+          (data as any[]).map((s) => ({
+            id: s.id,
+            sourceId: s.sourceId ?? s.source_id ?? null,
+            title: s.title ?? null,
+            kind: s.kind ?? null,
+          }))
+        );
+      } catch {
+        if (!cancelled) {
+          setSources([]);
+        }
+      }
+    }
+
+    loadSources();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, connected, address]);
 
   async function loadInsights() {
     if (!connected || !address) return;
@@ -655,7 +693,9 @@ export default function InsightsPage() {
         if (cancelled) return;
 
         // Convert to ReflectionEntry format
-        const reflectionEntries = items.map(itemToReflectionEntry);
+        const reflectionEntries = attachDemoSourceLinks(
+          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+        );
 
         // Compute always-on summary insights (pure function, no network calls)
         const insights = computeAlwaysOnSummary(reflectionEntries);
@@ -686,7 +726,12 @@ export default function InsightsPage() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, connected, address, encryptionReady, sessionKey]);
+  }, [mode, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
+
+  // Recompute source-driven insights when sources or summary reflections change
+  useEffect(() => {
+    setSourceInsights(computeUnifiedSourceInsights(sources, summaryReflectionEntries));
+  }, [sources, summaryReflectionEntries]);
 
   // Load decrypted reflections and compute spikes when Timeline mode is active
   useEffect(() => {
@@ -719,7 +764,9 @@ export default function InsightsPage() {
         if (cancelled) return;
 
         // Convert to ReflectionEntry format
-        const reflectionEntries = items.map(itemToReflectionEntry);
+        const reflectionEntries = attachDemoSourceLinks(
+          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+        );
 
         // Compute all insights (pure functions, no network calls)
         const spikes = computeTimelineSpikes(reflectionEntries);
@@ -754,7 +801,7 @@ export default function InsightsPage() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, connected, address, encryptionReady, sessionKey]);
+  }, [mode, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
   // Compute daily counts for timeline overview (last 28 days)
   // This hook MUST be called before any early returns to maintain hook order
@@ -787,6 +834,17 @@ export default function InsightsPage() {
     const hasData = counts.some(count => count > 0);
     return { dailyCounts: counts, dates: days, hasData };
   }, [timelineReflectionEntries]);
+
+  // Group summary reflections by source for source insights
+  const sourceReflectionsById = useMemo(() => {
+    const map = new Map<string, ReflectionEntry[]>();
+    summaryReflectionEntries.forEach((r) => {
+      if (!r.sourceId) return;
+      if (!map.has(r.sourceId)) map.set(r.sourceId, []);
+      map.get(r.sourceId)!.push(r);
+    });
+    return map;
+  }, [summaryReflectionEntries]);
 
   if (!mounted) return null;
 
@@ -1641,6 +1699,37 @@ export default function InsightsPage() {
                           {bucket.topic} · {bucket.count} entries
                         </span>
                       ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Source-driven topics */}
+                <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-white">Top topics this month</p>
+                    <span className="text-[11px] text-white/50">External sources</span>
+                  </div>
+                  {sources.length === 0 ? (
+                    <p className="text-sm text-white/60">Connect a source to get topic insights.</p>
+                  ) : sourceReflectionsById.size === 0 ? (
+                    <p className="text-sm text-white/60">No source-driven insights yet.</p>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {sources
+                        .filter((s) => s.sourceId && sourceReflectionsById.has(s.sourceId))
+                        .map((source) => {
+                          const highlight =
+                            sourceInsights?.highlights.find((h) => h.sourceId === source.sourceId)?.items?.[0];
+                          const reflectionsForSource = sourceReflectionsById.get(source.sourceId!) ?? [];
+                          return (
+                            <InsightsSourceCard
+                              key={source.sourceId ?? source.id}
+                              source={source}
+                              reflections={reflectionsForSource}
+                              highlight={highlight}
+                            />
+                          );
+                        })}
                     </div>
                   )}
                 </section>

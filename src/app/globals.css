@@ -25,6 +25,149 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Vault unlock animations - minimal state machine animations */
+
+/* Approach: dims background and slightly scales down main content */
+@keyframes vaultApproach {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.vault-approach {
+  animation: vaultApproach 0.4s ease-out forwards;
+}
+
+.vault-approach .vault-content {
+  transform: scale(0.98);
+  transition: transform 0.4s ease-out;
+}
+
+/* Travel: soft zoom in plus subtle blur on background ring */
+@keyframes vaultTravel {
+  0% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1.02);
+  }
+}
+
+.vault-travel {
+  animation: vaultTravel 0.6s ease-in-out forwards;
+}
+
+.vault-travel .vault-ring {
+  filter: blur(2px);
+  transition: filter 0.6s ease-in-out;
+}
+
+/* Unlock: quick brightness pulse */
+@keyframes vaultUnlock {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.3);
+  }
+}
+
+.vault-unlock {
+  animation: vaultUnlock 0.7s ease-in-out;
+}
+
+/* Resolve: fade out */
+.vault-resolve {
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+
+/* Error: small shake */
+@keyframes vaultError {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-4px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(4px);
+  }
+}
+
+.vault-error {
+  animation: vaultError 0.5s ease-in-out;
+}
+
+/* Background ring element */
+.vault-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+  filter: blur(0px);
+  transition: filter 0.6s ease-in-out;
+}
+
+/* Content container */
+.vault-content {
+  position: relative;
+  z-index: 10;
+  transition: transform 0.4s ease-out;
+}
+
+.vault-text {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+}
+
+.vault-error .vault-text {
+  color: #fca5a5;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .vault-approach,
+  .vault-travel,
+  .vault-unlock,
+  .vault-error {
+    animation: none;
+    transform: none !important;
+    filter: none !important;
+  }
+  
+  .vault-approach .vault-content,
+  .vault-travel .vault-content {
+    transform: none !important;
+  }
+  
+  .vault-travel .vault-ring {
+    filter: none !important;
+  }
+  
+  .vault-approach,
+  .vault-travel,
+  .vault-unlock {
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  }
+  
+  .vault-error {
+    opacity: 1;
+  }
+  
+  .vault-resolve {
+    transition: opacity 0.3s ease;
+  }
+}
+
 /* Vault unlock animations */
 @keyframes fadeOut {
   from {
