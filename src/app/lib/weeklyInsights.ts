@@ -2,6 +2,8 @@
 
 import type { InternalEvent } from "./types";
 import type { UnifiedInternalEvent } from "../../lib/internalEvents";
+import type { TimeWindow } from "./insights/timeWindows";
+import { fitHeuristics } from "./insights/distributions";
 
 export type WeeklyInsight = {
   weekId: string;         // e.g. "2025-12-01" for the Monday of that week
@@ -12,6 +14,9 @@ export type WeeklyInsight = {
   avgJournalLength: number;
   topGuessedTopics: string[];
   summaryText: string;
+  distributionLabel?: 'normal' | 'lognormal' | 'powerlaw' | 'mixed';
+  skew?: number;
+  concentrationShareTop10PercentDays?: number;
 };
 
 function startOfWeek(date: Date): Date {
@@ -54,6 +59,7 @@ export function computeWeeklyInsights(
       journalEvents: number;
       totalJournalLength: number;
       topicCounts: Map<string, number>;
+      events: (InternalEvent | UnifiedInternalEvent)[];
     }
   >();
 
@@ -73,11 +79,13 @@ export function computeWeeklyInsights(
         journalEvents: 0,
         totalJournalLength: 0,
         topicCounts: new Map(),
+        events: [],
       };
       buckets.set(weekId, bucket);
     }
 
     bucket.totalEvents += 1;
+    bucket.events.push(ev);
 
     // Determine if this is a UnifiedInternalEvent or legacy InternalEvent
     const isUnified = "sourceKind" in ev;
@@ -153,6 +161,13 @@ export function computeWeeklyInsights(
       topTopics,
     });
 
+    const distribution = fitHeuristics(
+      bucket.events.map((ev) => {
+        const eventAt = typeof ev.eventAt === "string" ? new Date(ev.eventAt) : ev.eventAt;
+        return { eventAt };
+      })
+    );
+
     insights.push({
       weekId,
       startDate: bucket.startDate,
@@ -162,6 +177,9 @@ export function computeWeeklyInsights(
       avgJournalLength,
       topGuessedTopics: topTopics,
       summaryText,
+      distributionLabel: distribution.distributionLabel,
+      skew: distribution.skew,
+      concentrationShareTop10PercentDays: distribution.concentrationShareTop10PercentDays,
     });
   }
 
@@ -169,6 +187,209 @@ export function computeWeeklyInsights(
   insights.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 
   return insights;
+}
+
+/**
+ * Compute insights for an arbitrary time window
+ * Extends weekly insights to work with any time window
+ */
+export function computeInsightsForWindow(
+  events: InternalEvent[] | UnifiedInternalEvent[],
+  window: TimeWindow
+): {
+  totalEntries: number;
+  totalEvents: number;
+  dominantTopics: string[];
+  largestTopicDrift: {
+    topic: string;
+    trend: 'rising' | 'stable' | 'fading';
+    change: number;
+  } | null;
+  mostRepeatedPhrases: Array<{ phrase: string; count: number }>;
+  peakMonths: Array<{ month: string; count: number }>;
+  distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed';
+  skew: number;
+  concentrationShareTop10PercentDays: number;
+} {
+  // Filter events to the time window
+  const windowEvents = events.filter((ev) => {
+    const eventAtDate = typeof ev.eventAt === "string" ? new Date(ev.eventAt) : ev.eventAt;
+    return eventAtDate >= window.start && eventAtDate <= window.end;
+  });
+
+  const totalEvents = windowEvents.length;
+
+  // Extract journal entries (reflections)
+  const journalEvents: Array<{
+    eventAt: Date;
+    topics: string[];
+    length: number;
+    plaintext?: string;
+  }> = [];
+
+  const topicCounts = new Map<string, number>();
+
+  for (const ev of windowEvents) {
+    const eventAtDate = typeof ev.eventAt === "string" ? new Date(ev.eventAt) : ev.eventAt;
+    
+    const isUnified = "sourceKind" in ev;
+    let sourceKind: string | undefined;
+    let eventKind: string | undefined;
+    let topics: string[] = [];
+    let length = 0;
+    let plaintext: string | undefined;
+
+    if (isUnified) {
+      const unified = ev as UnifiedInternalEvent;
+      sourceKind = unified.sourceKind;
+      eventKind = unified.eventKind;
+      topics = unified.topics ?? [];
+      
+      const rawMeta = unified.rawMetadata as Record<string, unknown> | undefined;
+      if (rawMeta?.raw_metadata && typeof (rawMeta.raw_metadata as Record<string, unknown>)?.length === "number") {
+        length = (rawMeta.raw_metadata as Record<string, unknown>).length as number;
+      } else if (rawMeta?.length && typeof rawMeta.length === "number") {
+        length = rawMeta.length as number;
+      } else if (unified.details) {
+        length = unified.details.length;
+        plaintext = unified.details;
+      }
+    } else {
+      const internal = ev as InternalEvent;
+      const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
+      sourceKind = payload.source_kind as string | undefined;
+      eventKind = payload.event_kind as string | undefined;
+
+      length =
+        typeof (payload?.raw_metadata as Record<string, unknown>)?.length === "number"
+          ? ((payload.raw_metadata as Record<string, unknown>).length as number)
+          : typeof payload?.content === "string"
+          ? (payload.content as string).length
+          : 0;
+
+      topics = Array.isArray(payload?.topics)
+        ? (payload.topics as unknown[]).filter((t): t is string => typeof t === "string")
+        : [];
+
+      if (typeof payload?.content === "string") {
+        plaintext = payload.content;
+      }
+    }
+
+    if (sourceKind === "journal" && eventKind === "written") {
+      journalEvents.push({
+        eventAt: eventAtDate,
+        topics,
+        length,
+        plaintext,
+      });
+
+      for (const t of topics) {
+        topicCounts.set(t, (topicCounts.get(t) || 0) + 1);
+      }
+    }
+  }
+
+  const totalEntries = journalEvents.length;
+
+  // Get dominant topics (top 5)
+  const dominantTopics = Array.from(topicCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([topic]) => topic);
+
+  // Compute topic drift (simplified: compare first half vs second half of window)
+  const midpoint = new Date(
+    window.start.getTime() + (window.end.getTime() - window.start.getTime()) / 2
+  );
+
+  const firstHalfTopics = new Map<string, number>();
+  const secondHalfTopics = new Map<string, number>();
+
+  journalEvents.forEach((entry) => {
+    const isFirstHalf = entry.eventAt < midpoint;
+    entry.topics.forEach((topic) => {
+      if (isFirstHalf) {
+        firstHalfTopics.set(topic, (firstHalfTopics.get(topic) || 0) + 1);
+      } else {
+        secondHalfTopics.set(topic, (secondHalfTopics.get(topic) || 0) + 1);
+      }
+    });
+  });
+
+  // Find largest topic drift
+  let largestDrift: {
+    topic: string;
+    trend: 'rising' | 'stable' | 'fading';
+    change: number;
+  } | null = null;
+
+  const allTopics = new Set([...firstHalfTopics.keys(), ...secondHalfTopics.keys()]);
+  for (const topic of allTopics) {
+    const firstCount = firstHalfTopics.get(topic) || 0;
+    const secondCount = secondHalfTopics.get(topic) || 0;
+    const change = secondCount - firstCount;
+    const absChange = Math.abs(change);
+
+    if (!largestDrift || absChange > Math.abs(largestDrift.change)) {
+      let trend: 'rising' | 'stable' | 'fading' = 'stable';
+      if (change > 0) trend = 'rising';
+      else if (change < 0) trend = 'fading';
+
+      largestDrift = {
+        topic,
+        trend,
+        change,
+      };
+    }
+  }
+
+  // Extract most repeated phrases (simple: 2-3 word phrases)
+  const phraseCounts = new Map<string, number>();
+  journalEvents.forEach((entry) => {
+    if (!entry.plaintext) return;
+    const words = entry.plaintext.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    
+    // Extract 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      const phrase = `${words[i]} ${words[i + 1]}`;
+      phraseCounts.set(phrase, (phraseCounts.get(phrase) || 0) + 1);
+    }
+  });
+
+  const mostRepeatedPhrases = Array.from(phraseCounts.entries())
+    .filter(([, count]) => count >= 2) // Only phrases that appear at least twice
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([phrase, count]) => ({ phrase, count }));
+
+  // Find peak months
+  const monthCounts = new Map<string, number>();
+  journalEvents.forEach((entry) => {
+    const monthKey = entry.eventAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    monthCounts.set(monthKey, (monthCounts.get(monthKey) || 0) + 1);
+  });
+
+  const peakMonths = Array.from(monthCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([month, count]) => ({ month, count }));
+
+  const distribution = fitHeuristics(
+    journalEvents.map((e) => ({ eventAt: e.eventAt }))
+  );
+
+  return {
+    totalEntries,
+    totalEvents,
+    dominantTopics,
+    largestTopicDrift: largestDrift,
+    mostRepeatedPhrases,
+    peakMonths,
+    distributionLabel: distribution.distributionLabel,
+    skew: distribution.skew,
+    concentrationShareTop10PercentDays: distribution.concentrationShareTop10PercentDays,
+  };
 }
 
 function buildSummaryText(params: {

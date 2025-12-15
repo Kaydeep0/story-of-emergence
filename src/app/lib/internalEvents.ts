@@ -195,10 +195,72 @@ export function useInternalEvents() {
         setEvents(result.items);
       })
       .catch((err) => {
-        console.error('[useInternalEvents] Failed to load events:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[useInternalEvents] Failed to load events:', err);
+        }
         setEvents([]);
       });
   }, [isConnected, address, encryptionReady, sessionKey]);
 
   return { events };
+}
+
+// ----- Source Events Import -----
+
+/**
+ * Insert multiple source events as internal events
+ * @param wallet - wallet address
+ * @param sessionKey - AES key derived from consent signature
+ * @param sourceId - the source ID these events belong to
+ * @param events - array of source events to import
+ * @returns array of inserted internal events
+ */
+export async function rpcInsertSourceEvents(
+  wallet: string,
+  sessionKey: CryptoKey,
+  sourceId: string,
+  events: Array<{
+    source_kind: string;
+    occurred_at: Date;
+    title: string;
+    url?: string | null;
+    raw?: string | null;
+  }>
+): Promise<InternalEvent[]> {
+  const supabase = getSupabaseForWallet(wallet);
+  
+  // Insert each event as an internal event with source_event payload
+  const inserted: InternalEvent[] = [];
+  
+  for (const event of events) {
+    const payload = {
+      type: 'source_event' as const,
+      source_id: sourceId,
+      source_kind: event.source_kind,
+      title: event.title,
+      url: event.url ?? null,
+      raw: event.raw ?? null,
+    };
+    
+    const cipher = await encryptJSON(sessionKey, payload);
+    
+    const { data, error } = await supabase.rpc("insert_internal_event", {
+      w: wallet.toLowerCase(),
+      p_event_at: event.occurred_at.toISOString(),
+      p_ciphertext: cipher,
+      p_encryption_version: 1,
+    });
+    
+    if (error) throw error;
+    
+    const row = data as InternalEventRow;
+    inserted.push({
+      id: row.id,
+      eventAt: new Date(row.event_at),
+      createdAt: new Date(row.created_at),
+      plaintext: payload,
+    });
+  }
+  
+  return inserted;
 }

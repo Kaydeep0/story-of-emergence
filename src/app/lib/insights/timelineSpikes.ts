@@ -1,6 +1,23 @@
 // src/app/lib/insights/timelineSpikes.ts
 // Pure function to compute timeline spikes from decrypted reflections
 // Runs entirely client-side - no network calls, no side effects
+//
+// DATA FLOW: Source → Reflection → Internal Event → Insight
+//
+// This module is part of the INSIGHT generation phase:
+//
+// 1. SOURCE: External entries (YouTube, articles, books) stored in external_entries
+// 2. REFLECTION: User imports source → creates reflection entry → linked via reflection_links
+// 3. INTERNAL EVENT: Reflection creation logs internal_event (source_event type)
+// 4. INSIGHT: This function analyzes reflections (including source-linked ones) to detect:
+//    - Days with unusually high writing activity (spikes)
+//    - Spikes are days with ≥3 entries AND ≥2× median daily activity
+//
+// Input: Array of ReflectionEntry (already decrypted, may have sourceId)
+// Output: Array of TimelineSpikeCard (insight cards for detected spikes)
+//
+// Source-linked reflections are identified by sourceId field on ReflectionEntry.
+// The Insights page uses this to show "From source" badges on spikes.
 
 import type { ReflectionEntry, InsightCard, InsightEvidence, TimelineSpikeCard, TimelineSpikeData } from './types';
 
@@ -201,8 +218,19 @@ export function itemToReflectionEntry(
   getSourceIdFor?: (reflectionId: string) => string | undefined
 ): ReflectionEntry {
   // Surface a sourceId if it is already present on the plaintext payload
-  // or from the reflection links (if getSourceIdFor is provided)
-  const overrideSource = getSourceIdFor ? getSourceIdFor(item.id) : undefined;
+  // or from the reflection links (if getSourceIdFor is provided and is a function)
+  let overrideSource: string | undefined = undefined;
+  if (getSourceIdFor && typeof getSourceIdFor === 'function') {
+    try {
+      overrideSource = getSourceIdFor(item.id);
+    } catch (err) {
+      // Silently handle errors from getSourceIdFor
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[timelineSpikes] Error calling getSourceIdFor:', err);
+      }
+    }
+  }
+  
   const sourceId =
     overrideSource !== undefined
       ? overrideSource || undefined
@@ -236,20 +264,11 @@ export function itemToReflectionEntry(
 }
 
 /**
- * Temporary helper to attach demo source links to a small subset of reflections.
- * This is UI-only and will be removed when real source links arrive.
+ * @deprecated This function is no longer needed with real reflection_links.
+ * Kept for backward compatibility but returns reflections unchanged.
  */
 export function attachDemoSourceLinks(reflections: ReflectionEntry[]): ReflectionEntry[] {
-  const demoSources = ['yt_demo_1', 'article_demo_1', 'book_demo_1'];
-  let assigned = 0;
-
-  return reflections.map((reflection) => {
-    if (reflection.sourceId) return reflection;
-    const sourceId = demoSources[assigned];
-    if (!sourceId) return reflection;
-
-    assigned += 1;
-    return { ...reflection, sourceId };
-  });
+  // No-op: real source links are now handled via reflection_links table
+  return reflections;
 }
 

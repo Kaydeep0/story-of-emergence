@@ -3,45 +3,48 @@
 
 import { useMemo, useState } from 'react';
 import type { ReflectionEntry } from '../../lib/insights/types';
+import { computeSourceWordFreq, computeSourceSummary } from '../../lib/insights/fromSources';
 
 type Props = {
   reflections: ReflectionEntry[];
 };
 
-const STOPWORDS = new Set([
-  'the','a','an','and','or','but','if','then','else','for','to','of','in','on','at','by','with','about','into','over','after','before','between','so','than','too','very','can','just','from','up','out','as','is','are','was','were','be','been','being','that','this','those','these','it','its','i','me','my','you','your','we','our','they','them','their'
-]);
-
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
-}
-
 export function InsightsPanel({ reflections }: Props) {
   const [copied, setCopied] = useState(false);
 
   const { topWords, highlights, summary } = useMemo(() => {
-    const allText = reflections.map((r) => r.plaintext || '').join(' ');
-    const tokens = tokenize(allText);
+    // INTEGRITY GUARDRAIL: If source has zero reflections, Insights must show "Not enough data"
+    if (reflections.length === 0) {
+      return {
+        topWords: [],
+        highlights: [],
+        summary: 'Not enough data yet.',
+      };
+    }
 
-    const freq = new Map<string, number>();
-    tokens.forEach((w) => freq.set(w, (freq.get(w) || 0) + 1));
+    // INTEGRITY GUARDRAIL: If reflections exist, Insights must never be empty silently
+    // Compute top 8 words
+    const topWords = computeSourceWordFreq(reflections, 8);
 
-    const sorted = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]);
-    const topWords = sorted.slice(0, 5).map(([word, count]) => ({ word, count }));
-
+    // Get up to 3 highlights (first line from each reflection)
     const highlights = reflections
-      .map((r) => (typeof r.plaintext === 'string' ? r.plaintext.split('\n')[0] : ''))
-      .filter((line) => line.trim().length > 0)
-      .slice(0, 2);
+      .map((r) => {
+        const text = typeof r.plaintext === 'string' ? r.plaintext : String(r.plaintext ?? '');
+        return text.split('\n')[0]?.trim() || '';
+      })
+      .filter((line) => line.length > 0)
+      .slice(0, 3);
 
-    const summary =
-      topWords.length > 0
-        ? `Themes: ${topWords.map((t) => t.word).join(', ')}`
-        : 'Not enough data yet.';
+    // Generate 2-3 sentence summary
+    const summary = computeSourceSummary(reflections);
+
+    // Defensive check: ensure we always have meaningful output when reflections exist
+    if (reflections.length > 0 && topWords.length === 0 && highlights.length === 0 && summary === 'Not enough data yet.') {
+      // This should not happen, but if it does, provide fallback
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[InsightsPanel] Reflections exist but insights are empty. This may indicate a data quality issue.');
+      }
+    }
 
     return { topWords, highlights, summary };
   }, [reflections]);

@@ -27,7 +27,9 @@ export async function fetchReflectionLinks(walletAddress: string): Promise<Refle
     .eq('wallet_address', walletAddress.toLowerCase());
 
   if (error) {
-    console.error('Failed to fetch reflection links:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[reflectionLinks] Failed to fetch reflection links:', error);
+    }
     throw error;
   }
 
@@ -65,7 +67,9 @@ export async function upsertReflectionLink(
       .eq('reflection_id', reflectionId);
 
     if (error) {
-      console.error('Failed to delete reflection link:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[reflectionLinks] Failed to delete reflection link:', error);
+      }
       throw error;
     }
     return;
@@ -90,7 +94,9 @@ export async function upsertReflectionLink(
       .eq('id', existing.id);
 
     if (error) {
-      console.error('Failed to update reflection link:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[reflectionLinks] Failed to update reflection link:', error);
+      }
       throw error;
     }
   } else {
@@ -104,7 +110,9 @@ export async function upsertReflectionLink(
       });
 
     if (error) {
-      console.error('Failed to insert reflection link:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[reflectionLinks] Failed to insert reflection link:', error);
+      }
       throw error;
     }
   }
@@ -127,7 +135,9 @@ export async function deleteReflectionLink(
     .eq('reflection_id', reflectionId);
 
   if (error) {
-    console.error('Failed to delete reflection link:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[reflectionLinks] Failed to delete reflection link:', error);
+    }
     throw error;
   }
 }
@@ -184,7 +194,9 @@ export function useReflectionLinks(walletAddress?: string) {
       })
       .catch((err) => {
         if (!cancelled) {
-          console.error('Failed to load reflection links:', err);
+          if (process.env.NODE_ENV === 'development') {
+          console.error('[reflectionLinks] Failed to load reflection links:', err);
+        }
           setError(err?.message ?? 'Failed to load reflection links');
           setLoading(false);
         }
@@ -253,7 +265,9 @@ export function useReflectionLinks(walletAddress?: string) {
         setLinks(previousLinks);
         const errMsg = err?.message ?? 'Failed to update reflection link';
         toast.error(errMsg);
-        console.error('Failed to set reflection link:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[reflectionLinks] Failed to set reflection link:', err);
+        }
       }
     },
     [walletAddress, links]

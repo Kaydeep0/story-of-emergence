@@ -12,10 +12,23 @@ if (!url || !anonKey) {
 }
 
 export async function GET(request: Request) {
+  const routeName = '/api/summary';
+  const supabaseCalls = ['entry_count_for_wallet', 'list_internal_events'];
+
   try {
+    // Verify env vars
+    if (!url || !anonKey) {
+      console.error(`[${routeName}] Missing Supabase env vars. URL: ${!!url}, AnonKey: ${!!anonKey}`);
+      return NextResponse.json(
+        { error: 'Server configuration error', streak: 0, entries: 0, totalEvents: 0, lastActiveAt: null },
+        { status: 500 }
+      );
+    }
+
     const walletAddress = request.headers.get('x-wallet-address') ?? '';
 
     if (!walletAddress) {
+      console.log(`[${routeName}] No wallet address, returning empty summary`);
       return NextResponse.json({
         streak: 0,
         entries: 0,
@@ -33,15 +46,28 @@ export async function GET(request: Request) {
       },
     });
 
+    console.log(`[${routeName}] Fetching summary for wallet: ${walletAddress.slice(0, 8)}...`);
+
     // Fetch entry count
+    const entryRpcName = supabaseCalls[0];
     const { data: entryCountData, error: entryError } = await supabase.rpc(
-      'entry_count_for_wallet',
+      entryRpcName,
       { w: walletAddress.toLowerCase() }
     );
 
+    if (entryError) {
+      console.error(`[${routeName}] ${entryRpcName} RPC error:`, {
+        message: entryError.message,
+        code: entryError.code,
+        details: entryError.details,
+        hint: entryError.hint,
+      });
+    }
+
     // Fetch internal events count
+    const eventsRpcName = supabaseCalls[1];
     const { data: events, error: eventsError } = await supabase.rpc(
-      'list_internal_events',
+      eventsRpcName,
       {
         w: walletAddress.toLowerCase(),
         p_limit: 100,
@@ -49,11 +75,13 @@ export async function GET(request: Request) {
       }
     );
 
-    if (entryError) {
-      console.error('[summary] entry_count_for_wallet error', entryError);
-    }
     if (eventsError) {
-      console.error('[summary] list_internal_events error', eventsError);
+      console.error(`[${routeName}] ${eventsRpcName} RPC error:`, {
+        message: eventsError.message,
+        code: eventsError.code,
+        details: eventsError.details,
+        hint: eventsError.hint,
+      });
     }
 
     const entries = typeof entryCountData === 'number' ? entryCountData : 0;
@@ -70,6 +98,7 @@ export async function GET(request: Request) {
       lastActiveAt = events[0]?.event_at ?? null;
     }
 
+    console.log(`[${routeName}] Successfully fetched summary: ${entries} entries, ${totalEvents} events`);
     return NextResponse.json({
       streak,
       entries,
@@ -77,9 +106,13 @@ export async function GET(request: Request) {
       lastActiveAt,
     });
   } catch (err: any) {
-    console.error('[summary] unexpected error', err);
+    console.error(`[${routeName}] Unexpected error:`, {
+      message: err?.message,
+      stack: err?.stack,
+      supabaseCalls: supabaseCalls.join(', '),
+    });
     return NextResponse.json(
-      { error: 'Unexpected error loading summary' },
+      { error: 'Unexpected error loading summary', streak: 0, entries: 0, totalEvents: 0, lastActiveAt: null },
       { status: 500 }
     );
   }

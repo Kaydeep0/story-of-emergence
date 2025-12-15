@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
+import type { SourceEntryLite } from '../../lib/insights/fromSources';
 
 /**
  * Normalized insight type that the drawer can consume
@@ -380,6 +381,7 @@ export function InsightDrawer({
   isHighlighted,
   toggleHighlight,
   reflectionEntries = [],
+  sources = [],
   isLoading = false,
   isEmpty = false,
   onNewReflection,
@@ -391,6 +393,7 @@ export function InsightDrawer({
   isHighlighted?: (card: InsightCard) => boolean;
   toggleHighlight?: (card: InsightCard) => void;
   reflectionEntries?: ReflectionEntry[];
+  sources?: SourceEntryLite[];
   isLoading?: boolean;
   isEmpty?: boolean;
   onNewReflection?: () => void;
@@ -447,9 +450,26 @@ export function InsightDrawer({
     }
   };
 
+  // Create a map of sourceId -> source title for quick lookups
+  const sourceTitleById = new Map<string, string>();
+  sources.forEach((s) => {
+    if (s.sourceId && s.title) {
+      sourceTitleById.set(s.sourceId, s.title);
+    }
+  });
+
   // Helper to find reflection by entryId
   function getReflectionByEntryId(entryId: string): ReflectionEntry | null {
     return reflectionEntries.find(entry => entry.id === entryId) || null;
+  }
+
+  // Helper to get source name for an evidence item
+  function getSourceNameForEvidence(entryId: string): string | null {
+    const reflection = getReflectionByEntryId(entryId);
+    if (reflection?.sourceId) {
+      return sourceTitleById.get(reflection.sourceId) || null;
+    }
+    return null;
   }
 
   // Helper to get preview text for evidence
@@ -707,6 +727,7 @@ export function InsightDrawer({
                         const preview = getEvidencePreview(ev);
                         const reflection = getReflectionByEntryId(ev.entryId);
                         const isClickable = !!reflection;
+                        const sourceName = getSourceNameForEvidence(ev.entryId);
                         const delayMs = 75; // Stagger delay in milliseconds (60-80ms range)
                         
                         return (
@@ -730,7 +751,17 @@ export function InsightDrawer({
                             ) : (
                               <span className="insight-evidence-date text-white/40 text-xs">•</span>
                             )}
-                            <span className="insight-evidence-text text-white/70 text-sm flex-1">{preview}</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="insight-evidence-text text-white/70 text-sm block">{preview}</span>
+                              {sourceName && (
+                                <span className="inline-flex items-center gap-1 text-xs text-white/40 mt-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                  </svg>
+                                  From Source: {sourceName}
+                                </span>
+                              )}
+                            </div>
                           </li>
                         );
                       })
@@ -869,6 +900,7 @@ export function InsightDrawer({
                     const preview = getEvidencePreview(ev);
                     const reflection = getReflectionByEntryId(ev.entryId);
                     const isClickable = !!reflection;
+                    const sourceName = getSourceNameForEvidence(ev.entryId);
                     const delayMs = 75; // Stagger delay in milliseconds (60-80ms range)
                     
                     return (
@@ -892,7 +924,17 @@ export function InsightDrawer({
                         ) : (
                           <span className="insight-evidence-date text-white/40 text-xs">•</span>
                         )}
-                        <span className="insight-evidence-text text-white/70 text-sm flex-1">{preview}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="insight-evidence-text text-white/70 text-sm block">{preview}</span>
+                          {sourceName && (
+                            <span className="inline-flex items-center gap-1 text-xs text-white/40 mt-1">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                              </svg>
+                              From Source: {sourceName}
+                            </span>
+                          )}
+                        </div>
                       </li>
                     );
                   })

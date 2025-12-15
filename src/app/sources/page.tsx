@@ -13,6 +13,7 @@ import { SourceForm } from '../components/SourceForm';
 import { insertExternalSource } from '../lib/sources';
 import { toast } from 'sonner';
 import { useReflectionLinks } from '../lib/reflectionLinks';
+import { importYoutubeTakeout } from '../lib/sources/importYoutubeTakeout';
 
 export default function SourcesPage() {
   const { address, isConnected } = useAccount();
@@ -26,6 +27,7 @@ export default function SourcesPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const connected = isConnected && !!address;
 
@@ -78,7 +80,9 @@ export default function SourcesPage() {
 
         if (cancelled) return;
 
-        const reflectionEntries = attachDemoSourceLinks(items.map(itemToReflectionEntry));
+        const reflectionEntries = attachDemoSourceLinks(
+          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+        );
         setReflections(reflectionEntries);
       } catch (err) {
         if (!cancelled) {
@@ -150,25 +154,73 @@ export default function SourcesPage() {
               You have {sources.length} external source{sources.length === 1 ? '' : 's'} linked to this wallet.
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => setAdding((v) => !v)}
-            className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors"
-          >
-            {adding ? 'Close' : 'Add source'}
-          </button>
+          <div className="flex gap-2">
+            {/* Dev-only YouTube Takeout import button */}
+            {process.env.NODE_ENV === 'development' && (
+              <label className="rounded-lg border border-yellow-500/30 px-3 py-1.5 text-sm text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/15 transition-colors cursor-pointer">
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  disabled={importing}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    setImporting(true);
+                    try {
+                      const result = await importYoutubeTakeout(file);
+                      
+                      // Log results to console
+                      console.group('📥 YouTube Takeout Import Results');
+                      console.log('Total events:', result.stats.total);
+                      console.log('Watch events:', result.stats.watchCount);
+                      console.log('Like events:', result.stats.likeCount);
+                      console.log('Date range:', {
+                        earliest: result.stats.dateRange.earliest?.toISOString() || 'N/A',
+                        latest: result.stats.dateRange.latest?.toISOString() || 'N/A',
+                      });
+                      console.log('Sample events (first 3):', result.events.slice(0, 3));
+                      console.log('All events:', result.events);
+                      console.groupEnd();
+                      
+                      toast.success(`Imported ${result.stats.total} events (${result.stats.watchCount} watches, ${result.stats.likeCount} likes)`);
+                    } catch (error) {
+                      console.error('YouTube Takeout import failed:', error);
+                      toast.error(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    } finally {
+                      setImporting(false);
+                      // Reset input
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                {importing ? 'Importing...' : '📥 Import YouTube Takeout (Dev)'}
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={() => setAdding((v) => !v)}
+              className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors"
+            >
+              {adding ? 'Close' : 'Add source'}
+            </button>
+          </div>
         </div>
 
         {adding && (
           <div className="mb-6">
             <SourceForm
-              onSubmit={async ({ title, kind, sourceId, notes }) => {
+              onSubmit={async ({ title, kind, sourceId, notes, url, sourceType }) => {
                 if (!address) return;
                 const row = await insertExternalSource(address, {
                   title,
                   kind,
                   sourceId,
                   notes,
+                  url,
+                  platform: 'manual',
+                  sourceType,
                 });
                 const mapped: SourceEntry = {
                   id: row.id,
@@ -180,6 +232,8 @@ export default function SourcesPage() {
                   createdAt: row.created_at,
                   notes: row.notes,
                   capturedAt: row.captured_at,
+                  platform: 'manual',
+                  sourceType: sourceType || 'note',
                 };
                 setSources((prev) => [mapped, ...prev]);
                 toast.success('Source added');

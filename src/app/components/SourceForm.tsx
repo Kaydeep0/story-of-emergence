@@ -2,21 +2,25 @@
 'use client';
 
 import { useState } from 'react';
+import type { SourceType } from '../lib/sources';
 
 type Props = {
-  onSubmit: (data: { title: string; kind: string; sourceId: string; notes?: string }) => Promise<void>;
+  onSubmit: (data: { title: string; kind: string; sourceId: string; notes?: string; url?: string; sourceType?: SourceType }) => Promise<void>;
   onCancel: () => void;
 };
 
-const KIND_OPTIONS = [
-  { value: 'youtube', label: 'YouTube' },
+const SOURCE_TYPE_OPTIONS: { value: SourceType; label: string }[] = [
+  { value: 'note', label: 'Note' },
   { value: 'article', label: 'Article' },
-  { value: 'book', label: 'Book' },
+  { value: 'link', label: 'Link' },
+  { value: 'video', label: 'Video' },
+  { value: 'post', label: 'Post' },
 ];
 
 export function SourceForm({ onSubmit, onCancel }: Props) {
   const [title, setTitle] = useState('');
-  const [kind, setKind] = useState('youtube');
+  const [sourceType, setSourceType] = useState<SourceType>('note');
+  const [url, setUrl] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -25,13 +29,22 @@ export function SourceForm({ onSubmit, onCancel }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!title.trim() || !sourceId.trim()) {
-      setError('Title and Source ID are required.');
+    if (!title.trim()) {
+      setError('Title is required.');
       return;
     }
+    // Generate sourceId from title if not provided
+    const finalSourceId = sourceId.trim() || `manual_${Date.now()}`;
     try {
       setSubmitting(true);
-      await onSubmit({ title: title.trim(), kind, sourceId: sourceId.trim(), notes: notes.trim() || undefined });
+      await onSubmit({ 
+        title: title.trim(), 
+        kind: 'manual', // Default platform to "manual"
+        sourceId: finalSourceId, 
+        notes: notes.trim() || undefined,
+        url: url.trim() || undefined,
+        sourceType,
+      });
     } catch (err: any) {
       setError(err?.message ?? 'Failed to add source.');
     } finally {
@@ -41,24 +54,32 @@ export function SourceForm({ onSubmit, onCancel }: Props) {
 
   return (
     <form className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4" onSubmit={handleSubmit}>
+      <div className="mb-2">
+        <h3 className="text-sm font-medium text-white/90">Add Source</h3>
+        <p className="text-xs text-white/50 mt-1">Add an external source (not a reflection)</p>
+      </div>
+
       <div className="space-y-1">
-        <label className="text-xs text-white/60">Title</label>
+        <label className="text-xs text-white/60">
+          Title <span className="text-rose-400">*</span>
+        </label>
         <input
           className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Naval Notes 2"
+          placeholder="e.g., Naval Notes 2"
+          required
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs text-white/60">Kind</label>
+        <label className="text-xs text-white/60">Source Type</label>
         <select
           className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
+          value={sourceType}
+          onChange={(e) => setSourceType(e.target.value as SourceType)}
         >
-          {KIND_OPTIONS.map((opt) => (
+          {SOURCE_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
@@ -67,12 +88,23 @@ export function SourceForm({ onSubmit, onCancel }: Props) {
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs text-white/60">Source ID</label>
+        <label className="text-xs text-white/60">URL (optional)</label>
+        <input
+          type="url"
+          className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.com/article"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs text-white/60">Source ID (optional, auto-generated if empty)</label>
         <input
           className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
           value={sourceId}
           onChange={(e) => setSourceId(e.target.value)}
-          placeholder="yt_demo_2"
+          placeholder="Auto-generated if empty"
         />
       </div>
 

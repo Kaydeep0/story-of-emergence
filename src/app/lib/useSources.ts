@@ -1,10 +1,22 @@
 // src/app/lib/useSources.ts
 // Hook for loading external source entries (temporary mock implementation)
+//
+// DATA FLOW: Source → Reflection → Internal Event → Insight
+//
+// 1. SOURCE: External entries (YouTube, articles, books) are stored in external_entries table
+// 2. REFLECTION: User imports a source, creating a reflection entry linked via reflection_links
+// 3. INTERNAL EVENT: When reflection is created, an internal event is logged (source_event)
+// 4. INSIGHT: Insights engine analyzes reflections (including source-linked ones) to generate:
+//    - Timeline spikes (days with high activity)
+//    - Topic drift (how themes change over time)
+//    - Source insights (summary, top words, highlights from linked reflections)
+//
+// This file handles step 1: Loading sources from Supabase.
 
 'use client';
 
 import type { ExternalEntry } from '../../lib/sources';
-import { getSupabaseForWallet } from '../../lib/supabase';
+import { getSupabaseForWallet } from './supabase';
 import { getLocalExternalEntries } from './sources';
 
 /**
@@ -54,12 +66,16 @@ export async function listExternalEntries(walletAddress: string) {
       p_offset: 0,
     });
     if (res.error) {
-      console.error('Error loading external entries', res.error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[useSources] Error loading external entries', res.error);
+      }
     } else {
       data = res.data ?? [];
     }
   } catch (e) {
-    console.error('Error loading external entries', e);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[useSources] Error loading external entries', e);
+    }
   }
 
   const combined = [...data, ...getLocalExternalEntries(walletAddress)];
@@ -85,6 +101,19 @@ export async function listExternalEntries(walletAddress: string) {
       url = row.source_id;
     }
 
+    // Infer platform and sourceType from kind (for backward compatibility)
+    // This will be replaced when database schema is updated
+    let platform: 'manual' | 'youtube' | 'x' | 'article' | 'other' = 'other';
+    if (row.kind === 'manual') platform = 'manual';
+    else if (row.kind === 'youtube') platform = 'youtube';
+    else if (row.kind === 'x') platform = 'x';
+    else if (row.kind === 'article') platform = 'article';
+
+    let sourceType: 'video' | 'post' | 'article' | 'note' | 'link' = 'note';
+    if (row.kind === 'youtube') sourceType = 'video';
+    else if (row.kind === 'article') sourceType = 'article';
+    else if (row.kind === 'book') sourceType = 'note';
+
     return {
       id: row.id,
       walletAddress: row.wallet_address,
@@ -95,6 +124,8 @@ export async function listExternalEntries(walletAddress: string) {
       createdAt: row.created_at || row.captured_at,
       notes,
       capturedAt: row.captured_at,
+      platform,
+      sourceType,
     };
   });
 }

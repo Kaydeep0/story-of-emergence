@@ -18,11 +18,29 @@ export type Source = {
   itemCount: number | null;
 };
 
+// Canonical Source type for future ingestion support
+export type SourcePlatform = 'manual' | 'youtube' | 'x' | 'article' | 'other';
+export type SourceType = 'video' | 'post' | 'article' | 'note' | 'link';
+
+export type CanonicalSource = {
+  id: string;
+  walletAddress: string;
+  platform: SourcePlatform;
+  sourceType: SourceType;
+  title: string;
+  url: string | null;
+  createdAt: string;
+  metadata: Record<string, unknown>; // JSON object for future use
+};
+
 export type ExternalSourceInput = {
   title: string;
   kind: string;
   sourceId: string;
   notes?: string | null;
+  url?: string | null;
+  platform?: SourcePlatform;
+  sourceType?: SourceType;
 };
 
 export type ExternalSourceRow = {
@@ -54,7 +72,7 @@ export async function insertExternalSource(
     kind: input.kind,
     source_id: input.sourceId,
     title: input.title,
-    url: null,
+    url: input.url ?? null,
     created_at: now,
     notes: input.notes ?? null,
     captured_at: now,

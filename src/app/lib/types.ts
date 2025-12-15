@@ -74,9 +74,20 @@ export type InternalEventRangeOptions = {
 
 import type { ExternalSourceKind } from '../../lib/sources';
 
+// ---- Source Event Types ----
+export type SourceEvent = {
+  source_id: string;
+  source_kind: 'youtube' | 'article' | 'book' | 'note';
+  occurred_at: Date;
+  title: string;
+  url?: string | null;
+  raw?: string | null;
+};
+
 export type InternalEventPayload =
   | { type: 'reflection_saved'; id: string }
   | { type: 'source_imported'; id: string; kind: ExternalSourceKind }
+  | { type: 'source_event'; source_id: string; source_kind: string; title: string; url?: string | null; raw?: string | null }
   | { type: 'insight_viewed'; insight: string }
   | { type: 'reflection_deleted'; id: string }
   | { type: 'reflection_restored'; id: string }

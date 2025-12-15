@@ -39,6 +39,7 @@ import { listExternalEntries } from "./lib/useSources";
 
 // react + ui
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from "sonner";
 import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
 import { baseSepolia } from 'viem/chains';
@@ -66,7 +67,8 @@ export default function Home() {
   // ---- hooks must be called first, same order every render ----
   const { address, isConnected } = useAccount();
   const signLockRef = useRef(false);
-
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get('focus');
 
   const chainId = useChainId();
   const { data: balance, isLoading: balLoading } = useBalance({
@@ -256,6 +258,9 @@ async function setSourceLink(reflectionId: string, sourceId: string | null): Pro
 const [nextOffset, setNextOffset] = useState<number | null>(0);
 const [loadingMore, setLoadingMore] = useState(false);
 
+// Focus tracking ref to prevent duplicate scrolls
+const lastFocusedIdRef = useRef<string | null>(null);
+
 
 
 // reload when wallet, encryption ready, or Trash toggle changes
@@ -266,6 +271,39 @@ useEffect(() => {
   loadMyReflections();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [mounted, connected, w, showDeleted, encryptionReady]);
+
+// Handle focus param: scroll to reflection and highlight it
+useEffect(() => {
+  if (!focusId || !mounted) return;
+  
+  // Only run if focusId has changed from what we last processed
+  if (lastFocusedIdRef.current === focusId) return;
+  
+  // Wait for items to be loaded and rendered
+  if (visibleItems.length === 0 && !loadingList) return;
+  
+  // Small delay to ensure DOM is ready
+  const timeoutId = setTimeout(() => {
+    const element = document.querySelector(`[data-entry-id="${focusId}"]`) as HTMLElement;
+    if (element) {
+      // Scroll to element
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Add highlight class
+      element.setAttribute('data-focus', 'true');
+      
+      // Remove highlight after 2.5 seconds
+      setTimeout(() => {
+        element.removeAttribute('data-focus');
+      }, 2500);
+      
+      // Update ref to prevent duplicate scrolls for the same focusId
+      lastFocusedIdRef.current = focusId;
+    }
+  }, 100);
+  
+  return () => clearTimeout(timeoutId);
+}, [focusId, mounted, visibleItems.length]);
 
 
 
@@ -998,7 +1036,7 @@ async function createShare() {
     {/* cards */}
     <div className="mt-4 space-y-2">
 {visibleItems.map((it) => (
-        <div key={it.id} className="rounded-xl border border-white/10 p-3">
+        <div key={it.id} data-entry-id={it.id} className="rounded-xl border border-white/10 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="text-xs text-white/50">
               {new Date(it.ts).toLocaleString()}

@@ -3,8 +3,9 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAccount } from 'wagmi';
+import { toast } from 'sonner';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { listExternalEntries } from '../../lib/useSources';
 import { rpcFetchEntries } from '../../lib/entries';
@@ -12,7 +13,8 @@ import { attachDemoSourceLinks, itemToReflectionEntry } from '../../lib/insights
 import type { ReflectionEntry } from '../../lib/insights/types';
 import type { SourceEntry } from '../../components/SourceCard';
 import { InsightsPanel } from './InsightsPanel';
-import { useReflectionLinks, getSourceIdFor } from '../../lib/reflectionLinks';
+import { useReflectionLinks } from '../../lib/reflectionLinks';
+import { rpcInsertEntry } from '../../lib/entries';
 
 /**
  * Source kind badge component with icons
@@ -66,13 +68,14 @@ export default function SourceDetailPage() {
   const sourceId = params?.sourceId;
   const { address, isConnected } = useAccount();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
-  const { links } = useReflectionLinks(address);
+  const { links, setLink, getSourceIdFor } = useReflectionLinks(address);
 
   const [mounted, setMounted] = useState(false);
   const [source, setSource] = useState<SourceEntry | null>(null);
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const connected = isConnected && !!address;
 
@@ -81,54 +84,83 @@ export default function SourceDetailPage() {
   }, []);
 
   // Load source metadata and reflections client-side
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!mounted || !connected || !encryptionReady || !address || !sessionKey || !sourceId) return;
 
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load sources and find the one matching sourceId
+      const entries = (await listExternalEntries(address)) as SourceEntry[];
+      const match = entries.find((s) => s.sourceId === sourceId);
+      setSource(match ?? null);
+
+      // Load reflections and filter by sourceId
+      const { items } = await rpcFetchEntries(address, sessionKey, {
+        includeDeleted: false,
+        limit: 500,
+        offset: 0,
+      });
+      const reflectionEntries = attachDemoSourceLinks(
+        items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+      );
+      const linked = reflectionEntries.filter((r) => r.sourceId === sourceId);
+      setReflections(linked);
+    } catch (err: any) {
+      console.error('Failed to load source detail', err);
+      setError(err?.message ?? 'Failed to load source detail');
+    } finally {
+      setLoading(false);
+    }
+  }, [mounted, connected, encryptionReady, address, sessionKey, sourceId, getSourceIdFor]);
+
+  useEffect(() => {
     let cancelled = false;
 
-    async function loadData() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Load sources and find the one matching sourceId
-        const entries = (await listExternalEntries(address)) as SourceEntry[];
-        if (cancelled) return;
-        const match = entries.find((s) => s.sourceId === sourceId);
-        setSource(match ?? null);
-
-        // Load reflections and filter by sourceId
-        const { items } = await rpcFetchEntries(address, sessionKey, {
-          includeDeleted: false,
-          limit: 500,
-          offset: 0,
-        });
-        if (cancelled) return;
-        const reflectionEntries = attachDemoSourceLinks(
-          items.map((item) => itemToReflectionEntry(item, (reflectionId) => getSourceIdFor(reflectionId, links)))
-        );
-        const linked = reflectionEntries.filter((r) => r.sourceId === sourceId);
-        setReflections(linked);
-      } catch (err: any) {
-        if (!cancelled) {
-          console.error('Failed to load source detail', err);
-          setError(err?.message ?? 'Failed to load source detail');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+    async function runLoadData() {
+      await loadData();
+      if (cancelled) return;
     }
 
-    loadData();
+    if (mounted && connected && encryptionReady && address && sessionKey && sourceId) {
+      runLoadData();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [mounted, connected, encryptionReady, address, sessionKey, sourceId, links]);
+  }, [loadData]);
 
   const previewReflections = useMemo(() => reflections.slice(0, 20), [reflections]);
+
+  // Handle import button click
+  const handleImport = async () => {
+    if (!address || !sessionKey || !sourceId || !source) return;
+    
+    setImporting(true);
+    try {
+      // Create a new encrypted reflection entry with placeholder content
+      const placeholderText = `Imported from: ${source.title || 'Source'}\n\n[Placeholder reflection content]`;
+      const { id: reflectionId } = await rpcInsertEntry(address, sessionKey, {
+        text: placeholderText,
+        ts: Date.now(),
+      });
+
+      // Link the new reflection to the source
+      await setLink(reflectionId, sourceId);
+
+      toast.success('Reflection imported successfully');
+      
+      // The useEffect that depends on 'links' will automatically refresh
+      // when setLink updates the links state
+    } catch (err: any) {
+      console.error('Failed to import reflection', err);
+      toast.error(err?.message || 'Failed to import reflection');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (!mounted) return null;
 
@@ -197,22 +229,55 @@ export default function SourceDetailPage() {
                     <span className="text-xs text-white/50">{source.sourceId}</span>
                   )}
                 </div>
-                <h2 className="text-xl font-semibold text-white/90">
-                  {source?.title || 'Untitled source'}
-                </h2>
-                <div className="text-sm text-white/60 space-y-1">
-                  {source?.createdAt && (
-                    <p>
-                      Added{' '}
-                      {new Date(source.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-white/90">
+                      {source?.title || 'Untitled source'}
+                    </h2>
+                    {reflections.length > 0 && (
+                      <p className="text-xs text-white/50 mt-1.5">
+                        Imported reflections contribute to Insights and Timeline
+                      </p>
+                    )}
+                    <div className="text-sm text-white/60 space-y-1 mt-2">
+                      {source?.createdAt && (
+                        <p>
+                          Added{' '}
+                          {new Date(source.createdAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                      )}
+                      <p>Linked reflections: {reflections.length}</p>
+                      {source?.notes && <p className="text-white/70">{source.notes}</p>}
+                    </div>
+                  </div>
+                  {sourceId && (
+                    <button
+                      onClick={handleImport}
+                      disabled={importing || !encryptionReady}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {importing ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Importing...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                          </svg>
+                          Import
+                        </>
+                      )}
+                    </button>
                   )}
-                  <p>Linked reflections: {reflections.length}</p>
-                  {source?.notes && <p className="text-white/70">{source.notes}</p>}
                 </div>
               </div>
 
@@ -233,16 +298,23 @@ export default function SourceDetailPage() {
                         typeof ref.plaintext === 'string'
                           ? ref.plaintext.split('\n')[0]
                           : '';
+                      // Remove "Imported from:" prefix if present
+                      const displayText = firstLine.startsWith('Imported from:')
+                        ? firstLine.replace(/^Imported from:\s*/, '').trim()
+                        : firstLine;
                       return (
                         <li
                           key={ref.id}
                           className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 flex items-start justify-between gap-3"
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white/80 truncate">
-                              {firstLine || '(no content)'}
+                            <p className="text-xs text-white/50 mb-1">
+                              Reflection generated from this source
                             </p>
-                            <p className="text-xs text-white/40">
+                            <p className="text-sm text-white/80 truncate">
+                              {displayText || '(no content)'}
+                            </p>
+                            <p className="text-xs text-white/40 mt-1">
                               {new Date(ref.createdAt).toLocaleDateString(undefined, {
                                 month: 'short',
                                 day: 'numeric',
@@ -251,7 +323,7 @@ export default function SourceDetailPage() {
                             </p>
                           </div>
                           <Link
-                            href={`/#${ref.id}`}
+                            href={`/?focus=${ref.id}`}
                             className="text-xs text-emerald-300 hover:text-emerald-200 transition-colors"
                           >
                             View

@@ -62,6 +62,8 @@ export type SourceEntry = {
   createdAt: string;
   notes?: string | null;
   capturedAt: string;
+  platform?: string;
+  sourceType?: string;
 };
 
 type Props = {
@@ -93,9 +95,16 @@ export function SourceCard({ entry, linkedReflections, expanded, onToggle, detai
             )}
           </h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <SourceKindBadge kind={entry.kind} />
+            {entry.sourceType && (
+              <span className="text-xs text-white/60 uppercase">
+                {entry.sourceType}
+              </span>
+            )}
+            <span className="text-xs text-white/50">
+              {entry.platform === 'manual' ? 'Manual source' : entry.platform || entry.kind || 'Source'}
+            </span>
             {entry.sourceId && (
-              <span className="text-xs text-white/50">
+              <span className="text-xs text-white/40">
                 {entry.sourceId}
               </span>
             )}
@@ -114,13 +123,17 @@ export function SourceCard({ entry, linkedReflections, expanded, onToggle, detai
             })}
           </span>
         )}
-        <button
-          type="button"
-          onClick={onToggle}
-          className="block text-left text-neutral-400 hover:text-white/80 transition-colors"
-        >
-          Linked reflections: {linkedReflections.length}
-        </button>
+        {linkedReflections.length === 0 ? (
+          <span className="text-white/40 italic">Not linked to a reflection</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="block text-left text-neutral-400 hover:text-white/80 transition-colors"
+          >
+            Linked reflections: {linkedReflections.length}
+          </button>
+        )}
       </div>
 
       {/* Notes */}

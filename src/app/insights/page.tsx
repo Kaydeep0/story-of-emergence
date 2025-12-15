@@ -1,11 +1,54 @@
 'use client';
 
+/**
+ * PHASE ONE VERIFICATION CHECKLIST
+ * 
+ * This page is considered healthy when:
+ * 
+ * 1. DATA FLOW INTEGRITY:
+ *    ✓ Sources load from external_entries table
+ *    ✓ Reflections load and decrypt successfully
+ *    ✓ Reflection links (reflection_links table) connect sources to reflections
+ *    ✓ Internal events load for timeline view
+ *    ✓ Insights compute correctly from reflections (including source-linked ones)
+ * 
+ * 2. INSIGHT GENERATION:
+ *    ✓ Timeline spikes detect days with ≥3 entries AND ≥2× median activity
+ *    ✓ Source-linked reflections show "From source" badge on spikes
+ *    ✓ Always-on summary insights compute from last 7 days
+ *    ✓ Topic drift analyzes theme changes over time
+ *    ✓ Link clusters group related reflections
+ * 
+ * 3. UI STATE MANAGEMENT:
+ *    ✓ Loading states show skeletons (not blank screens)
+ *    ✓ Error states display user-friendly messages
+ *    ✓ Empty states explain what's needed (not just "No data")
+ *    ✓ Source insights panel shows "Not enough data" when reflections.length === 0
+ *    ✓ Source insights panel never silently empty when reflections exist
+ * 
+ * 4. PERFORMANCE:
+ *    ✓ All insight computation is client-side (no blocking network calls)
+ *    ✓ Supabase client uses singleton pattern (no multiple GoTrueClient instances)
+ *    ✓ Reflections are cached and reused across insight computations
+ * 
+ * 5. DATA QUALITY:
+ *    ✓ Reflections with sourceId are correctly linked via reflection_links
+ *    ✓ Source titles resolve correctly for "From source" badges
+ *    ✓ Timeline events filter correctly (all/mind/sources)
+ * 
+ * If any of these fail, check:
+ * - Console for errors (dev mode only)
+ * - Network tab for failed Supabase queries
+ * - Reflection links are properly set when importing sources
+ */
+
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { rpcListInternalEvents } from '../lib/internalEvents';
-import { computeWeeklyInsights, WeeklyInsight } from '../lib/weeklyInsights';
+import { computeWeeklyInsights, computeInsightsForWindow, WeeklyInsight } from '../lib/weeklyInsights';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
@@ -29,6 +72,7 @@ import { InsightsFromSources } from '../components/InsightsFromSources';
 import { listExternalEntries } from '../lib/useSources';
 import { InsightsSourceCard } from '../components/InsightsSourceCard';
 import { useReflectionLinks } from '../lib/reflectionLinks';
+import { lifetimeWindow } from '../lib/insights/timeWindows';
 
 
 /**
@@ -82,6 +126,13 @@ function EventIcon({ eventType }: { eventType: string }) {
       return (
         <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+        </svg>
+      );
+    case 'source_event':
+      // Book/document icon for source events
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
         </svg>
       );
     default:
@@ -385,23 +436,46 @@ function FeedbackButtons({
   );
 }
 
-type InsightsMode = 'weekly' | 'timeline' | 'summary';
+type InsightsMode = 'weekly' | 'timeline' | 'summary' | 'yearly' | 'lifetime';
 
 type SimpleEvent = {
   id: string;
   eventAt: string;
   eventType: string;
+  plaintext?: unknown;
 };
 
 const MODE_OPTIONS: { value: InsightsMode; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'timeline', label: 'Timeline' },
   { value: 'summary', label: 'Summary' },
+  { value: 'yearly', label: 'Yearly' },
+  { value: 'lifetime', label: 'Lifetime' },
 ];
+
+const TOPIC_KEYWORDS = {
+  focus: ['focus', 'concentrate', 'attention', 'distracted', 'productive', 'flow'],
+  work: ['work', 'job', 'career', 'office', 'meeting', 'project', 'deadline', 'colleague'],
+  money: ['money', 'finance', 'budget', 'savings', 'investment', 'expense', 'income', 'salary'],
+  health: ['health', 'exercise', 'sleep', 'tired', 'energy', 'workout', 'meditation', 'stress'],
+  relationships: ['relationship', 'friend', 'family', 'partner', 'love', 'connection', 'social'],
+};
+
+function extractTopicsFromText(text: string): string[] {
+  const topics: string[] = [];
+  const lower = text.toLowerCase();
+  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((k) => lower.includes(k))) {
+      topics.push(topic);
+    }
+  }
+  return topics;
+}
 
 export default function InsightsPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
+  const pathname = usePathname();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   const { getSourceIdFor } = useReflectionLinks(address);
 
@@ -415,6 +489,7 @@ export default function InsightsPage() {
   const [timelineEvents, setTimelineEvents] = useState<SimpleEvent[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'mind' | 'sources'>('all');
 
   // Summary state
   const [summaryData, setSummaryData] = useState<{
@@ -451,6 +526,19 @@ export default function InsightsPage() {
 
   // Contrast pairs state (computed from decrypted reflections)
   const [contrastPairs, setContrastPairs] = useState<ContrastPair[]>([]);
+
+  // Lifetime view state
+  const [lifetimeLoading, setLifetimeLoading] = useState(false);
+  const [lifetimeError, setLifetimeError] = useState<string | null>(null);
+  const [lifetimeStats, setLifetimeStats] = useState<{
+    windowLabel: string;
+    totalEntries: number;
+    totalEvents: number;
+    dominantTopics: string[];
+    distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed';
+    skew: number;
+    concentrationShareTop10PercentDays: number;
+  } | null>(null);
 
   // Expansion state for spike cards (tracks which dates are expanded)
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
@@ -576,6 +664,7 @@ export default function InsightsPage() {
   useEffect(() => {
     if (mode !== 'timeline') return;
     if (!connected || !address) return;
+    if (!encryptionReady || !sessionKey) return;
 
     let cancelled = false;
 
@@ -584,21 +673,34 @@ export default function InsightsPage() {
         setTimelineLoading(true);
         setTimelineError(null);
 
-        const res = await fetch('/api/timeline', {
-          headers: {
-            'x-wallet-address': address!.toLowerCase(),
-          },
+        // Load decrypted events using rpcListInternalEvents
+        const result = await rpcListInternalEvents(address, sessionKey, {
+          limit: 500,
+          offset: 0,
         });
 
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error ?? 'Failed to load timeline');
-        }
-
-        const json = await res.json();
-
         if (!cancelled) {
-          setTimelineEvents((json.events ?? []) as SimpleEvent[]);
+          // Convert to SimpleEvent format
+          const events: SimpleEvent[] = result.items.map((ev) => {
+            let eventType = 'unknown';
+            
+            // Extract event type from plaintext
+            if (ev.plaintext && typeof ev.plaintext === 'object' && ev.plaintext !== null) {
+              const payload = ev.plaintext as Record<string, unknown>;
+              if ('type' in payload && typeof payload.type === 'string') {
+                eventType = payload.type;
+              }
+            }
+            
+            return {
+              id: ev.id,
+              eventAt: ev.eventAt.toISOString(),
+              eventType,
+              plaintext: ev.plaintext, // Keep plaintext for filtering
+            };
+          });
+          
+          setTimelineEvents(events as SimpleEvent[]);
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -616,7 +718,7 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, connected, address]);
+  }, [mode, connected, address, encryptionReady, sessionKey]);
 
   // Load summary data when connected (for health strip and Summary tab)
   useEffect(() => {
@@ -727,6 +829,80 @@ export default function InsightsPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
+
+  // Load reflections and compute lifetime view
+  useEffect(() => {
+    if (mode !== 'lifetime') return;
+    if (!connected || !address) return;
+
+    let cancelled = false;
+
+    async function loadLifetime() {
+      try {
+        setLifetimeLoading(true);
+        setLifetimeError(null);
+
+        if (!encryptionReady || !sessionKey) {
+          if (encryptionError) {
+            setLifetimeError(encryptionError);
+          }
+          return;
+        }
+
+        const { items } = await rpcFetchEntries(address!, sessionKey, {
+          includeDeleted: false,
+          limit: 1000,
+          offset: 0,
+        });
+
+        if (cancelled) return;
+
+        const reflectionEntries = attachDemoSourceLinks(
+          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+        );
+
+        const window = lifetimeWindow(reflectionEntries);
+
+        // Convert reflections to pseudo events for the window engine
+        const pseudoEvents = reflectionEntries.map((r) => ({
+          eventAt: new Date(r.createdAt),
+          sourceKind: 'journal',
+          eventKind: 'written',
+          topics: extractTopicsFromText(r.plaintext || ''),
+          details: r.plaintext,
+        }));
+
+        const stats = computeInsightsForWindow(pseudoEvents as any, window);
+
+        if (!cancelled) {
+          setLifetimeStats({
+            windowLabel: window.label,
+            totalEntries: stats.totalEntries,
+            totalEvents: stats.totalEvents,
+            dominantTopics: stats.dominantTopics,
+            distributionLabel: stats.distributionLabel,
+            skew: stats.skew,
+            concentrationShareTop10PercentDays: stats.concentrationShareTop10PercentDays,
+          });
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Failed to load lifetime insights', err);
+          setLifetimeError(err.message ?? 'Failed to load lifetime insights');
+        }
+      } finally {
+        if (!cancelled) {
+          setLifetimeLoading(false);
+        }
+      }
+    }
+
+    loadLifetime();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, connected, address, encryptionReady, sessionKey, encryptionError, getSourceIdFor]);
 
   // Recompute source-driven insights when sources or summary reflections change
   useEffect(() => {
@@ -846,6 +1022,47 @@ export default function InsightsPage() {
     return map;
   }, [summaryReflectionEntries]);
 
+  // Create a map of sourceId -> source title for quick lookups
+  const sourceTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    sources.forEach((s) => {
+      if (s.sourceId && s.title) {
+        map.set(s.sourceId, s.title);
+      }
+    });
+    return map;
+  }, [sources]);
+
+  // Helper to check if an insight card has evidence from sources
+  function hasSourceEvidence(card: InsightCard, reflectionEntries: ReflectionEntry[]): boolean {
+    const entryMap = new Map(reflectionEntries.map(e => [e.id, e]));
+    return card.evidence.some(ev => {
+      const entry = entryMap.get(ev.entryId);
+      return entry?.sourceId !== undefined;
+    });
+  }
+
+  // Helper to get source name for an insight card (returns first source found)
+  function getSourceNameForInsight(card: InsightCard, reflectionEntries: ReflectionEntry[]): string | null {
+    const entryMap = new Map(reflectionEntries.map(e => [e.id, e]));
+    for (const ev of card.evidence) {
+      const entry = entryMap.get(ev.entryId);
+      if (entry?.sourceId) {
+        return sourceTitleById.get(entry.sourceId) || null;
+      }
+    }
+    return null;
+  }
+
+  // Helper to get source name for a specific evidence item
+  function getSourceNameForEvidence(entryId: string, reflectionEntries: ReflectionEntry[]): string | null {
+    const entry = reflectionEntries.find(e => e.id === entryId);
+    if (entry?.sourceId) {
+      return sourceTitleById.get(entry.sourceId) || null;
+    }
+    return null;
+  }
+
   if (!mounted) return null;
 
   // Derive latest insight if available
@@ -890,19 +1107,37 @@ export default function InsightsPage() {
         {/* Mode switcher */}
         <div className="flex justify-center mb-8">
           <div className="inline-flex rounded-xl border border-white/10 p-1 bg-white/5">
-            {MODE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setMode(opt.value)}
-                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                  mode === opt.value
-                    ? 'bg-white text-black font-medium'
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+            {MODE_OPTIONS.map((opt) => {
+              if (opt.value === 'yearly') {
+                // Yearly navigates to separate route
+                return (
+                  <Link
+                    key={opt.value}
+                    href="/insights/yearly"
+                    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      pathname === '/insights/yearly'
+                        ? 'bg-white text-black font-medium'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              }
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setMode(opt.value)}
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                    mode === opt.value
+                      ? 'bg-white text-black font-medium'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1003,7 +1238,22 @@ export default function InsightsPage() {
                         >
                           {/* Card header */}
                           <div className="flex items-start justify-between">
-                            <h3 className="font-medium text-amber-200">{spike.title}</h3>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-amber-200">{spike.title}</h3>
+                              {hasSourceEvidence(spike, timelineReflectionEntries) && (
+                                <div className="mt-1.5">
+                                  <span 
+                                    className="inline-flex items-center gap-1 text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full border border-white/10"
+                                    title="Derived from imported source material"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                    </svg>
+                                    From source
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2">
                               <FeedbackButtons
                                 insightId={spike.id}
@@ -1115,7 +1365,19 @@ export default function InsightsPage() {
                         >
                           {/* Card header */}
                           <div className="flex items-start justify-between">
-                            <h3 className="font-medium text-sky-200">{coach.title}</h3>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-sky-200">{coach.title}</h3>
+                              {hasSourceEvidence(coach, timelineReflectionEntries) && (
+                                <div className="mt-1.5">
+                                  <span className="inline-flex items-center gap-1 text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                    </svg>
+                                    From Source{getSourceNameForInsight(coach, timelineReflectionEntries) ? `: ${getSourceNameForInsight(coach, timelineReflectionEntries)}` : ''}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2">
                               <FeedbackButtons
                                 insightId={coach.id}
@@ -1225,7 +1487,19 @@ export default function InsightsPage() {
                         >
                           {/* Card header */}
                           <div className="flex items-start justify-between">
-                            <h3 className="font-medium text-violet-200">{cluster.title}</h3>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-violet-200">{cluster.title}</h3>
+                              {hasSourceEvidence(cluster, timelineReflectionEntries) && (
+                                <div className="mt-1.5">
+                                  <span className="inline-flex items-center gap-1 text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                    </svg>
+                                    From Source{getSourceNameForInsight(cluster, timelineReflectionEntries) ? `: ${getSourceNameForInsight(cluster, timelineReflectionEntries)}` : ''}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2">
                               <FeedbackButtons
                                 insightId={cluster.id}
@@ -1524,12 +1798,23 @@ export default function InsightsPage() {
             {/* Activity Timeline Section */}
             {connected && encryptionReady && (
               <div className="space-y-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
-                  Activity Timeline
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    Activity Timeline
+                  </h2>
+                  <select
+                    value={timelineFilter}
+                    onChange={(e) => setTimelineFilter(e.target.value as 'all' | 'mind' | 'sources')}
+                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  >
+                    <option value="all">All</option>
+                    <option value="mind">My mind</option>
+                    <option value="sources">Sources</option>
+                  </select>
+                </div>
 
                 {timelineLoading && (
                   <p className="text-sm text-white/60">Loading timeline…</p>
@@ -1549,8 +1834,39 @@ export default function InsightsPage() {
                 )}
 
                 {!timelineLoading && !timelineError && timelineEvents.length > 0 && (() => {
+                // Filter events based on selected filter
+                const filteredEvents = timelineEvents.filter((ev) => {
+                  if (timelineFilter === 'all') return true;
+                  
+                  // Check if event has source_id in plaintext
+                  const hasSourceId = ev.plaintext && 
+                    typeof ev.plaintext === 'object' && 
+                    ev.plaintext !== null &&
+                    'source_id' in ev.plaintext &&
+                    typeof (ev.plaintext as Record<string, unknown>).source_id === 'string';
+                  
+                  if (timelineFilter === 'sources') {
+                    return hasSourceId;
+                  }
+                  
+                  // 'mind' filter - events without source_id
+                  if (timelineFilter === 'mind') {
+                    return !hasSourceId;
+                  }
+                  
+                  return true;
+                });
+                
+                if (filteredEvents.length === 0) {
+                  return (
+                    <p className="text-sm text-white/60">
+                      No events match the selected filter.
+                    </p>
+                  );
+                }
+                
                 // Group events by calendar day
-                const groupedByDay = timelineEvents.reduce((acc, ev) => {
+                const groupedByDay = filteredEvents.reduce((acc, ev) => {
                   const d = new Date(ev.eventAt);
                   const dateKey = d.toLocaleDateString(undefined, {
                     weekday: 'long',
@@ -1561,7 +1877,7 @@ export default function InsightsPage() {
                   if (!acc[dateKey]) acc[dateKey] = [];
                   acc[dateKey].push(ev);
                   return acc;
-                }, {} as Record<string, typeof timelineEvents>);
+                }, {} as Record<string, typeof filteredEvents>);
 
                 return (
                   <div className="space-y-6">
@@ -1581,10 +1897,21 @@ export default function InsightsPage() {
                               minute: '2-digit',
                             });
                             const isUnknown = ev.eventType === 'unknown';
+                            
+                            // Extract title for source events
+                            let eventTitle: string | null = null;
+                            if (ev.eventType === 'source_event' && ev.plaintext && typeof ev.plaintext === 'object' && ev.plaintext !== null) {
+                              const payload = ev.plaintext as Record<string, unknown>;
+                              if ('title' in payload && typeof payload.title === 'string') {
+                                eventTitle = payload.title;
+                              }
+                            }
 
                             // Badge color based on event type
                             const badgeClass = isUnknown
                               ? 'bg-zinc-700/50 text-zinc-400'
+                              : ev.eventType === 'source_event'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                               : 'bg-white/10 text-white';
 
                             return (
@@ -1606,6 +1933,13 @@ export default function InsightsPage() {
                                 >
                                   {ev.eventType}
                                 </span>
+                                
+                                {/* Title for source events */}
+                                {eventTitle && (
+                                  <span className="text-sm text-white/70 flex-1 truncate">
+                                    {eventTitle}
+                                  </span>
+                                )}
                               </li>
                             );
                           })}
@@ -1824,7 +2158,19 @@ export default function InsightsPage() {
                           >
                             {/* Card header */}
                             <div className="flex items-start justify-between">
-                              <h3 className="font-medium text-emerald-200">{insight.title}</h3>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium text-emerald-200">{insight.title}</h3>
+                                {hasSourceEvidence(insight, summaryReflectionEntries) && (
+                                  <div className="mt-1.5">
+                                    <span className="inline-flex items-center gap-1 text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                                      </svg>
+                                      From Source{getSourceNameForInsight(insight, summaryReflectionEntries) ? `: ${getSourceNameForInsight(insight, summaryReflectionEntries)}` : ''}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 <FeedbackButtons
                                   insightId={insight.id}
@@ -1946,6 +2292,63 @@ export default function InsightsPage() {
           </div>
         )}
 
+        {/* Lifetime view */}
+        {mode === 'lifetime' && (
+          <div className="mt-8 space-y-6">
+            {lifetimeLoading && (
+              <div className="rounded-2xl border border-white/10 p-6 text-center">
+                <p className="text-white/70">Loading lifetime insights…</p>
+              </div>
+            )}
+
+            {lifetimeError && !lifetimeLoading && (
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6 text-center">
+                <p className="text-sm text-rose-400">{lifetimeError}</p>
+              </div>
+            )}
+
+            {!lifetimeLoading && !lifetimeError && lifetimeStats && (
+              <>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-white">Lifetime</h2>
+                    <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/80">
+                      Pattern: {lifetimeStats.distributionLabel}
+                    </span>
+                  </div>
+                  <p className="text-sm text-white/60 mt-1">{lifetimeStats.windowLabel}</p>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-2xl font-semibold">{lifetimeStats.totalEntries}</div>
+                      <div className="text-xs text-white/50 mt-1">Total entries</div>
+                    </div>
+                    <div className="rounded-xl bg-white/5 p-4 text-center">
+                      <div className="text-2xl font-semibold">{lifetimeStats.totalEvents}</div>
+                      <div className="text-xs text-white/50 mt-1">Total events</div>
+                    </div>
+                  </div>
+                </div>
+
+                {lifetimeStats.dominantTopics.length > 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <h2 className="text-lg font-semibold mb-3">Dominant Topics</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {lifetimeStats.dominantTopics.map((topic) => (
+                        <span
+                          key={topic}
+                          className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-white/90"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Weekly view (existing content) */}
         {mode === 'weekly' && (
           <>
@@ -2032,6 +2435,12 @@ export default function InsightsPage() {
                       <p className="text-sm text-white/70 leading-relaxed">
                         {latest.summaryText}
                       </p>
+                      {latest.distributionLabel && (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
+                          <span className="font-medium text-white/80">Pattern</span>
+                          <span>{latest.distributionLabel}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2080,6 +2489,7 @@ export default function InsightsPage() {
             ? summaryReflectionEntries
             : []
         }
+        sources={sources}
         isLoading={
           mode === 'timeline'
             ? reflectionsLoading

@@ -63,6 +63,64 @@ export function computeSourceHighlights(
   }));
 }
 
+/**
+ * Generate a 2-3 sentence summary from linked reflections
+ * Uses top words and key themes to create a natural language summary
+ */
+export function computeSourceSummary(reflections: ReflectionEntry[]): string {
+  if (reflections.length === 0) {
+    return 'Not enough data yet.';
+  }
+
+  const topWords = computeSourceWordFreq(reflections, 8);
+  const themes = computeSourceThemes(reflections, 5);
+
+  if (topWords.length === 0) {
+    return 'Not enough data yet.';
+  }
+
+  // Extract key sentences from reflections for context
+  const snippets: string[] = [];
+  for (const r of reflections.slice(0, 3)) {
+    const text = typeof r.plaintext === 'string' ? r.plaintext.trim() : String(r.plaintext ?? '').trim();
+    if (text.length === 0) continue;
+    
+    // Get first sentence or first 100 chars
+    const firstSentence = text.split(/[.!?]/)[0]?.trim();
+    if (firstSentence && firstSentence.length > 20) {
+      snippets.push(firstSentence.length > 100 ? firstSentence.slice(0, 100) + '…' : firstSentence);
+    }
+  }
+
+  // Build summary sentences
+  const sentences: string[] = [];
+
+  // First sentence: Overview with reflection count and main themes
+  const reflectionWord = reflections.length === 1 ? 'reflection' : 'reflections';
+  const themePhrase = themes.length > 0 
+    ? ` around ${themes.slice(0, 3).join(', ')}`
+    : '';
+  sentences.push(
+    `This source has ${reflections.length} linked ${reflectionWord}${themePhrase}.`
+  );
+
+  // Second sentence: Key topics from top words (always include if we have any)
+  if (topWords.length > 0) {
+    const topPhrase = topWords.slice(0, Math.min(3, topWords.length)).map(t => t.word).join(', ');
+    sentences.push(`Key topics include ${topPhrase}.`);
+  }
+
+  // Third sentence: Optional snippet if available
+  if (snippets.length > 0) {
+    const snippet = snippets[0];
+    if (snippet.length > 0) {
+      sentences.push(`Notable: "${snippet}".`);
+    }
+  }
+
+  return sentences.join(' ');
+}
+
 export function computeUnifiedSourceInsights(
   sources: SourceEntryLite[],
   reflections: ReflectionEntry[]
