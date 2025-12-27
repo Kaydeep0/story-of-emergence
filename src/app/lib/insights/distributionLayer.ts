@@ -2,7 +2,7 @@
 // Distribution Layer: Classifies entry behavior into normal, log normal, power law over time windows
 // Pure function - no side effects, no network calls, client-side only
 
-import type { ReflectionEntry } from './types';
+import type { ReflectionEntry, InsightCard } from './types';
 import { filterEventsByWindow, groupByDay } from './timeWindows';
 
 export type TimeWindowDays = 7 | 30 | 90 | 365;
@@ -213,5 +213,74 @@ function computeWindowDistribution(
 export function computeDistributionLayer(entries: ReflectionEntry[]): WindowDistribution[] {
   const windows: TimeWindowDays[] = [7, 30, 90, 365];
   return windows.map(windowDays => computeWindowDistribution(entries, windowDays));
+}
+
+/**
+ * Compute a distribution insight card for the 30-day window
+ * Returns null if there's not enough data
+ */
+export function computeDistributionInsight(entries: ReflectionEntry[]): InsightCard | null {
+  const dist30 = computeWindowDistribution(entries, 30);
+  
+  // Need at least some entries to create an insight
+  if (entries.length === 0 || dist30.topSpikeDates.length === 0) {
+    return null;
+  }
+  
+  // Get entries in the 30-day window
+  const now = new Date();
+  const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const end = now;
+  const windowEntries = filterEventsByWindow(entries, start, end);
+  
+  // Group by day and get counts
+  const byDay = groupByDay(windowEntries);
+  const dayCounts: Array<{ date: string; count: number }> = [];
+  
+  for (const [date, dayEntries] of byDay.entries()) {
+    dayCounts.push({ date, count: dayEntries.length });
+  }
+  
+  // Sort by count descending
+  dayCounts.sort((a, b) => b.count - a.count);
+  
+  // Get top 3 days
+  const top3 = dayCounts.slice(0, 3);
+  const top3Total = top3.reduce((sum, d) => sum + d.count, 0);
+  const totalEntries = windowEntries.length;
+  const top3Percent = totalEntries > 0 ? Math.round((top3Total / totalEntries) * 100) : 0;
+  
+  // Only create insight if it's power law or log normal (not normal)
+  if (dist30.classification === 'normal') {
+    return null;
+  }
+  
+  // Determine title based on classification
+  const title = dist30.classification === 'powerlaw' 
+    ? 'Your activity follows a power law'
+    : 'Your activity follows a log-normal pattern';
+  
+  // Create explanation
+  const explanation = `Over the last 30 days, a small number of days account for most of your writing and thinking. Three spikes explain ~${top3Percent}% of total output.`;
+  
+  // Create evidence from top 3 spike dates
+  const evidence = top3.flatMap((day, idx) => {
+    const dayEntries = byDay.get(day.date) || [];
+    // Return up to 3 entries per spike day as evidence
+    return dayEntries.slice(0, 3).map((entry) => ({
+      entryId: entry.id,
+      timestamp: entry.createdAt,
+      preview: entry.plaintext.substring(0, 50) || `${day.count} entries`,
+    }));
+  }).slice(0, 10); // Limit total evidence to 10 entries
+  
+  return {
+    id: `distribution-30d-${Date.now()}`,
+    kind: 'distribution',
+    title,
+    explanation,
+    evidence,
+    computedAt: new Date().toISOString(),
+  };
 }
 
