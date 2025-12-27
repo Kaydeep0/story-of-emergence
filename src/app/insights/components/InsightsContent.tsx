@@ -2483,7 +2483,6 @@ export default function InsightsContent({ mode }: InsightsContentProps) {
         )}
       </section>
 
-      {/* Insight Detail Drawer */}
       <InsightDrawer
         insight={selectedInsight}
         isOpen={drawerOpen}
