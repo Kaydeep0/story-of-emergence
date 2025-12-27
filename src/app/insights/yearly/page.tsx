@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../../lib/useLogEvent';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
@@ -12,6 +12,8 @@ import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { useHighlights } from '../../lib/insights/useHighlights';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
+import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
+import { exportPng } from '../../lib/share/exportPng';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -26,6 +28,10 @@ export default function YearlyWrapPage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [windowDistribution, setWindowDistribution] = useState<WindowDistribution | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [lastGeneratedAt, setLastGeneratedAt] = useState<Date | null>(null);
+  
+  const shareCardRef = useRef<HTMLDivElement>(null);
 
   const connected = isConnected && !!address;
 
@@ -165,6 +171,47 @@ export default function YearlyWrapPage() {
     };
   }, [distributionResult, windowDistribution]);
 
+  // Handle downloading PNG
+  const handleDownloadPng = async () => {
+    if (!shareCardRef.current) {
+      toast.error('Share card not ready');
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      await exportPng(shareCardRef.current);
+      setLastGeneratedAt(new Date());
+      toast.success('Share card downloaded');
+    } catch (err: any) {
+      console.error('Failed to export PNG:', err);
+      toast.error(err?.message ?? 'Failed to export PNG');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Handle copying caption
+  const handleCopyCaption = async () => {
+    if (!distributionResult || !windowDistribution) {
+      toast.error('No data available');
+      return;
+    }
+
+    const activeDays = computeActiveDays(distributionResult.dailyCounts);
+    const classificationLabel = formatClassification(windowDistribution.classification);
+    
+    const caption = `My year followed a ${classificationLabel.toLowerCase()} pattern. ${distributionResult.totalEntries} entries across ${activeDays} active days. Computed locally in Story of Emergence.`;
+
+    try {
+      await navigator.clipboard.writeText(caption);
+      toast.success('Caption copied to clipboard');
+    } catch (err: any) {
+      console.error('Failed to copy caption:', err);
+      toast.error('Failed to copy caption');
+    }
+  };
+
   // Handle saving highlight
   const handleSaveHighlight = async () => {
     if (!connected || !address) {
@@ -284,6 +331,64 @@ export default function YearlyWrapPage() {
         {/* Yearly Wrap Content */}
         {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
           <div className="space-y-6">
+            {/* Share this year section */}
+            {windowDistribution && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
+                <h2 className="text-lg font-semibold">Share this year</h2>
+                
+                {/* Hidden full-size card for export */}
+                <div 
+                  ref={shareCardRef}
+                  style={{ position: 'absolute', left: '-9999px', top: 0 }}
+                >
+                  <YearlyWrapShareCard
+                    year={new Date().getFullYear()}
+                    classificationLabel={formatClassification(windowDistribution.classification)}
+                    totalEntries={distributionResult.totalEntries}
+                    activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                    spikeRatio={distributionResult.stats.spikeRatio}
+                    top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+                  />
+                </div>
+
+                {/* Preview - scaled down */}
+                <div className="flex justify-center overflow-hidden">
+                  <div 
+                    className="scale-[0.3] origin-top"
+                    style={{ transform: 'scale(0.3)', transformOrigin: 'top center' }}
+                  >
+                    <YearlyWrapShareCard
+                      year={new Date().getFullYear()}
+                      classificationLabel={formatClassification(windowDistribution.classification)}
+                      totalEntries={distributionResult.totalEntries}
+                      activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                      spikeRatio={distributionResult.stats.spikeRatio}
+                      top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+                    />
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadPng}
+                    disabled={isGenerating}
+                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGenerating ? 'Generating...' : 'Download PNG'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyCaption}
+                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
+                  >
+                    Copy Caption
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Narrative Insight Card */}
             {narrativeInsight && (
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
