@@ -444,11 +444,12 @@ type SimpleEvent = {
   plaintext?: unknown;
 };
 
-const MODE_OPTIONS: { value: InsightsMode; label: string }[] = [
+const MODE_OPTIONS: { value: InsightsMode | 'distributions'; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'timeline', label: 'Timeline' },
   { value: 'summary', label: 'Summary' },
   { value: 'yearly', label: 'Yearly' },
+  { value: 'distributions', label: 'Distributions' },
   { value: 'lifetime', label: 'Lifetime' },
 ];
 
@@ -1141,10 +1142,27 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
+              if (opt.value === 'distributions') {
+                // Distributions navigates to separate route
+                return (
+                  <Link
+                    key={opt.value}
+                    href="/insights/distributions"
+                    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      pathname === '/insights/distributions'
+                        ? 'bg-white text-black font-medium'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              }
+              // After filtering out 'yearly' and 'distributions', value is InsightsMode
               return (
                 <button
                   key={opt.value}
-                  onClick={() => setMode(opt.value)}
+                  onClick={() => setMode(opt.value as InsightsMode)}
                   className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                     mode === opt.value
                       ? 'bg-white text-black font-medium'

@@ -33,7 +33,8 @@ export type InsightKind =
   | 'topic_cluster'
   | 'always_on_summary'
   | 'link_cluster'
-  | 'streak_coach';
+  | 'streak_coach'
+  | 'distribution';
 
 /**
  * Base insight card type
