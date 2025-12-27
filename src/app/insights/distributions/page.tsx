@@ -10,6 +10,8 @@ import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeDistributionLayer, computeDistributionInsight, type WindowDistribution } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { useHighlights } from '../../lib/insights/useHighlights';
+import { rpcInsertEntry } from '../../lib/entries';
+import { toast } from 'sonner';
 
 export default function DistributionsPage() {
   const { address, isConnected } = useAccount();
@@ -114,6 +116,41 @@ export default function DistributionsPage() {
     return 'Normal';
   };
 
+  // Save highlight to Supabase
+  const saveHighlightToSupabase = async (insight: InsightCard) => {
+    if (!connected || !address) {
+      toast.error('Connect wallet to save');
+      return;
+    }
+
+    if (!encryptionReady || !sessionKey) {
+      toast.error('Encryption key not ready');
+      return;
+    }
+
+    try {
+      // Save as an entry with highlight type
+      await rpcInsertEntry(address, sessionKey, {
+        type: 'highlight',
+        insightId: insight.id,
+        kind: insight.kind,
+        title: insight.title,
+        explanation: insight.explanation,
+        computedAt: insight.computedAt,
+        evidence: insight.evidence,
+        ts: Date.now(),
+      });
+
+      // Also save to localStorage for immediate UI update
+      toggleHighlight(insight);
+      
+      toast.success('Saved to Highlights');
+    } catch (err: any) {
+      console.error('Failed to save highlight', err);
+      toast.error(err?.message ?? 'Failed to save highlight');
+    }
+  };
+
   if (!mounted) return null;
 
   // Show wallet/encryption messaging if not ready
@@ -183,7 +220,15 @@ export default function DistributionsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => toggleHighlight(distributionInsight)}
+                    onClick={() => {
+                      if (isHighlighted(distributionInsight)) {
+                        // Already highlighted - just toggle localStorage
+                        toggleHighlight(distributionInsight);
+                      } else {
+                        // Not highlighted - save to Supabase
+                        saveHighlightToSupabase(distributionInsight);
+                      }
+                    }}
                     className="p-1 rounded-full transition-colors hover:bg-white/10"
                     title={isHighlighted(distributionInsight) ? 'Remove from highlights' : 'Save to Highlights'}
                   >
