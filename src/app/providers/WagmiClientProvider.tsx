@@ -6,6 +6,7 @@ import { WagmiProvider, createConfig, http, type Config } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { baseSepolia } from 'wagmi/chains';
+import { silenceWalletConnectSessionRequest } from '../lib/walletconnect/silenceSessionRequest';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,21 @@ const ssrSafeConfig = createConfig({
 
 export default function WagmiClientProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<Config>(ssrSafeConfig);
+
+  // Silence WalletConnect session_request warning
+  useEffect(() => {
+    // Try immediately (in case WalletConnect is already initialized)
+    silenceWalletConnectSessionRequest();
+    
+    // Also try after a short delay to catch async initialization
+    const timeoutId = setTimeout(() => {
+      silenceWalletConnectSessionRequest();
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
   useEffect(() => {
     // Lazy-load WalletConnect config only in browser runtime
@@ -45,6 +61,8 @@ export default function WagmiClientProvider({ children }: { children: React.Reac
 
         if (mounted) {
           setConfig(wagmiConfig);
+          // Try to silence warning after WalletConnect config is loaded
+          silenceWalletConnectSessionRequest();
         }
       } catch (err) {
         console.error('Failed to initialize WalletConnect:', err);
