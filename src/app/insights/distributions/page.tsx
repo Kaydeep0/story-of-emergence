@@ -7,7 +7,7 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeDistributionLayer, computeDistributionInsight, type WindowDistribution } from '../../lib/insights/distributionLayer';
+import { computeDistributionLayer, computeDistributionLayerLegacy, computeDistributionInsight, type WindowDistribution, type DistributionResult } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { useHighlights } from '../../lib/insights/useHighlights';
 import { rpcInsertEntry } from '../../lib/entries';
@@ -25,6 +25,7 @@ export default function DistributionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [distributions, setDistributions] = useState<WindowDistribution[]>([]);
+  const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [distributionInsight, setDistributionInsight] = useState<InsightCard | null>(null);
 
   const connected = isConnected && !!address;
@@ -91,11 +92,17 @@ export default function DistributionsPage() {
   useEffect(() => {
     if (reflections.length === 0) {
       setDistributions([]);
+      setDistributionResult(null);
       setDistributionInsight(null);
       return;
     }
 
-    const computed = computeDistributionLayer(reflections);
+    // Compute detailed distribution result (30-day window)
+    const result = computeDistributionLayer(reflections, { windowDays: 30 });
+    setDistributionResult(result);
+    
+    // Compute legacy distributions for table view
+    const computed = computeDistributionLayerLegacy(reflections);
     setDistributions(computed);
     
     const insight = computeDistributionInsight(reflections);
@@ -143,6 +150,7 @@ export default function DistributionsPage() {
       // Build highlight payload (same pattern as other entries)
       const highlightPayload = {
         type: 'highlight',
+        subtype: 'distribution-layer',
         title: distributionInsight.title,
         body: distributionInsight.explanation,
         evidence: distributionInsight.evidence.map(ev => ({
@@ -160,6 +168,13 @@ export default function DistributionsPage() {
           topSpikeDates: dist30?.topSpikeDates || [],
           frequencyPerDay: dist30?.frequencyPerDay || 0,
           magnitudeProxy: dist30?.magnitudeProxy || 0,
+          // Include computed stats (if available)
+          ...(distributionResult ? {
+            mostCommonDayCount: distributionResult.stats.mostCommonDayCount,
+            variance: distributionResult.stats.variance,
+            spikeRatio: distributionResult.stats.spikeRatio,
+            top10PercentDaysShare: distributionResult.stats.top10PercentDaysShare,
+          } : {}),
         },
         ts: Date.now(),
       };
@@ -232,6 +247,50 @@ export default function DistributionsPage() {
         {!loading && !error && reflections.length === 0 && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70">No reflections found. Start writing to see distribution analysis.</p>
+          </div>
+        )}
+
+        {/* Distribution Stats */}
+        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
+          <div className="mb-8 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold mb-4">Distribution Profile (30 days)</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Most Common Day Count</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.mostCommonDayCount}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Variance</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
+                  <div className="text-xs text-white/40 mt-1">max day / median day</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
+                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
+                  <div className="text-xs text-white/40 mt-1">power law signal</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Days List */}
+            {distributionResult.topDays.length > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <h3 className="text-md font-semibold mb-3">Top Days</h3>
+                <div className="space-y-2">
+                  {distributionResult.topDays.slice(0, 10).map((day, idx) => (
+                    <div key={day.date} className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">{formatDate(day.date)}</span>
+                      <span className="text-white/90 font-medium">{day.count} entries</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

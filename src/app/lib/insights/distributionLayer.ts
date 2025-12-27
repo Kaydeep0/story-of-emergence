@@ -208,9 +208,161 @@ function computeWindowDistribution(
 }
 
 /**
- * Main function: Compute distributions for all time windows
+ * Distribution computation result with detailed stats
  */
-export function computeDistributionLayer(entries: ReflectionEntry[]): WindowDistribution[] {
+export type DistributionResult = {
+  totalEntries: number;
+  dateRange: { start: Date; end: Date };
+  dailyCounts: number[];
+  topDays: Array<{ date: string; count: number }>;
+  fittedBuckets: {
+    normal: { count: number; share: number };
+    lognormal: { count: number; share: number };
+    powerlaw: { count: number; share: number };
+  };
+  stats: {
+    mostCommonDayCount: number;
+    variance: number;
+    spikeRatio: number; // max day / median day
+    top10PercentDaysShare: number; // power law signal
+  };
+};
+
+/**
+ * Compute distribution layer with detailed stats
+ */
+export function computeDistributionLayer(
+  entries: ReflectionEntry[],
+  opts?: { windowDays?: TimeWindowDays }
+): DistributionResult {
+  const windowDays = opts?.windowDays || 30;
+  const now = new Date();
+  const start = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+  const end = now;
+  
+  const windowEntries = filterEventsByWindow(entries, start, end);
+  
+  if (windowEntries.length === 0) {
+    return {
+      totalEntries: 0,
+      dateRange: { start, end },
+      dailyCounts: [],
+      topDays: [],
+      fittedBuckets: {
+        normal: { count: 0, share: 0 },
+        lognormal: { count: 0, share: 0 },
+        powerlaw: { count: 0, share: 0 },
+      },
+      stats: {
+        mostCommonDayCount: 0,
+        variance: 0,
+        spikeRatio: 0,
+        top10PercentDaysShare: 0,
+      },
+    };
+  }
+  
+  // Group by day and get counts
+  const byDay = groupByDay(windowEntries);
+  const dayCounts: Array<{ date: string; count: number }> = [];
+  
+  for (const [date, dayEntries] of byDay.entries()) {
+    dayCounts.push({ date, count: dayEntries.length });
+  }
+  
+  // Sort by count descending for top days
+  const sortedByCount = [...dayCounts].sort((a, b) => b.count - a.count);
+  const topDays = sortedByCount.slice(0, 10);
+  
+  // Get daily counts array (for variance calculation)
+  const dailyCountsArray = dayCounts.map(d => d.count);
+  
+  // Compute stats
+  const counts = dailyCountsArray;
+  const n = counts.length;
+  
+  if (n === 0) {
+    return {
+      totalEntries: windowEntries.length,
+      dateRange: { start, end },
+      dailyCounts: [],
+      topDays: [],
+      fittedBuckets: {
+        normal: { count: 0, share: 0 },
+        lognormal: { count: 0, share: 0 },
+        powerlaw: { count: 0, share: 0 },
+      },
+      stats: {
+        mostCommonDayCount: 0,
+        variance: 0,
+        spikeRatio: 0,
+        top10PercentDaysShare: 0,
+      },
+    };
+  }
+  
+  // Most common day count (mode)
+  const countFreq = new Map<number, number>();
+  counts.forEach(c => countFreq.set(c, (countFreq.get(c) || 0) + 1));
+  let mostCommonDayCount = 0;
+  let maxFreq = 0;
+  countFreq.forEach((freq, count) => {
+    if (freq > maxFreq) {
+      maxFreq = freq;
+      mostCommonDayCount = count;
+    }
+  });
+  
+  // Variance
+  const mean = counts.reduce((s, c) => s + c, 0) / n;
+  const variance = counts.reduce((s, c) => s + Math.pow(c - mean, 2), 0) / n;
+  
+  // Spike ratio (max day / median day)
+  const sortedCounts = [...counts].sort((a, b) => a - b);
+  const median = sortedCounts.length > 0
+    ? sortedCounts.length % 2 === 0
+      ? (sortedCounts[sortedCounts.length / 2 - 1] + sortedCounts[sortedCounts.length / 2]) / 2
+      : sortedCounts[Math.floor(sortedCounts.length / 2)]
+    : 0;
+  const maxCount = Math.max(...counts);
+  const spikeRatio = median > 0 ? maxCount / median : 0;
+  
+  // Top 10 percent days share (power law signal)
+  const total = counts.reduce((s, c) => s + c, 0);
+  const top10PercentCount = Math.max(1, Math.ceil(n * 0.1));
+  const top10PercentDays = sortedByCount.slice(0, top10PercentCount);
+  const top10PercentTotal = top10PercentDays.reduce((s, d) => s + d.count, 0);
+  const top10PercentDaysShare = total > 0 ? top10PercentTotal / total : 0;
+  
+  // Classify into buckets
+  const dist = computeWindowDistribution(entries, windowDays);
+  const normalCount = dist.classification === 'normal' ? 1 : 0;
+  const lognormalCount = dist.classification === 'lognormal' ? 1 : 0;
+  const powerlawCount = dist.classification === 'powerlaw' ? 1 : 0;
+  
+  return {
+    totalEntries: windowEntries.length,
+    dateRange: { start, end },
+    dailyCounts: dailyCountsArray,
+    topDays,
+    fittedBuckets: {
+      normal: { count: normalCount, share: normalCount },
+      lognormal: { count: lognormalCount, share: lognormalCount },
+      powerlaw: { count: powerlawCount, share: powerlawCount },
+    },
+    stats: {
+      mostCommonDayCount,
+      variance,
+      spikeRatio,
+      top10PercentDaysShare,
+    },
+  };
+}
+
+/**
+ * Legacy function: Compute distributions for all time windows (for backward compatibility)
+ */
+export function computeDistributionLayerLegacy(entries: ReflectionEntry[]): WindowDistribution[] {
   const windows: TimeWindowDays[] = [7, 30, 90, 365];
   return windows.map(windowDays => computeWindowDistribution(entries, windowDays));
 }
