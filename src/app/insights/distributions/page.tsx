@@ -116,34 +116,61 @@ export default function DistributionsPage() {
     return 'Normal';
   };
 
-  // Save highlight to Supabase
-  const saveHighlightToSupabase = async (insight: InsightCard) => {
+  // Handle saving highlight to Supabase (reusing existing entry save pattern)
+  const handleSaveHighlight = async () => {
+    // Gate: wallet connection
     if (!connected || !address) {
       toast.error('Connect wallet to save');
       return;
     }
 
+    // Gate: encryption session
     if (!encryptionReady || !sessionKey) {
-      toast.error('Encryption key not ready');
+      toast.error('Unlock vault to save');
+      return;
+    }
+
+    // Gate: must have insight
+    if (!distributionInsight) {
+      toast.error('No insight to save');
       return;
     }
 
     try {
-      // Save as an entry with highlight type
-      await rpcInsertEntry(address, sessionKey, {
-        type: 'highlight',
-        insightId: insight.id,
-        kind: insight.kind,
-        title: insight.title,
-        explanation: insight.explanation,
-        computedAt: insight.computedAt,
-        evidence: insight.evidence,
-        ts: Date.now(),
-      });
-
-      // Also save to localStorage for immediate UI update
-      toggleHighlight(insight);
+      // Get 30-day distribution for metadata
+      const dist30 = distributions.find(d => d.windowDays === 30);
       
+      // Build highlight payload (same pattern as other entries)
+      const highlightPayload = {
+        type: 'highlight',
+        title: distributionInsight.title,
+        body: distributionInsight.explanation,
+        evidence: distributionInsight.evidence.map(ev => ({
+          entryId: ev.entryId,
+          timestamp: ev.timestamp,
+          preview: ev.preview,
+        })),
+        metadata: {
+          insightId: distributionInsight.id,
+          kind: distributionInsight.kind,
+          computedAt: distributionInsight.computedAt,
+          // Include distribution params
+          windowDays: 30,
+          classification: dist30?.classification || 'unknown',
+          topSpikeDates: dist30?.topSpikeDates || [],
+          frequencyPerDay: dist30?.frequencyPerDay || 0,
+          magnitudeProxy: dist30?.magnitudeProxy || 0,
+        },
+        ts: Date.now(),
+      };
+
+      // Call the same helper used by other pages (rpcInsertEntry)
+      await rpcInsertEntry(address, sessionKey, highlightPayload);
+
+      // Also update localStorage for immediate UI feedback
+      toggleHighlight(distributionInsight);
+
+      // Toast success
       toast.success('Saved to Highlights');
     } catch (err: any) {
       console.error('Failed to save highlight', err);
@@ -226,7 +253,7 @@ export default function DistributionsPage() {
                         toggleHighlight(distributionInsight);
                       } else {
                         // Not highlighted - save to Supabase
-                        saveHighlightToSupabase(distributionInsight);
+                        handleSaveHighlight();
                       }
                     }}
                     className="p-1 rounded-full transition-colors hover:bg-white/10"

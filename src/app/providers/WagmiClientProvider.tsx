@@ -21,7 +21,6 @@ const ssrSafeConfig = createConfig({
 
 export default function WagmiClientProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<Config>(ssrSafeConfig);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     // Lazy-load WalletConnect config only in browser runtime
@@ -46,13 +45,10 @@ export default function WagmiClientProvider({ children }: { children: React.Reac
 
         if (mounted) {
           setConfig(wagmiConfig);
-          setReady(true);
         }
       } catch (err) {
         console.error('Failed to initialize WalletConnect:', err);
-        if (mounted) {
-          setReady(true); // Still use SSR-safe config even if WalletConnect fails
-        }
+        // Continue with SSR-safe config if WalletConnect fails
       }
     })();
 
@@ -63,17 +59,13 @@ export default function WagmiClientProvider({ children }: { children: React.Reac
 
   // Always render WagmiProvider to prevent WagmiProviderNotFoundError
   // Start with SSR-safe config, upgrade to WalletConnect config when ready
+  // Always render RainbowKitProvider to prevent "Transaction hooks must be used within RainbowKitProvider" error
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        {ready ? (
-          <RainbowKitProvider>
-            {children}
-          </RainbowKitProvider>
-        ) : (
-          // Render without RainbowKit during SSR/initial load
-          <>{children}</>
-        )}
+        <RainbowKitProvider>
+          {children}
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
