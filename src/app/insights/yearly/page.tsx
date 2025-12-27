@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../../lib/useLogEvent';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
@@ -14,6 +14,7 @@ import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
 import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
 import { exportPng } from '../../lib/share/exportPng';
+import { extractKeywords, computeWordShift, getMoments, MeaningCard, Glossary } from './components/YearlyMeaning';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -30,8 +31,6 @@ export default function YearlyWrapPage() {
   const [windowDistribution, setWindowDistribution] = useState<WindowDistribution | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<Date | null>(null);
-  
-  const shareCardRef = useRef<HTMLDivElement>(null);
 
   const connected = isConnected && !!address;
 
@@ -171,16 +170,53 @@ export default function YearlyWrapPage() {
     };
   }, [distributionResult, windowDistribution]);
 
+  // Compute Mirror insights (keywords, word shift, moments)
+  const mirrorInsights = useMemo(() => {
+    if (reflections.length === 0 || !distributionResult) {
+      return null;
+    }
+
+    const keywords = extractKeywords(reflections, 14);
+    const wordShift = computeWordShift(reflections);
+    const topSpikeDates = getTopSpikeDates(distributionResult, 3);
+    const moments = getMoments(reflections, topSpikeDates);
+
+    return {
+      keywords,
+      wordShift,
+      moments,
+    };
+  }, [reflections, distributionResult]);
+
+  // Compute most common day count
+  const mostCommonDayCount = useMemo(() => {
+    if (!distributionResult || distributionResult.dailyCounts.length === 0) {
+      return null;
+    }
+
+    const counts = distributionResult.dailyCounts.filter(c => c > 0);
+    if (counts.length === 0) return null;
+
+    const frequency = new Map<number, number>();
+    counts.forEach(count => {
+      frequency.set(count, (frequency.get(count) || 0) + 1);
+    });
+
+    return Array.from(frequency.entries())
+      .sort((a, b) => b[1] - a[1])[0][0];
+  }, [distributionResult]);
+
   // Handle downloading PNG
   const handleDownloadPng = async () => {
-    if (!shareCardRef.current) {
+    const exportCard = document.getElementById('yearly-wrap-export-card');
+    if (!exportCard) {
       toast.error('Share card not ready');
       return;
     }
 
     try {
       setIsGenerating(true);
-      await exportPng(shareCardRef.current);
+      await exportPng(exportCard as HTMLElement);
       setLastGeneratedAt(new Date());
       toast.success('Share card downloaded');
     } catch (err: any) {
@@ -332,59 +368,213 @@ export default function YearlyWrapPage() {
         {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
           <div className="space-y-6">
             {/* Share this year section */}
-            {windowDistribution && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
-                <h2 className="text-lg font-semibold">Share this year</h2>
-                
-                {/* Hidden full-size card for export */}
-                <div 
-                  ref={shareCardRef}
-                  style={{ position: 'absolute', left: '-9999px', top: 0 }}
-                >
-                  <YearlyWrapShareCard
-                    year={new Date().getFullYear()}
-                    classificationLabel={formatClassification(windowDistribution.classification)}
-                    totalEntries={distributionResult.totalEntries}
-                    activeDays={computeActiveDays(distributionResult.dailyCounts)}
-                    spikeRatio={distributionResult.stats.spikeRatio}
-                    top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                  />
-                </div>
-
-                {/* Preview - scaled down */}
-                <div className="flex justify-center overflow-hidden">
+            {windowDistribution && (() => {
+              const activeDays = computeActiveDays(distributionResult.dailyCounts);
+              const classificationLabel = formatClassification(windowDistribution.classification);
+              const caption = `My year followed a ${classificationLabel.toLowerCase()} pattern. ${distributionResult.totalEntries} entries across ${activeDays} active days. Computed locally in Story of Emergence.`;
+              
+              return (
+                <div className="w-full">
+                  {/* Hidden full-size card for export - fixed 1080x1350 */}
                   <div 
-                    className="scale-[0.3] origin-top"
-                    style={{ transform: 'scale(0.3)', transformOrigin: 'top center' }}
+                    style={{ 
+                      position: 'absolute', 
+                      left: '-9999px', 
+                      top: 0,
+                      visibility: 'hidden',
+                    }}
                   >
                     <YearlyWrapShareCard
+                      id="yearly-wrap-export-card"
+                      mode="export"
                       year={new Date().getFullYear()}
-                      classificationLabel={formatClassification(windowDistribution.classification)}
+                      classificationLabel={classificationLabel}
                       totalEntries={distributionResult.totalEntries}
-                      activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                      activeDays={activeDays}
                       spikeRatio={distributionResult.stats.spikeRatio}
                       top10PercentShare={distributionResult.stats.top10PercentDaysShare}
                     />
                   </div>
-                </div>
 
-                {/* Buttons */}
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={handleDownloadPng}
-                    disabled={isGenerating}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGenerating ? 'Generating...' : 'Download PNG'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyCaption}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                  >
-                    Copy Caption
-                  </button>
+                  {/* Two-column layout: preview left, controls right */}
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {/* Left column: Preview card */}
+                    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
+                      <YearlyWrapShareCard
+                        mode="preview"
+                        year={new Date().getFullYear()}
+                        classificationLabel={classificationLabel}
+                        totalEntries={distributionResult.totalEntries}
+                        activeDays={activeDays}
+                        spikeRatio={distributionResult.stats.spikeRatio}
+                        top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+                      />
+                    </div>
+
+                    {/* Right column: Controls and caption */}
+                    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6 space-y-6">
+                      <div>
+                        <h3 className="text-lg font-semibold">Share this year</h3>
+                        <p className="mt-2 text-sm text-white/60">
+                          Export a card you can post anywhere.
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={handleDownloadPng}
+                            disabled={isGenerating}
+                            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          >
+                            {isGenerating ? 'Generating...' : 'Download PNG'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCopyCaption}
+                            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
+                          >
+                            Copy Caption
+                          </button>
+                        </div>
+
+                        <div className="mt-4">
+                          <label className="text-xs text-white/60">Caption</label>
+                          <textarea
+                            className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/80 resize-none"
+                            rows={6}
+                            value={caption}
+                            readOnly
+                          />
+                        </div>
+                      </div>
+
+                      {/* Your year, interpreted */}
+                      {windowDistribution && (
+                        <div>
+                          <h3 className="text-lg font-semibold mb-3">Your year, interpreted</h3>
+                          <div className="space-y-3">
+                            <MeaningCard
+                              title={formatClassification(windowDistribution.classification) + ' rhythm'}
+                              explanation={`Your writing follows a ${formatClassification(windowDistribution.classification).toLowerCase()} pattern.`}
+                              rhythmNote={windowDistribution.classification === 'lognormal' 
+                                ? 'This suggests steady baseline days with occasional intense bursts—common in creative work.'
+                                : windowDistribution.classification === 'powerlaw'
+                                ? 'This suggests a few massive days drive most of your output—highly concentrated energy.'
+                                : 'This suggests consistent daily volume with moderate variation.'}
+                              metricChip={formatClassification(windowDistribution.classification)}
+                            />
+                            <MeaningCard
+                              title="Variance"
+                              explanation={`Your days vary by ${distributionResult.stats.variance.toFixed(1)} entries on average.`}
+                              rhythmNote={distributionResult.stats.variance > 5 
+                                ? 'High variance means quiet stretches followed by big bursts.'
+                                : 'Low variance means you maintain a steady daily rhythm.'}
+                              metricChip={`${distributionResult.stats.variance.toFixed(1)}`}
+                            />
+                            <MeaningCard
+                              title="Spike ratio"
+                              explanation={`Your biggest day was ${distributionResult.stats.spikeRatio.toFixed(1)}x your typical day.`}
+                              rhythmNote={distributionResult.stats.spikeRatio > 3
+                                ? 'You tend to pour it all out in intense sessions rather than steady daily output.'
+                                : 'Your output stays relatively consistent day to day.'}
+                              metricChip={`${distributionResult.stats.spikeRatio.toFixed(1)}x`}
+                            />
+                            <MeaningCard
+                              title="Top 10% days share"
+                              explanation={`${(distributionResult.stats.top10PercentDaysShare * 100).toFixed(0)}% of your writing happened on your busiest days.`}
+                              rhythmNote={distributionResult.stats.top10PercentDaysShare > 0.5
+                                ? 'Your year was driven by a few "gravity well" days that pulled everything together.'
+                                : 'Your writing was spread more evenly across the year.'}
+                              metricChip={`${(distributionResult.stats.top10PercentDaysShare * 100).toFixed(0)}%`}
+                            />
+                            {mostCommonDayCount !== null && (
+                              <MeaningCard
+                                title="Most common day"
+                                explanation={`Your most typical day had ${mostCommonDayCount} ${mostCommonDayCount === 1 ? 'entry' : 'entries'}.`}
+                                rhythmNote="This is your baseline rhythm—the daily output level you naturally gravitate toward."
+                                metricChip={`${mostCommonDayCount}`}
+                              />
+                            )}
+                          </div>
+                          <Glossary />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Mirror section */}
+            {mirrorInsights && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <h2 className="text-lg font-semibold mb-6">Mirror: what you wrote about</h2>
+                
+                <div className="grid gap-6 lg:grid-cols-3">
+                  {/* Recurring words */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/90 mb-3">Recurring words</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {mirrorInsights.keywords.map((word) => (
+                        <span
+                          key={word}
+                          className="px-2 py-1 rounded-lg bg-white/10 text-white/80 text-xs"
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Your shift this year */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/90 mb-3">Your shift this year</h3>
+                    <div className="space-y-3">
+                      {mirrorInsights.wordShift.rising.length > 0 && (
+                        <div>
+                          <div className="text-xs text-white/60 mb-1">Rising</div>
+                          <div className="flex flex-wrap gap-2">
+                            {mirrorInsights.wordShift.rising.map(({ word }) => (
+                              <span
+                                key={word}
+                                className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs"
+                              >
+                                {word}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {mirrorInsights.wordShift.fading.length > 0 && (
+                        <div>
+                          <div className="text-xs text-white/60 mb-1">Fading</div>
+                          <div className="flex flex-wrap gap-2">
+                            {mirrorInsights.wordShift.fading.map(({ word }) => (
+                              <span
+                                key={word}
+                                className="px-2 py-1 rounded-lg bg-white/10 text-white/50 text-xs"
+                              >
+                                {word}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Three moments */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-white/90 mb-3">Three moments</h3>
+                    <div className="space-y-3">
+                      {mirrorInsights.moments.map((moment) => (
+                        <div key={moment.date} className="rounded-lg border border-white/10 bg-black/30 p-3">
+                          <div className="text-xs text-white/60 mb-1">{formatDate(moment.date)}</div>
+                          <p className="text-xs text-white/80 leading-relaxed">{moment.preview}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
