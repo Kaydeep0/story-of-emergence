@@ -206,7 +206,7 @@ export function Glossary() {
           </div>
           <div>
             <div className="font-medium text-white/90 mb-1">Top 10 percent days share</div>
-            <div>How much of your total writing happened on your busiest days. If this is high, your year was driven by a few "gravity well" days.</div>
+            <div>How much of your total writing happened on your busiest days. If this is high, your year was driven by a few &quot;gravity well&quot; days.</div>
           </div>
           <div>
             <div className="font-medium text-white/90 mb-1">Most common day count</div>
