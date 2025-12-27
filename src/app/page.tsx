@@ -105,6 +105,10 @@ useEffect(() => {
   if (!mounted || !connected || !address) return;
   let cancelled = false;
   async function loadSourcesList() {
+    if (!address) {
+      setSources([]);
+      return;
+    }
     try {
       const data = await listExternalEntries(address);
       if (!cancelled) setSources(data as any[]);

@@ -26,7 +26,7 @@ export type YearlyWrap = {
     sourceId: string;
     count: number;
   }>;
-  distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed';
+  distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none';
   skew: number;
   concentrationShareTop10PercentDays: number;
 };
@@ -128,6 +128,9 @@ export function computeYearlyWrap(items: ReflectionEntry[], year: number): Yearl
       activeDays: 0,
       avgLengthChars: 0,
       topSources: [],
+      distributionLabel: 'none',
+      skew: 0,
+      concentrationShareTop10PercentDays: 0,
     };
   }
 

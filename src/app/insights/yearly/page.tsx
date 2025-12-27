@@ -7,7 +7,8 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeYearlyWrap, getAvailableYears, type YearlyWrap } from '../../lib/insights/yearlyWrap';
+import { computeYearlyWrap, getAvailableYears } from '../../lib/insights/yearlyWrap';
+import type { YearlyWrap } from '../../lib/insights/yearlyWrapSchema';
 import type { ReflectionEntry } from '../../lib/insights/types';
 import { listExternalEntries } from '../../lib/useSources';
 
@@ -42,6 +43,10 @@ export default function YearlyWrapPage() {
     let cancelled = false;
 
     async function loadSources() {
+      if (!address) {
+        setSources([]);
+        return;
+      }
       try {
         const data = await listExternalEntries(address);
         if (cancelled) return;
@@ -73,6 +78,10 @@ export default function YearlyWrapPage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) {
+        setReflections([]);
+        return;
+      }
       try {
         setLoading(true);
         setError(null);
@@ -119,9 +128,11 @@ export default function YearlyWrapPage() {
   }, [reflections, selectedYear]);
 
   // Compute yearly wrap for selected year
+  // Note: computeYearlyWrap may need to be updated to return the schema type
   const yearlyWrap = useMemo<YearlyWrap | null>(() => {
     if (reflections.length === 0) return null;
-    return computeYearlyWrap(reflections, selectedYear);
+    // Type assertion: computeYearlyWrap should return YearlyWrap schema type
+    return computeYearlyWrap(reflections, selectedYear) as unknown as YearlyWrap;
   }, [reflections, selectedYear]);
 
   // Get source title by sourceId
@@ -204,26 +215,21 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Empty State */}
-        {!loading && !error && (!yearlyWrap || yearlyWrap.entryCount === 0) && (
+        {!loading && !error && (!yearlyWrap || yearlyWrap.engagement.totalReflections === 0) && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70">No reflections found for {selectedYear}.</p>
           </div>
         )}
 
         {/* Yearly Wrap Content */}
-        {!loading && !error && yearlyWrap && yearlyWrap.entryCount > 0 && (
+        {!loading && !error && yearlyWrap && yearlyWrap.engagement.totalReflections > 0 && (
           <div className="space-y-6">
-            {/* Headline */}
+            {/* Year Header */}
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">{yearlyWrap.year}</h2>
-                  <p className="text-white/80 text-lg">{yearlyWrap.headline}</p>
-                </div>
-                <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/80">
-                  Pattern: {yearlyWrap.distributionLabel}
-                </span>
-              </div>
+              <h2 className="text-xl font-semibold mb-2">{yearlyWrap.year}</h2>
+              <p className="text-white/80 text-sm">
+                {yearlyWrap.engagement.totalReflections} reflection{yearlyWrap.engagement.totalReflections === 1 ? '' : 's'} · {yearlyWrap.engagement.activeDays} active day{yearlyWrap.engagement.activeDays === 1 ? '' : 's'}
+              </p>
             </div>
 
             {/* Stats Card */}
@@ -231,20 +237,20 @@ export default function YearlyWrapPage() {
               <h2 className="text-lg font-semibold mb-4">Stats</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.entryCount}</div>
+                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.totalReflections}</div>
                   <div className="text-sm text-white/60">Entries</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.activeDays}</div>
+                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.activeDays}</div>
                   <div className="text-sm text-white/60">Active Days</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.avgLengthChars}</div>
+                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.averageReflectionLength}</div>
                   <div className="text-sm text-white/60">Avg Length</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">
-                    {yearlyWrap.dominantThemes.length > 0 ? yearlyWrap.dominantThemes.length : 0}
+                    {yearlyWrap.themes.topThemes.length > 0 ? yearlyWrap.themes.topThemes.length : 0}
                   </div>
                   <div className="text-sm text-white/60">Themes</div>
                 </div>
@@ -252,11 +258,11 @@ export default function YearlyWrapPage() {
             </div>
 
             {/* Dominant Themes Section */}
-            {yearlyWrap.dominantThemes.length > 0 && (
+            {yearlyWrap.themes.topThemes.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h2 className="text-lg font-semibold mb-3">Dominant Themes</h2>
                 <div className="flex flex-wrap gap-2">
-                  {yearlyWrap.dominantThemes.map((theme) => (
+                  {yearlyWrap.themes.topThemes.map((theme) => (
                     <span
                       key={theme}
                       className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-white/90"
@@ -269,28 +275,23 @@ export default function YearlyWrapPage() {
             )}
 
             {/* Rising Topics Section */}
-            {yearlyWrap.risingTopics.length > 0 && (
+            {yearlyWrap.themes.fastestRisingTheme && (
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6">
-                <h2 className="text-lg font-semibold mb-3 text-emerald-200">Rising Topics</h2>
+                <h2 className="text-lg font-semibold mb-3 text-emerald-200">Rising Topic</h2>
                 <div className="flex flex-wrap gap-2">
-                  {yearlyWrap.risingTopics.map((topic) => (
-                    <span
-                      key={topic}
-                      className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200"
-                    >
-                      {topic}
-                    </span>
-                  ))}
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200">
+                    {yearlyWrap.themes.fastestRisingTheme}
+                  </span>
                 </div>
               </div>
             )}
 
             {/* Fading Topics Section */}
-            {yearlyWrap.fadingTopics.length > 0 && (
+            {yearlyWrap.themes.themesFadedThisYear.length > 0 && (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
                 <h2 className="text-lg font-semibold mb-3 text-amber-200">Fading Topics</h2>
                 <div className="flex flex-wrap gap-2">
-                  {yearlyWrap.fadingTopics.map((topic) => (
+                  {yearlyWrap.themes.themesFadedThisYear.map((topic) => (
                     <span
                       key={topic}
                       className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm text-amber-200"
@@ -303,20 +304,13 @@ export default function YearlyWrapPage() {
             )}
 
             {/* Key Moments Section */}
-            {yearlyWrap.keyMoments.length > 0 && (
+            {yearlyWrap.cognition.majorTimelineSpikes.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h2 className="text-lg font-semibold mb-3">Key Moments</h2>
                 <div className="space-y-3">
-                  {yearlyWrap.keyMoments.map((moment, index) => (
+                  {yearlyWrap.cognition.majorTimelineSpikes.map((spike, index) => (
                     <div key={index} className="border-l-2 border-white/20 pl-4">
-                      <div className="text-sm text-white/60 mb-1">
-                        {new Date(moment.date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </div>
-                      <p className="text-white/80">{moment.summary}</p>
+                      <p className="text-white/80">{spike}</p>
                     </div>
                   ))}
                 </div>
@@ -324,16 +318,19 @@ export default function YearlyWrapPage() {
             )}
 
             {/* Top Sources Section */}
-            {yearlyWrap.topSources.length > 0 && (
+            {yearlyWrap.attention.dominantSources.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h2 className="text-lg font-semibold mb-3">Top Sources</h2>
                 <div className="space-y-2">
-                  {yearlyWrap.topSources.map((source) => (
-                    <div key={source.sourceId} className="flex items-center justify-between">
-                      <span className="text-white/90">{getSourceTitle(source.sourceId)}</span>
-                      <span className="text-sm text-white/60">{source.count} reference{source.count === 1 ? '' : 's'}</span>
-                    </div>
-                  ))}
+                  {yearlyWrap.attention.dominantSources.map((sourceId) => {
+                    const share = yearlyWrap.attention.attentionShareBySource[sourceId] ?? 0;
+                    return (
+                      <div key={sourceId} className="flex items-center justify-between">
+                        <span className="text-white/90">{getSourceTitle(sourceId)}</span>
+                        <span className="text-sm text-white/60">{Math.round(share * 100)}%</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -46,6 +46,7 @@ export default function SourcesPage() {
     if (!mounted || !connected || !encryptionReady || !address) return;
     
     async function loadSources() {
+      if (!address) return;
       setLoading(true);
       setError(null);
       try {
@@ -71,6 +72,11 @@ export default function SourcesPage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) {
+        setReflections([]);
+        return;
+      }
+
       try {
         const { items } = await rpcFetchEntries(address, sessionKey, {
           includeDeleted: false,

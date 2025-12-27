@@ -124,7 +124,20 @@ export function SourceCard({ entry, linkedReflections, expanded, onToggle, detai
           </span>
         )}
         {linkedReflections.length === 0 ? (
-          <span className="text-white/40 italic">Not linked to a reflection</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-white/40 italic">No reflections linked yet</span>
+            {detailHref && (
+              <Link
+                href={detailHref}
+                className="inline-flex items-center gap-1 text-xs text-emerald-300 hover:text-emerald-200 transition-colors underline"
+              >
+                Link or import reflections
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            )}
+          </div>
         ) : (
           <button
             type="button"

@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const routeName = '/api/events/log';
   let requestBodySize = 0;
   let parsedBodyKeys: string[] = [];
-  let supabaseCallName = 'log_internal_event';
+  const supabaseCallName = 'log_internal_event';
 
   try {
     // Get request body size

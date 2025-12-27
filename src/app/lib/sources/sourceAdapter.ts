@@ -1,4 +1,4 @@
-import { InternalEvent } from '../events/types';
+import type { InternalEvent } from '../types';
 
 export type SourceKind =
   | 'youtube'

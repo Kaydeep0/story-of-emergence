@@ -156,6 +156,9 @@ export function useEncryptionSession() {
       setError(null);
 
       try {
+        if (!currentWallet) {
+          throw new Error('Wallet address is required');
+        }
         const msg = `Story of Emergence — encryption key consent for ${currentWallet}`;
         const signature = await signMessageAsync({ message: msg });
         
@@ -220,6 +223,9 @@ export function useEncryptionSession() {
       // Clear old session
       clearSessionFromStorage();
 
+      if (!currentWallet) {
+        throw new Error('Wallet address is required');
+      }
       const msg = `Story of Emergence — encryption key consent for ${currentWallet}`;
       const signature = await signMessageAsync({ message: msg });
       
@@ -308,6 +314,9 @@ export function useEncryptionSession() {
     setError(null);
 
     try {
+      if (!currentWallet) {
+        return { needsWallet: false, needsConsent: true, isReady: false };
+      }
       const msg = `Story of Emergence — encryption key consent for ${currentWallet}`;
       const signature = await signMessageAsync({ message: msg });
       

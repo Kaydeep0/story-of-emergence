@@ -129,12 +129,12 @@ export function SourceLinkMenu({ reflectionId, currentSourceId, sources, onLink 
 
             {/* Source list */}
             {sources.map((source) => {
-              const sid = source.sourceId ?? source.source_id;
+              const sid = source.sourceId ?? source.source_id ?? null;
               const isSelected = sid === currentSourceId;
               
               return (
                 <button
-                  key={sid}
+                  key={sid ?? 'no-id'}
                   onClick={() => handleSelectSource(sid)}
                   className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 ${
                     isSelected

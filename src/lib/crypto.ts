@@ -16,6 +16,17 @@ declare global {
 
 // --- helpers ---
 
+/**
+ * Convert Uint8Array to ArrayBuffer for WebCrypto APIs
+ * Returns a real ArrayBuffer containing exactly the bytes in the view
+ */
+export function u8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
+  // Create a new ArrayBuffer and copy the data to ensure we have a pure ArrayBuffer
+  const buf = new ArrayBuffer(u8.length);
+  new Uint8Array(buf).set(u8);
+  return buf;
+}
+
 // Convert "0x..." hex string to bytes
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
@@ -38,7 +49,7 @@ export async function deriveKeyFromSignature(address: string): Promise<CryptoKey
   });
 
   const sigBytes = hexToBytes(hexSig);
-  const digest = await crypto.subtle.digest('SHA-256', sigBytes); // 32 bytes
+  const digest = await crypto.subtle.digest('SHA-256', u8ToArrayBuffer(sigBytes)); // 32 bytes
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
@@ -48,7 +59,7 @@ export async function deriveKeyFromSignature(address: string): Promise<CryptoKey
 export async function encryptJSON(obj: unknown, key: CryptoKey): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12)); // 12-byte IV for AES-GCM
   const plaintext = new TextEncoder().encode(JSON.stringify(obj));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, u8ToArrayBuffer(plaintext));
 
   const payload = new Uint8Array(iv.length + (ct as ArrayBuffer).byteLength);
   payload.set(iv, 0);
@@ -65,14 +76,14 @@ export async function decryptJSON(b64: string, key: CryptoKey): Promise<unknown>
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const iv = raw.slice(0, 12);
   const ct = raw.slice(12);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, u8ToArrayBuffer(ct));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(pt)));
 }
 
 // --- derive an AES key directly from a hex signature ---
 export async function keyFromSignatureHex(hexSig: string): Promise<CryptoKey> {
   const sigBytes = hexToBytes(hexSig);
-  const digest = await crypto.subtle.digest('SHA-256', sigBytes);
+  const digest = await crypto.subtle.digest('SHA-256', u8ToArrayBuffer(sigBytes));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
@@ -91,7 +102,7 @@ export function tryDecodeLegacyJSON(b64: string): unknown {
 export async function aesGcmEncryptText(key: CryptoKey, plaintext: string): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = new TextEncoder().encode(plaintext);
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, u8ToArrayBuffer(data));
 
   const payload = new Uint8Array(iv.length + (ct as ArrayBuffer).byteLength);
   payload.set(iv, 0);
@@ -108,7 +119,7 @@ export async function aesGcmDecryptText(key: CryptoKey, packed: string): Promise
   const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   const iv = raw.slice(0, 12);
   const ct = raw.slice(12);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, u8ToArrayBuffer(ct));
   return new TextDecoder().decode(new Uint8Array(pt));
 }
 
@@ -133,7 +144,7 @@ export type EncryptionEnvelope = {
 export async function encryptText(key: CryptoKey, plaintext: string): Promise<EncryptionEnvelope> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = new TextEncoder().encode(plaintext);
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, u8ToArrayBuffer(data));
   
   // For AES-GCM, the tag is appended to the ciphertext
   // The ciphertext includes: actual ciphertext + 16-byte authentication tag
@@ -169,7 +180,7 @@ export async function decryptText(key: CryptoKey, envelope: EncryptionEnvelope):
   const pt = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
     key,
-    ciphertextWithTag
+    u8ToArrayBuffer(ciphertextWithTag)
   );
   
   return new TextDecoder().decode(new Uint8Array(pt));

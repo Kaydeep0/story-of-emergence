@@ -39,7 +39,7 @@ type YouTubeTakeoutData = {
  * Supports watch-history.json and likes.json
  */
 export class YouTubeTakeoutAdapter implements SourceAdapter {
-  sourceKind: 'youtube' = 'youtube';
+  sourceKind = 'youtube' as const;
   
   importCapabilities = {
     history: true,
@@ -138,7 +138,7 @@ export class YouTubeTakeoutAdapter implements SourceAdapter {
         const payload = {
           type: 'source_event' as const,
           source_id: 'youtube-takeout', // Will be replaced with actual source ID on import
-          source_kind: 'youtube',
+          source_kind: 'youtube' as const,
           title: entry.title || 'Untitled Video',
           url: entry.titleUrl || null,
           raw: JSON.stringify(metadata),
@@ -189,7 +189,7 @@ export class YouTubeTakeoutAdapter implements SourceAdapter {
         const payload = {
           type: 'source_event' as const,
           source_id: 'youtube-takeout', // Will be replaced with actual source ID on import
-          source_kind: 'youtube',
+          source_kind: 'youtube' as const,
           title: entry.title || 'Untitled Video',
           url: entry.titleUrl || null,
           raw: JSON.stringify(metadata),

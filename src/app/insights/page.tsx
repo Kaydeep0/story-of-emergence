@@ -596,6 +596,7 @@ export default function InsightsPage() {
     let cancelled = false;
 
     async function loadSources() {
+      if (!address) return;
       try {
         const data = await listExternalEntries(address);
         if (cancelled) return;
@@ -633,6 +634,8 @@ export default function InsightsPage() {
     setLoading(true);
     setError(null);
 
+    if (!address) return;
+
     try {
       const { items } = await rpcListInternalEvents(address, sessionKey, {
         limit: 500,
@@ -669,6 +672,7 @@ export default function InsightsPage() {
     let cancelled = false;
 
     async function loadTimeline() {
+      if (!address || !sessionKey) return;
       try {
         setTimelineLoading(true);
         setTimelineError(null);
@@ -1033,6 +1037,17 @@ export default function InsightsPage() {
     return map;
   }, [sources]);
 
+  // Create a map of sourceId -> source kind for quick lookups
+  const sourceKindById = useMemo(() => {
+    const map = new Map<string, string>();
+    sources.forEach((s) => {
+      if (s.sourceId && s.kind) {
+        map.set(s.sourceId, s.kind);
+      }
+    });
+    return map;
+  }, [sources]);
+
   // Helper to check if an insight card has evidence from sources
   function hasSourceEvidence(card: InsightCard, reflectionEntries: ReflectionEntry[]): boolean {
     const entryMap = new Map(reflectionEntries.map(e => [e.id, e]));
@@ -1049,6 +1064,18 @@ export default function InsightsPage() {
       const entry = entryMap.get(ev.entryId);
       if (entry?.sourceId) {
         return sourceTitleById.get(entry.sourceId) || null;
+      }
+    }
+    return null;
+  }
+
+  // Helper to get source kind for an insight card (returns first source found)
+  function getSourceKindForInsight(card: InsightCard, reflectionEntries: ReflectionEntry[]): string | null {
+    const entryMap = new Map(reflectionEntries.map(e => [e.id, e]));
+    for (const ev of card.evidence) {
+      const entry = entryMap.get(ev.entryId);
+      if (entry?.sourceId) {
+        return sourceKindById.get(entry.sourceId) || null;
       }
     }
     return null;
@@ -1249,7 +1276,18 @@ export default function InsightsPage() {
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                     </svg>
-                                    From source
+                                    {(() => {
+                                      const sourceName = getSourceNameForInsight(spike, timelineReflectionEntries);
+                                      const sourceKind = getSourceKindForInsight(spike, timelineReflectionEntries);
+                                      if (sourceName && sourceKind) {
+                                        return `From ${sourceKind}: ${sourceName}`;
+                                      } else if (sourceName) {
+                                        return `From Source: ${sourceName}`;
+                                      } else if (sourceKind) {
+                                        return `From ${sourceKind}`;
+                                      }
+                                      return 'From source';
+                                    })()}
                                   </span>
                                 </div>
                               )}
@@ -1373,7 +1411,18 @@ export default function InsightsPage() {
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                     </svg>
-                                    From Source{getSourceNameForInsight(coach, timelineReflectionEntries) ? `: ${getSourceNameForInsight(coach, timelineReflectionEntries)}` : ''}
+                                    {(() => {
+                                      const sourceName = getSourceNameForInsight(coach, timelineReflectionEntries);
+                                      const sourceKind = getSourceKindForInsight(coach, timelineReflectionEntries);
+                                      if (sourceName && sourceKind) {
+                                        return `From ${sourceKind}: ${sourceName}`;
+                                      } else if (sourceName) {
+                                        return `From Source: ${sourceName}`;
+                                      } else if (sourceKind) {
+                                        return `From ${sourceKind}`;
+                                      }
+                                      return 'From source';
+                                    })()}
                                   </span>
                                 </div>
                               )}
@@ -1495,7 +1544,18 @@ export default function InsightsPage() {
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                     </svg>
-                                    From Source{getSourceNameForInsight(cluster, timelineReflectionEntries) ? `: ${getSourceNameForInsight(cluster, timelineReflectionEntries)}` : ''}
+                                    {(() => {
+                                      const sourceName = getSourceNameForInsight(cluster, timelineReflectionEntries);
+                                      const sourceKind = getSourceKindForInsight(cluster, timelineReflectionEntries);
+                                      if (sourceName && sourceKind) {
+                                        return `From ${sourceKind}: ${sourceName}`;
+                                      } else if (sourceName) {
+                                        return `From Source: ${sourceName}`;
+                                      } else if (sourceKind) {
+                                        return `From ${sourceKind}`;
+                                      }
+                                      return 'From source';
+                                    })()}
                                   </span>
                                 </div>
                               )}
@@ -2166,7 +2226,18 @@ export default function InsightsPage() {
                                       <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                       </svg>
-                                      From Source{getSourceNameForInsight(insight, summaryReflectionEntries) ? `: ${getSourceNameForInsight(insight, summaryReflectionEntries)}` : ''}
+                                      {(() => {
+                                        const sourceName = getSourceNameForInsight(insight, summaryReflectionEntries);
+                                        const sourceKind = getSourceKindForInsight(insight, summaryReflectionEntries);
+                                        if (sourceName && sourceKind) {
+                                          return `From ${sourceKind}: ${sourceName}`;
+                                        } else if (sourceName) {
+                                          return `From Source: ${sourceName}`;
+                                        } else if (sourceKind) {
+                                          return `From ${sourceKind}`;
+                                        }
+                                        return 'From source';
+                                      })()}
                                     </span>
                                   </div>
                                 )}

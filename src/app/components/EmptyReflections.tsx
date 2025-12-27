@@ -1,6 +1,4 @@
 'use client';
-cat > src/app/components/EmptyReflections.tsx <<'TSX'
-'use client';
 
 export default function EmptyReflections(props: { onLoadClick: () => void }) {
   return (

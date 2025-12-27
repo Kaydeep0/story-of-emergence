@@ -1,6 +1,8 @@
 // src/lib/sharing.ts
 // Types and helpers for private sharing (Phase 2)
 
+import { u8ToArrayBuffer } from './crypto';
+
 // ----- Base64URL helpers -----
 
 /**
@@ -178,7 +180,7 @@ export async function exportKeyRaw(key: CryptoKey): Promise<Uint8Array> {
  * Import raw bytes as an AES-GCM key
  */
 export async function importKeyRaw(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  return crypto.subtle.importKey('raw', u8ToArrayBuffer(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
 /**
@@ -195,7 +197,7 @@ export async function wrapKeyForRecipient(
   const ct = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     recipientDerivedKey,
-    raw
+    u8ToArrayBuffer(raw)
   );
   
   // Combine iv + ciphertext
@@ -231,7 +233,7 @@ export async function unwrapKeyForRecipient(
   const rawKey = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv },
     localDerivedKey,
-    ct
+    u8ToArrayBuffer(ct)
   );
   
   return crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['decrypt']);
@@ -250,7 +252,7 @@ export async function encryptSlice(
   const plaintext = JSON.stringify(payload);
   const data = new TextEncoder().encode(plaintext);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, contentKey, data);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, contentKey, u8ToArrayBuffer(data));
   
   const combined = new Uint8Array(iv.length + ct.byteLength);
   combined.set(iv, 0);
@@ -280,7 +282,7 @@ export async function decryptSlice(
   const iv = raw.slice(0, 12);
   const ct = raw.slice(12);
   
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, contentKey, ct);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, contentKey, u8ToArrayBuffer(ct));
   const text = new TextDecoder().decode(new Uint8Array(pt));
   return JSON.parse(text);
 }
