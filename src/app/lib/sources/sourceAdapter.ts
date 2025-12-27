@@ -1,21 +1,15 @@
-// src/app/lib/sources/sourceAdapter.ts
-// Source Adapter Interface for large-scale ingestion
+import { InternalEvent } from '../events/types';
 
-import type { InternalEvent } from '../types';
+export type SourceKind =
+  | 'youtube'
+  | 'article'
+  | 'book'
+  | 'podcast'
+  | 'social';
 
-/**
- * Base interface for source adapters that normalize external data
- * into InternalEvent[] format for ingestion into the system.
- */
 export interface SourceAdapter {
-  /**
-   * The kind of source this adapter handles
-   */
-  sourceKind: 'youtube' | 'article' | 'book' | 'podcast' | 'social';
+  sourceKind: SourceKind;
 
-  /**
-   * Capabilities this adapter supports for importing data
-   */
   importCapabilities: {
     history?: boolean;
     likes?: boolean;
@@ -24,10 +18,9 @@ export interface SourceAdapter {
   };
 
   /**
-   * Normalize raw external data into InternalEvent[] format
-   * @param raw - Raw data from the external source (format varies by source)
-   * @returns Array of InternalEvent objects ready for ingestion
+   * Normalize raw external data into internal events.
+   * Must not mutate state.
+   * Must not access encryption keys directly.
    */
   normalize(raw: unknown): InternalEvent[];
 }
-
