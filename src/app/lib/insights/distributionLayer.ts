@@ -179,7 +179,7 @@ function generateExplanation(
 /**
  * Compute distribution for a specific time window
  */
-function computeWindowDistribution(
+export function computeWindowDistribution(
   entries: ReflectionEntry[],
   windowDays: TimeWindowDays
 ): WindowDistribution {
@@ -317,15 +317,16 @@ export function computeDistributionLayer(
   const mean = counts.reduce((s, c) => s + c, 0) / n;
   const variance = counts.reduce((s, c) => s + Math.pow(c - mean, 2), 0) / n;
   
-  // Spike ratio (max day / median day)
-  const sortedCounts = [...counts].sort((a, b) => a - b);
-  const median = sortedCounts.length > 0
-    ? sortedCounts.length % 2 === 0
-      ? (sortedCounts[sortedCounts.length / 2 - 1] + sortedCounts[sortedCounts.length / 2]) / 2
-      : sortedCounts[Math.floor(sortedCounts.length / 2)]
+  // Spike ratio (max day / median of non-zero days)
+  const nonZeroCounts = counts.filter(c => c > 0);
+  const sortedNonZero = [...nonZeroCounts].sort((a, b) => a - b);
+  const median = sortedNonZero.length > 0
+    ? sortedNonZero.length % 2 === 0
+      ? (sortedNonZero[sortedNonZero.length / 2 - 1] + sortedNonZero[sortedNonZero.length / 2]) / 2
+      : sortedNonZero[Math.floor(sortedNonZero.length / 2)]
     : 0;
-  const maxCount = Math.max(...counts);
-  const spikeRatio = median > 0 ? maxCount / median : 0;
+  const maxCount = Math.max(...counts, 0);
+  const spikeRatio = median > 0 ? maxCount / median : (maxCount > 0 ? maxCount : 0);
   
   // Top 10 percent days share (power law signal)
   const total = counts.reduce((s, c) => s + c, 0);
@@ -365,6 +366,20 @@ export function computeDistributionLayer(
 export function computeDistributionLayerLegacy(entries: ReflectionEntry[]): WindowDistribution[] {
   const windows: TimeWindowDays[] = [7, 30, 90, 365];
   return windows.map(windowDays => computeWindowDistribution(entries, windowDays));
+}
+
+/**
+ * Compute active days count (days with at least 1 entry)
+ */
+export function computeActiveDays(dailyCounts: number[]): number {
+  return dailyCounts.filter(count => count > 0).length;
+}
+
+/**
+ * Get top spike dates from distribution result
+ */
+export function getTopSpikeDates(distributionResult: DistributionResult, count: number = 3): string[] {
+  return distributionResult.topDays.slice(0, count).map(d => d.date);
 }
 
 /**

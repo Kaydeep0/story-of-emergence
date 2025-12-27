@@ -7,23 +7,25 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeYearlyWrap, getAvailableYears } from '../../lib/insights/yearlyWrap';
-import type { YearlyWrap } from '../../lib/insights/yearlyWrapSchema';
-import type { ReflectionEntry } from '../../lib/insights/types';
-import { listExternalEntries } from '../../lib/useSources';
+import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from '../../lib/insights/distributionLayer';
+import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
+import { useHighlights } from '../../lib/insights/useHighlights';
+import { rpcInsertEntry } from '../../lib/entries';
+import { toast } from 'sonner';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
   const { logEvent } = useLogEvent();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   const { getSourceIdFor } = useReflectionLinks(address);
+  const { isHighlighted, toggleHighlight } = useHighlights();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [sources, setSources] = useState<Array<{ id: string; sourceId: string; title: string }>>([]);
+  const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
+  const [windowDistribution, setWindowDistribution] = useState<WindowDistribution | null>(null);
 
   const connected = isConnected && !!address;
 
@@ -37,40 +39,7 @@ export default function YearlyWrapPage() {
     logEvent('page_insights');
   }, [mounted, connected, logEvent]);
 
-  // Load external sources for source titles
-  useEffect(() => {
-    if (!mounted || !connected || !address) return;
-    let cancelled = false;
-
-    async function loadSources() {
-      if (!address) {
-        setSources([]);
-        return;
-      }
-      try {
-        const data = await listExternalEntries(address);
-        if (cancelled) return;
-        setSources(
-          (data as any[]).map((s) => ({
-            id: s.id,
-            sourceId: s.sourceId ?? s.source_id ?? '',
-            title: s.title ?? 'Untitled Source',
-          }))
-        );
-      } catch {
-        if (!cancelled) {
-          setSources([]);
-        }
-      }
-    }
-
-    loadSources();
-    return () => {
-      cancelled = true;
-    };
-  }, [mounted, connected, address]);
-
-  // Load reflections
+  // Load reflections (same pattern as Distributions page)
   useEffect(() => {
     if (!mounted || !connected || !address) return;
     if (!encryptionReady || !sessionKey) return;
@@ -118,27 +87,141 @@ export default function YearlyWrapPage() {
     };
   }, [mounted, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Get available years and set default to current year or most recent
-  const availableYears = useMemo(() => {
-    const years = getAvailableYears(reflections);
-    if (years.length > 0 && !years.includes(selectedYear)) {
-      setSelectedYear(years[0]); // Set to most recent year if current selection not available
+  // Compute yearly distribution (365 days)
+  useEffect(() => {
+    if (reflections.length === 0) {
+      setDistributionResult(null);
+      setWindowDistribution(null);
+      return;
     }
-    return years;
-  }, [reflections, selectedYear]);
 
-  // Compute yearly wrap for selected year
-  // Note: computeYearlyWrap may need to be updated to return the schema type
-  const yearlyWrap = useMemo<YearlyWrap | null>(() => {
-    if (reflections.length === 0) return null;
-    // Type assertion: computeYearlyWrap should return YearlyWrap schema type
-    return computeYearlyWrap(reflections, selectedYear) as unknown as YearlyWrap;
-  }, [reflections, selectedYear]);
+    // Compute distribution for 365 days
+    const result = computeDistributionLayer(reflections, { windowDays: 365 });
+    setDistributionResult(result);
+    
+    // Also get window distribution for classification
+    const windowDist = computeWindowDistribution(reflections, 365);
+    setWindowDistribution(windowDist);
+  }, [reflections]);
 
-  // Get source title by sourceId
-  const getSourceTitle = (sourceId: string): string => {
-    const source = sources.find((s) => s.sourceId === sourceId);
-    return source?.title || sourceId;
+  // Format date for display
+  const formatDate = (dateStr: string): string => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // Format classification label
+  const formatClassification = (classification: string): string => {
+    if (classification === 'lognormal') return 'Log Normal';
+    if (classification === 'powerlaw') return 'Power Law';
+    return 'Normal';
+  };
+
+  // Compute narrative insight
+  const narrativeInsight = useMemo<InsightCard | null>(() => {
+    if (!distributionResult || !windowDistribution || distributionResult.totalEntries === 0) {
+      return null;
+    }
+
+    const activeDays = computeActiveDays(distributionResult.dailyCounts);
+    const topSpikeDates = getTopSpikeDates(distributionResult, 3);
+    const topDay = distributionResult.topDays[0];
+    const biggestSpikeDay = topDay ? formatDate(topDay.date) : null;
+    const top10PercentShare = distributionResult.stats.top10PercentDaysShare;
+
+    const classification = windowDistribution.classification;
+    const classificationLabel = formatClassification(classification);
+
+    // Build narrative
+    const title = `Your year followed a ${classificationLabel.toLowerCase()} pattern`;
+    
+    let body = `You wrote ${distributionResult.totalEntries} reflections across ${activeDays} active days. `;
+    
+    if (top10PercentShare > 0.5) {
+      body += `Your most intense days account for ${Math.round(top10PercentShare * 100)}% of your total output. `;
+    } else {
+      body += `Your writing was spread across ${activeDays} days. `;
+    }
+    
+    if (biggestSpikeDay) {
+      body += `Your biggest day was ${biggestSpikeDay} with ${topDay.count} entries.`;
+    }
+
+    return {
+      id: `yearly-wrap-${Date.now()}`,
+      kind: 'distribution',
+      title,
+      explanation: body,
+      evidence: topSpikeDates.slice(0, 3).map((date, idx) => {
+        const dayData = distributionResult.topDays.find(d => d.date === date);
+        return {
+          entryId: `spike-${idx}`,
+          timestamp: new Date(date).toISOString(),
+          preview: `${dayData?.count || 0} entries on ${formatDate(date)}`,
+        };
+      }),
+      computedAt: new Date().toISOString(),
+    };
+  }, [distributionResult, windowDistribution]);
+
+  // Handle saving highlight
+  const handleSaveHighlight = async () => {
+    if (!connected || !address) {
+      toast.error('Connect wallet to save');
+      return;
+    }
+
+    if (!encryptionReady || !sessionKey) {
+      toast.error('Unlock vault to save');
+      return;
+    }
+
+    if (!narrativeInsight || !distributionResult || !windowDistribution) {
+      toast.error('No insight to save');
+      return;
+    }
+
+    try {
+      const topSpikeDates = getTopSpikeDates(distributionResult, 3);
+      const activeDays = computeActiveDays(distributionResult.dailyCounts);
+
+      const highlightPayload = {
+        type: 'highlight',
+        subtype: 'yearly_wrap',
+        title: narrativeInsight.title,
+        body: narrativeInsight.explanation,
+        evidence: narrativeInsight.evidence.map(ev => ({
+          entryId: ev.entryId,
+          timestamp: ev.timestamp,
+          preview: ev.preview,
+        })),
+        metadata: {
+          insightId: narrativeInsight.id,
+          kind: narrativeInsight.kind,
+          computedAt: narrativeInsight.computedAt,
+          windowDays: 365,
+          classification: windowDistribution.classification,
+          totalEntries: distributionResult.totalEntries,
+          activeDays,
+          topDays: distributionResult.topDays.slice(0, 10),
+          spikeDates: topSpikeDates,
+          mostCommonDayCount: distributionResult.stats.mostCommonDayCount,
+          variance: distributionResult.stats.variance,
+          spikeRatio: distributionResult.stats.spikeRatio,
+          top10PercentDaysShare: distributionResult.stats.top10PercentDaysShare,
+          narrative: narrativeInsight.explanation,
+        },
+        ts: Date.now(),
+      };
+
+      await rpcInsertEntry(address, sessionKey, highlightPayload);
+      toggleHighlight(narrativeInsight);
+      toast.success('Saved to Highlights');
+    } catch (err: any) {
+      console.error('Failed to save highlight', err);
+      toast.error(err?.message ?? 'Failed to save highlight');
+    }
   };
 
   if (!mounted) return null;
@@ -147,7 +230,7 @@ export default function YearlyWrapPage() {
   if (!connected) {
     return (
       <main className="min-h-screen bg-black text-white">
-        <section className="max-w-2xl mx-auto px-4 py-10">
+        <section className="max-w-4xl mx-auto px-4 py-10">
           <h1 className="text-2xl font-semibold text-center mb-2">Yearly Wrap</h1>
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70 mb-3">Connect your wallet to view your yearly wrap.</p>
@@ -160,7 +243,7 @@ export default function YearlyWrapPage() {
   if (!encryptionReady) {
     return (
       <main className="min-h-screen bg-black text-white">
-        <section className="max-w-2xl mx-auto px-4 py-10">
+        <section className="max-w-4xl mx-auto px-4 py-10">
           <h1 className="text-2xl font-semibold text-center mb-2">Yearly Wrap</h1>
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70 mb-3">
@@ -174,31 +257,8 @@ export default function YearlyWrapPage() {
 
   return (
     <main className="min-h-screen bg-black text-white">
-      <section className="max-w-2xl mx-auto px-4 py-10">
+      <section className="max-w-4xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-6">Yearly Wrap</h1>
-
-        {/* Year Selector */}
-        <div className="mb-6">
-          <label htmlFor="year-select" className="block text-sm text-white/60 mb-2">
-            Select Year
-          </label>
-          <select
-            id="year-select"
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="w-full rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-white/20"
-          >
-            {availableYears.length === 0 ? (
-              <option value={new Date().getFullYear()}>No data available</option>
-            ) : (
-              availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
 
         {/* Loading State */}
         {loading && (
@@ -215,123 +275,149 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Empty State */}
-        {!loading && !error && (!yearlyWrap || yearlyWrap.engagement.totalReflections === 0) && (
+        {!loading && !error && (!distributionResult || distributionResult.totalEntries === 0) && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
-            <p className="text-white/70">No reflections found for {selectedYear}.</p>
+            <p className="text-white/70">No reflections found in the last 365 days. Start writing to see your yearly wrap.</p>
           </div>
         )}
 
         {/* Yearly Wrap Content */}
-        {!loading && !error && yearlyWrap && yearlyWrap.engagement.totalReflections > 0 && (
+        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
           <div className="space-y-6">
-            {/* Year Header */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-xl font-semibold mb-2">{yearlyWrap.year}</h2>
-              <p className="text-white/80 text-sm">
-                {yearlyWrap.engagement.totalReflections} reflection{yearlyWrap.engagement.totalReflections === 1 ? '' : 's'} · {yearlyWrap.engagement.activeDays} active day{yearlyWrap.engagement.activeDays === 1 ? '' : 's'}
-              </p>
-            </div>
+            {/* Narrative Insight Card */}
+            {narrativeInsight && (
+              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-orange-200">{narrativeInsight.title}</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isHighlighted(narrativeInsight)) {
+                          toggleHighlight(narrativeInsight);
+                        } else {
+                          handleSaveHighlight();
+                        }
+                      }}
+                      className="p-1 rounded-full transition-colors hover:bg-white/10"
+                      title={isHighlighted(narrativeInsight) ? 'Remove from highlights' : 'Save to Highlights'}
+                    >
+                      {isHighlighted(narrativeInsight) ? (
+                        <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-white/70">{narrativeInsight.explanation}</p>
+                <p className="text-xs text-white/40">Computed locally</p>
+              </div>
+            )}
 
-            {/* Stats Card */}
+            {/* Metrics Grid */}
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold mb-4">Stats</h2>
+              <h2 className="text-lg font-semibold mb-4">Year in Numbers</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.totalReflections}</div>
-                  <div className="text-sm text-white/60">Entries</div>
+                  <div className="text-sm text-white/60 mb-1">Total Entries</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.totalEntries}</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.activeDays}</div>
-                  <div className="text-sm text-white/60">Active Days</div>
+                  <div className="text-sm text-white/60 mb-1">Active Days</div>
+                  <div className="text-2xl font-bold text-white">{computeActiveDays(distributionResult.dailyCounts)}</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-white">{yearlyWrap.engagement.averageReflectionLength}</div>
-                  <div className="text-sm text-white/60">Avg Length</div>
+                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
+                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
                 </div>
                 <div>
+                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Variance</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Classification</div>
                   <div className="text-2xl font-bold text-white">
-                    {yearlyWrap.themes.topThemes.length > 0 ? yearlyWrap.themes.topThemes.length : 0}
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                      windowDistribution?.classification === 'normal' 
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : windowDistribution?.classification === 'lognormal'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                    }`}>
+                      {windowDistribution ? formatClassification(windowDistribution.classification) : 'N/A'}
+                    </span>
                   </div>
-                  <div className="text-sm text-white/60">Themes</div>
                 </div>
               </div>
             </div>
 
-            {/* Dominant Themes Section */}
-            {yearlyWrap.themes.topThemes.length > 0 && (
+            {/* Top 10 Days */}
+            {distributionResult.topDays.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h2 className="text-lg font-semibold mb-3">Dominant Themes</h2>
-                <div className="flex flex-wrap gap-2">
-                  {yearlyWrap.themes.topThemes.map((theme) => (
-                    <span
-                      key={theme}
-                      className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-white/90"
-                    >
-                      {theme}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Rising Topics Section */}
-            {yearlyWrap.themes.fastestRisingTheme && (
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6">
-                <h2 className="text-lg font-semibold mb-3 text-emerald-200">Rising Topic</h2>
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200">
-                    {yearlyWrap.themes.fastestRisingTheme}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Fading Topics Section */}
-            {yearlyWrap.themes.themesFadedThisYear.length > 0 && (
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
-                <h2 className="text-lg font-semibold mb-3 text-amber-200">Fading Topics</h2>
-                <div className="flex flex-wrap gap-2">
-                  {yearlyWrap.themes.themesFadedThisYear.map((topic) => (
-                    <span
-                      key={topic}
-                      className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm text-amber-200"
-                    >
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Key Moments Section */}
-            {yearlyWrap.cognition.majorTimelineSpikes.length > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h2 className="text-lg font-semibold mb-3">Key Moments</h2>
-                <div className="space-y-3">
-                  {yearlyWrap.cognition.majorTimelineSpikes.map((spike, index) => (
-                    <div key={index} className="border-l-2 border-white/20 pl-4">
-                      <p className="text-white/80">{spike}</p>
+                <h3 className="text-md font-semibold mb-3">Top 10 Days</h3>
+                <div className="space-y-2">
+                  {distributionResult.topDays.slice(0, 10).map((day) => (
+                    <div key={day.date} className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">{formatDate(day.date)}</span>
+                      <span className="text-white/90 font-medium">{day.count} entries</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Top Sources Section */}
-            {yearlyWrap.attention.dominantSources.length > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h2 className="text-lg font-semibold mb-3">Top Sources</h2>
-                <div className="space-y-2">
-                  {yearlyWrap.attention.dominantSources.map((sourceId) => {
-                    const share = yearlyWrap.attention.attentionShareBySource[sourceId] ?? 0;
-                    return (
-                      <div key={sourceId} className="flex items-center justify-between">
-                        <span className="text-white/90">{getSourceTitle(sourceId)}</span>
-                        <span className="text-sm text-white/60">{Math.round(share * 100)}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* Distribution Table (365d window) */}
+            {windowDistribution && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left p-4 text-sm font-semibold text-white/80">Window</th>
+                      <th className="text-left p-4 text-sm font-semibold text-white/80">Classification</th>
+                      <th className="text-left p-4 text-sm font-semibold text-white/80">Top 3 Spike Dates</th>
+                      <th className="text-left p-4 text-sm font-semibold text-white/80">Explanation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-white/5 last:border-0">
+                      <td className="p-4 text-white/90 font-medium">365d</td>
+                      <td className="p-4">
+                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          windowDistribution.classification === 'normal' 
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                            : windowDistribution.classification === 'lognormal'
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                            : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                        }`}>
+                          {formatClassification(windowDistribution.classification)}
+                        </span>
+                      </td>
+                      <td className="p-4 text-white/70 text-sm">
+                        {windowDistribution.topSpikeDates.length > 0 ? (
+                          <ul className="space-y-1">
+                            {windowDistribution.topSpikeDates.map((date, idx) => (
+                              <li key={idx}>{formatDate(date)}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-white/40">No spikes</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-white/70 text-sm">{windowDistribution.explanation}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -340,4 +426,3 @@ export default function YearlyWrapPage() {
     </main>
   );
 }
-
