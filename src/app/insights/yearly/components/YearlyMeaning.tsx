@@ -174,6 +174,7 @@ export function Glossary() {
 
   return (
     <div className="mt-4">
+      <p className="text-xs text-white/60 mb-2">Numbers are just shadows. Here is what they mean in human terms.</p>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -193,7 +194,7 @@ export function Glossary() {
         <div className="mt-3 space-y-3 text-xs text-white/70">
           <div>
             <div className="font-medium text-white/90 mb-1">Log normal</div>
-            <div>Most days are small, a few days are huge. This is the normal pattern for creative work, training, investing, journaling. Steady baseline plus occasional surges.</div>
+            <div>Most days are small, a few days are huge. Steady baseline plus occasional surges.</div>
           </div>
           <div>
             <div className="font-medium text-white/90 mb-1">Variance</div>
