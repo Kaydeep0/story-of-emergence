@@ -42,7 +42,7 @@
  * - Reflection links are properly set when importing sources
  */
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -58,7 +58,7 @@ import { computeLinkClusters } from '../lib/insights/linkClusters';
 import { computeStreakCoach } from '../lib/insights/streakCoach';
 import { computeTopicDrift } from '../lib/insights/topicDrift';
 import { computeContrastPairs } from '../lib/insights/contrastPairs';
-import { computeUnifiedSourceInsights, type UnifiedSourceInsights, type SourceEntryLite, computeSourceWordFreq } from '../lib/insights/fromSources';
+import { computeUnifiedSourceInsights, type UnifiedSourceInsights, type SourceEntryLite } from '../lib/insights/fromSources';
 import type { ContrastPair } from '../lib/insights/contrastPairs';
 import { useHighlights } from '../lib/insights/useHighlights';
 import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
@@ -68,7 +68,6 @@ import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
 import DebugInsightStrip from '../components/DebugInsightStrip';
-import { InsightsFromSources } from '../components/InsightsFromSources';
 import { listExternalEntries } from '../lib/useSources';
 import { InsightsSourceCard } from '../components/InsightsSourceCard';
 import { useReflectionLinks } from '../lib/reflectionLinks';
@@ -1077,15 +1076,6 @@ export default function InsightsPage() {
       if (entry?.sourceId) {
         return sourceKindById.get(entry.sourceId) || null;
       }
-    }
-    return null;
-  }
-
-  // Helper to get source name for a specific evidence item
-  function getSourceNameForEvidence(entryId: string, reflectionEntries: ReflectionEntry[]): string | null {
-    const entry = reflectionEntries.find(e => e.id === entryId);
-    if (entry?.sourceId) {
-      return sourceTitleById.get(entry.sourceId) || null;
     }
     return null;
   }

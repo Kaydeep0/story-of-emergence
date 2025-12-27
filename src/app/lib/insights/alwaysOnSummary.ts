@@ -10,18 +10,6 @@ import type {
 } from './types';
 
 /**
- * Configuration for summary computation
- */
-const SUMMARY_CONFIG = {
-  // Number of days to analyze for the current period
-  currentPeriodDays: 7,
-  // Number of days to analyze for the previous period
-  previousPeriodDays: 7,
-  // Minimum days of history needed to compute insights
-  minDaysForAnalysis: 7,
-};
-
-/**
  * Get the start of day (midnight) for a given date in local timezone
  */
 function getStartOfDay(date: Date): Date {

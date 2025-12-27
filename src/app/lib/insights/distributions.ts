@@ -11,13 +11,6 @@ export type DistributionResult = {
   dailyCounts: number[];
 };
 
-function getDate(ev: EventLike): Date | null {
-  const val = ev.eventAt ?? ev.createdAt;
-  if (!val) return null;
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d;
-}
-
 export function computeDailyCounts(events: EventLike[]): number[] {
   const byDay = groupByDay(events);
   return Array.from(byDay.values()).map((arr) => arr.length);

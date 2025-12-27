@@ -105,10 +105,11 @@ export async function GET(request: Request) {
       totalEvents,
       lastActiveAt,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
     console.error(`[${routeName}] Unexpected error:`, {
-      message: err?.message,
-      stack: err?.stack,
+      message: error.message,
+      stack: error.stack,
       supabaseCalls: supabaseCalls.join(', '),
     });
     return NextResponse.json(

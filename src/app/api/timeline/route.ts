@@ -71,20 +71,30 @@ export async function GET(request: Request) {
     }
 
     // Map each row to a SimpleEvent
-    const events: SimpleEvent[] = (data ?? []).map((row: any) => {
+    const events: SimpleEvent[] = (data ?? []).map((row: unknown) => {
+      if (!row || typeof row !== 'object') {
+        return { id: '', eventAt: new Date().toISOString(), eventType: 'unknown' };
+      }
+      
+      const r = row as { id?: string; event_at?: string; ciphertext?: string };
       let eventType = 'unknown';
 
       // Parse ciphertext as JSON to extract event_type
-      try {
-        const parsed = JSON.parse(row.ciphertext);
-        eventType = parsed.event_type ?? parsed.event_kind ?? 'unknown';
-      } catch {
-        // If parsing fails, keep eventType as 'unknown'
+      if (r.ciphertext) {
+        try {
+          const parsed: unknown = JSON.parse(r.ciphertext);
+          if (parsed && typeof parsed === 'object') {
+            const p = parsed as { event_type?: string; event_kind?: string };
+            eventType = p.event_type ?? p.event_kind ?? 'unknown';
+          }
+        } catch {
+          // If parsing fails, keep eventType as 'unknown'
+        }
       }
 
       return {
-        id: row.id,
-        eventAt: row.event_at,
+        id: r.id ?? '',
+        eventAt: r.event_at ?? new Date().toISOString(),
         eventType,
       };
     });
@@ -94,10 +104,11 @@ export async function GET(request: Request) {
 
     console.log(`[${routeName}] Successfully fetched ${events.length} events`);
     return NextResponse.json({ events });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
     console.error(`[${routeName}] Unexpected error:`, {
-      message: err?.message,
-      stack: err?.stack,
+      message: error.message,
+      stack: error.stack,
       supabaseCall: supabaseCallName,
     });
     return NextResponse.json(
