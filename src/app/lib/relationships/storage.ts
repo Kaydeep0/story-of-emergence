@@ -87,16 +87,80 @@ export async function loadRelationshipPayload(
 
 /**
  * List all relationship payload IDs for a wallet
- * This is a stub function that returns an empty list
+ * Scans localStorage for all relationship payloads belonging to the wallet
  * @param walletAddress - Wallet address of the user
- * @returns Promise resolving to an array of relationship IDs
+ * @returns Promise resolving to an array of relationship IDs (reflection IDs)
  */
 export async function listRelationshipIds(
   walletAddress: string
 ): Promise<string[]> {
-  // Stub implementation - returns empty array
-  // In a real implementation, this would list all relationship IDs for the wallet
-  return [];
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const prefix = `relationships_${walletAddress.toLowerCase()}_reflection_`;
+  const reflectionIds: string[] = [];
+
+  try {
+    // Scan all localStorage keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        // Extract reflection ID from key
+        const reflectionId = key.replace(prefix, '');
+        if (reflectionId) {
+          reflectionIds.push(reflectionId);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to list relationship IDs', err);
+  }
+
+  return reflectionIds;
+}
+
+/**
+ * Load all relationship payloads for a wallet
+ * Returns all encrypted payloads without decrypting
+ * @param walletAddress - Wallet address of the user
+ * @returns Promise resolving to an array of encrypted payloads with their reflection IDs
+ */
+export async function loadAllRelationshipPayloads(
+  walletAddress: string
+): Promise<Array<{ reflectionId: string; payload: EncryptedRelationshipPayload }>> {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const prefix = `relationships_${walletAddress.toLowerCase()}_reflection_`;
+  const results: Array<{ reflectionId: string; payload: EncryptedRelationshipPayload }> = [];
+
+  try {
+    // Scan all localStorage keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        // Extract reflection ID from key
+        const reflectionId = key.replace(prefix, '');
+        if (reflectionId) {
+          try {
+            const stored = localStorage.getItem(key);
+            if (stored) {
+              const payload = JSON.parse(stored) as EncryptedRelationshipPayload;
+              results.push({ reflectionId, payload });
+            }
+          } catch (err) {
+            console.error(`Failed to parse payload for reflection ${reflectionId}`, err);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load all relationship payloads', err);
+  }
+
+  return results;
 }
 
 /**

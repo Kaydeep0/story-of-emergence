@@ -20,7 +20,9 @@ import {
 import {
   saveRelationshipPayload,
   loadRelationshipPayload,
+  loadAllRelationshipPayloads,
 } from '../lib/relationships/storage';
+import { useRouter } from 'next/navigation';
 
 type LinkType = 'tag' | 'reflection' | 'source';
 
@@ -37,6 +39,7 @@ export function ReflectionLinks({
   sessionKey,
   encryptionReady,
 }: ReflectionLinksProps) {
+  const router = useRouter();
   const [graph, setGraph] = useState<RelationshipGraph>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,6 +47,8 @@ export function ReflectionLinks({
   const [linkType, setLinkType] = useState<LinkType>('tag');
   const [linkReference, setLinkReference] = useState('');
   const [relationshipId, setRelationshipId] = useState<string | null>(null);
+  const [backlinks, setBacklinks] = useState<Array<{ reflectionId: string; nodeId: string }>>([]);
+  const [loadingBacklinks, setLoadingBacklinks] = useState(false);
 
   // Load relationships for this reflection
   const loadRelationships = useCallback(async () => {
@@ -102,10 +107,72 @@ export function ReflectionLinks({
     }
   }, [graph, walletAddress, sessionKey, encryptionReady, relationshipId]);
 
+  // Load backlinks by scanning all relationship payloads
+  const loadBacklinks = useCallback(async () => {
+    if (!encryptionReady || !sessionKey || !walletAddress) return;
+
+    setLoadingBacklinks(true);
+    try {
+      // Load all relationship payloads for the wallet
+      const allPayloads = await loadAllRelationshipPayloads(walletAddress);
+
+      const foundBacklinks: Array<{ reflectionId: string; nodeId: string }> = [];
+
+      // Decrypt and scan each payload
+      for (const { reflectionId: otherReflectionId, payload } of allPayloads) {
+        // Skip the current reflection's own payload
+        if (otherReflectionId === reflectionId) continue;
+
+        try {
+          const otherGraph = await decryptRelationshipGraph(sessionKey, payload);
+          
+          // Find edges that point TO the current reflection
+          for (const edge of otherGraph.edges) {
+            if (edge.deletedAt) continue;
+
+            // Check if this edge points to the current reflection
+            const targetNode = otherGraph.nodes.find((n) => n.id === edge.toNodeId);
+            if (!targetNode) continue;
+
+            // Check if target node is the current reflection
+            if (
+              targetNode.type === 'reflection' &&
+              (targetNode as ReflectionNode).reflectionId === reflectionId
+            ) {
+              // Found a backlink! Get the source reflection
+              const sourceNode = otherGraph.nodes.find((n) => n.id === edge.fromNodeId);
+              if (sourceNode && sourceNode.type === 'reflection') {
+                const sourceReflectionId = (sourceNode as ReflectionNode).reflectionId;
+                // Avoid duplicates
+                if (!foundBacklinks.find((b) => b.reflectionId === sourceReflectionId)) {
+                  foundBacklinks.push({
+                    reflectionId: sourceReflectionId,
+                    nodeId: sourceNode.id,
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          // Skip payloads that can't be decrypted (might be from different sessions)
+          console.debug(`Could not decrypt payload for reflection ${otherReflectionId}`, err);
+        }
+      }
+
+      setBacklinks(foundBacklinks);
+    } catch (err: any) {
+      console.error('Failed to load backlinks', err);
+      setBacklinks([]);
+    } finally {
+      setLoadingBacklinks(false);
+    }
+  }, [reflectionId, walletAddress, sessionKey, encryptionReady]);
+
   // Load on mount and when dependencies change
   useEffect(() => {
     loadRelationships();
-  }, [loadRelationships]);
+    loadBacklinks();
+  }, [loadRelationships, loadBacklinks]);
 
   // Get or create reflection node ID
   const reflectionNodeId = useMemo(() => {
@@ -460,6 +527,44 @@ export function ReflectionLinks({
       ) : (
         !showAddForm && <p className="text-xs text-white/40">No links yet</p>
       )}
+
+      {/* Backlinks section - read-only */}
+      <div className="pt-2 border-t border-white/10 mt-2">
+        <p className="text-xs text-white/60 mb-1.5">Linked from</p>
+        {loadingBacklinks ? (
+          <p className="text-xs text-white/40">Scanning…</p>
+        ) : backlinks.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {backlinks.map((backlink) => (
+              <button
+                key={backlink.reflectionId}
+                onClick={() => {
+                  router.push(`/?focus=${backlink.reflectionId}`);
+                }}
+                className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/40 transition-colors"
+                title={`View reflection ${backlink.reflectionId}`}
+              >
+                <span>{backlink.reflectionId}</span>
+                <svg
+                  className="w-3 h-3 ml-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-white/30 italic">No other reflections link to this one</p>
+        )}
+      </div>
     </div>
   );
 }

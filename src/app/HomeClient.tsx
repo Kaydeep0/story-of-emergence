@@ -10,7 +10,7 @@ import ReflectionsSkeleton from '../components/ReflectionsSkeleton';
 import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from './components/ExportButton';
 import { SourceLinkMenu } from './components/SourceLinkMenu';
-import { ReflectionLinks } from '../components/ReflectionLinks';
+import { ReflectionLinks } from '@/app/components/ReflectionLinks';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
