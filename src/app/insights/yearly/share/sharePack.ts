@@ -52,6 +52,7 @@ export interface SharePack {
     weekCount: number;
     spikeCount: number;
     topSpikeDates: string[]; // YYYY-MM-DD format
+    dailyCounts: number[]; // For visualization
   };
   
   numbers?: {
@@ -205,6 +206,7 @@ export function buildSharePack(input: SharePackInput): SharePack {
         weekCount: Math.ceil(yearShape.dailyCounts.length / 7),
         spikeCount: yearShape.topSpikeDates.length,
         topSpikeDates: yearShape.topSpikeDates,
+        dailyCounts: yearShape.dailyCounts, // Include for visualization
       };
     }
   }

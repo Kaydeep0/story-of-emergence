@@ -460,6 +460,7 @@ export default function YearlyWrapPage() {
               mirrorInsight={narrativeInsight?.explanation}
               entries={reflections}
               distributionResult={distributionResult}
+              windowDistribution={windowDistribution}
             />
 
             {/* 4️⃣ MEMORY: Mirror section (Recurring words + Three moments, word shift hidden by default) */}

@@ -9,23 +9,16 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { YearlyShareCard, type ShareCardPlatform, PLATFORM_DIMENSIONS } from '../../../components/share/YearlyShareCard';
 import { buildShareText, type Platform, pickTopMomentsForShare, isProbablySystemOrErrorText, cleanForShare } from '../../../lib/share/buildShareText';
 import { exportPng } from '../../../lib/share/exportPng';
 import { toast } from 'sonner';
 import type { ReflectionEntry } from '../../../lib/insights/types';
-import type { DistributionResult } from '../../../lib/insights/distributionLayer';
+import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
+import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
+import { ShareCardRenderer, getFrameForPlatform } from '../share/ShareCardRenderer';
 
-// Share pack selection type - drives which modules render
-export interface SharePackSelection {
-  yearSentence: boolean;
-  archetype: boolean;
-  yearShape: boolean;
-  topMoments: boolean;
-  threeNumbers: boolean;
-  wholesomeMirror: boolean;
-}
+// SharePackSelection is now imported from sharePack.ts
 
 
 // Privacy filter: Sanitize text to remove decrypt errors, JSON, and system messages
@@ -61,15 +54,6 @@ function sanitizeText(text: string | undefined): string | undefined {
 }
 
 
-// Map Platform to ShareCardPlatform for card dimensions
-function getCardPlatform(platform: Platform): ShareCardPlatform {
-  if (platform === 'linkedin') return 'linkedin-square';
-  if (platform === 'instagram') return 'instagram-square'; // Use square for Instagram
-  if (platform === 'tiktok') return 'tiktok';
-  if (platform === 'threads') return 'instagram-square'; // Threads uses Instagram square
-  // X uses Instagram portrait format
-  return 'instagram-portrait';
-}
 
 // Get platform-specific download button label
 function getDownloadLabel(platform: Platform): string {
@@ -101,147 +85,6 @@ function getPlatformMicroCopy(platform: Platform): string {
   return microCopy[platform] || '';
 }
 
-// PreviewCard component - semantic preview, separate from export card
-// This is NOT the export card - it's a readable story preview
-// Max width: 500px - always readable and scaled to fit container
-// Normal readable font sizes, no pixel-perfect constraints
-interface PreviewCardProps {
-  year: number;
-  content: {
-    identitySentence?: string;
-    archetype?: string;
-    yearShape?: {
-      dailyCounts: number[];
-      topSpikeDates: string[];
-    };
-    numbers?: {
-      totalEntries: number;
-      activeDays: number;
-      spikeRatio: number;
-    };
-    moments?: Array<{ date: string; preview: string; context?: string }>;
-    mirrorInsight?: string;
-  };
-}
-
-function PreviewCard({ year, content }: PreviewCardProps) {
-  const maxWidth = 500;
-  
-  return (
-    <div
-      style={{
-        maxWidth: `${maxWidth}px`,
-        width: '100%',
-        backgroundColor: '#000000',
-        color: '#ffffff',
-        padding: '32px',
-        borderRadius: '12px',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
-      }}
-    >
-      {/* Title */}
-      <div>
-        <div style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>
-          Story of Emergence
-        </div>
-        <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '12px' }}>
-          Yearly Wrap
-        </div>
-        <div style={{ fontSize: '36px', fontWeight: '700' }}>
-          {year}
-        </div>
-      </div>
-
-      {/* Year sentence */}
-      {content.identitySentence && (
-        <div style={{ fontSize: '18px', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.9)' }}>
-          {content.identitySentence}
-        </div>
-      )}
-
-      {/* Archetype */}
-      {content.archetype && (
-        <div style={{ fontSize: '16px', fontWeight: '600', color: 'rgba(255, 255, 255, 0.9)' }}>
-          {content.archetype}
-        </div>
-      )}
-
-      {/* Year shape summary */}
-      {content.yearShape && (
-        <div>
-          <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '8px' }}>
-            Year shape
-          </div>
-          <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-            {content.yearShape.dailyCounts.length} weeks of activity, {content.yearShape.topSpikeDates.length} spike days
-          </div>
-        </div>
-      )}
-
-      {/* Numbers */}
-      {content.numbers && (
-        <div>
-          <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '12px' }}>
-            Numbers
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Total Entries</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{content.numbers.totalEntries}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Active Days</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{content.numbers.activeDays}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>Spike Ratio</div>
-              <div style={{ fontSize: '24px', fontWeight: '700' }}>{content.numbers.spikeRatio.toFixed(1)}x</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Moments summary */}
-      {content.moments && content.moments.length > 0 && (
-        <div>
-          <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.6)', marginBottom: '12px' }}>
-            Top Moments
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {content.moments.slice(0, 3).map((moment, idx) => (
-              <div key={idx}>
-                <div style={{ fontSize: '14px', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.8)', marginBottom: moment.context ? '4px' : '0' }}>
-                  {moment.preview}
-                </div>
-                {moment.context && (
-                  <div style={{ fontSize: '12px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.6)', fontStyle: 'italic' }}>
-                    {moment.context}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Mirror insight */}
-      {content.mirrorInsight && (
-        <div style={{ fontSize: '15px', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>
-          {content.mirrorInsight}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.4)', marginTop: 'auto', paddingTop: '24px' }}>
-        Computed locally. Nothing uploaded.
-      </div>
-    </div>
-  );
-}
-
 export interface SharePackBuilderProps {
   year: number;
   identitySentence: string;
@@ -259,6 +102,7 @@ export interface SharePackBuilderProps {
   mirrorInsight?: string;
   entries?: ReflectionEntry[]; // For computing moment context
   distributionResult?: DistributionResult | null; // For computing moment context
+  windowDistribution?: WindowDistribution | null; // For distribution label
 }
 
 export function SharePackBuilder({
@@ -271,6 +115,7 @@ export function SharePackBuilder({
   mirrorInsight,
   entries = [],
   distributionResult = null,
+  windowDistribution = null,
 }: SharePackBuilderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selection, setSelection] = useState<SharePackSelection>({
@@ -282,10 +127,12 @@ export function SharePackBuilder({
     wholesomeMirror: false,
   });
   const [generatedSelection, setGeneratedSelection] = useState<SharePackSelection | null>(null);
+  const [generatedPack, setGeneratedPack] = useState<SharePack | null>(null);
   const [platform, setPlatform] = useState<Platform>('instagram');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTexts, setGeneratedTexts] = useState<{ caption: string; tiktokOverlay?: string[] } | null>(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [shareComplete, setShareComplete] = useState(false);
+  const [lastExport, setLastExport] = useState<{ platform: Platform; filename?: string } | null>(null);
   const expandedPanelRef = useRef<HTMLDivElement>(null);
 
   // Compute contextual fact for a moment based on entries and distribution
@@ -373,7 +220,35 @@ export function SharePackBuilder({
     }));
   };
 
+  // Map Platform to SharePackPlatform
+  const mapPlatform = (p: Platform): SharePackPlatform => {
+    return p as SharePackPlatform; // They have the same values
+  };
+
+  // Build SharePack from current selection
+  const buildCurrentSharePack = (sel: SharePackSelection): SharePack => {
+    return buildSharePack({
+      year,
+      selection: sel,
+      platform: mapPlatform(platform),
+      identitySentence,
+      archetype,
+      yearShape,
+      moments,
+      numbers,
+      mirrorInsight,
+      entries,
+      distributionResult,
+      windowDistribution,
+    });
+  };
+
   const handleGenerate = () => {
+    // Build SharePack
+    const pack = buildCurrentSharePack(selection);
+    setGeneratedPack(pack);
+    
+    // Build caption text (for compatibility with existing UI)
     const content = {
       identitySentence: selection.yearSentence ? identitySentence : undefined,
       archetype: selection.archetype ? archetype : undefined,
@@ -386,7 +261,7 @@ export function SharePackBuilder({
     const texts = buildShareText(platform, content);
     setGeneratedTexts(texts);
     setGeneratedSelection({ ...selection }); // Store snapshot of selection
-    setShowConfirmation(false); // Reset confirmation when regenerating
+    setShareComplete(false); // Reset completion state when regenerating
   };
 
   const handleDownloadImage = async () => {
@@ -410,23 +285,32 @@ export function SharePackBuilder({
         }
       }
       
-      // Show confirmation banner
-      setShowConfirmation(true);
+      // Set share complete state
+      setShareComplete(true);
+      setLastExport({ platform, filename });
     } catch (err: any) {
       console.error('Failed to export image:', err);
       toast.error(err?.message ?? 'Failed to export image');
+      // Keep shareComplete false on error
+      setShareComplete(false);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleShareAnotherPlatform = () => {
-    setShowConfirmation(false);
-    setPlatform('instagram'); // Reset to default
+    // Reset completion state but keep all selections and generated content
+    setShareComplete(false);
+    // Platform can be changed by user clicking platform chips
+    // No need to reset platform here
   };
 
   const handleDone = () => {
-    setShowConfirmation(false);
+    // Reset completion state and clear transient export state
+    setShareComplete(false);
+    setLastExport(null);
+    // Optionally collapse the share section
+    // For now, just reset to pre-export state without navigation
   };
 
 
@@ -438,7 +322,7 @@ export function SharePackBuilder({
 
     try {
       await navigator.clipboard.writeText(generatedTexts.caption);
-      toast.success('Caption copied to clipboard');
+      toast.success('Caption copied.');
     } catch (err: any) {
       console.error('Failed to copy caption:', err);
       toast.error('Failed to copy caption');
@@ -466,46 +350,10 @@ export function SharePackBuilder({
   const hasPersonalContent = selection.topMoments || selection.wholesomeMirror || selection.yearSentence;
   const privacyBadge = hasPersonalContent ? 'May include personal text' : 'Privacy safe';
 
-  // Get card dimensions for current platform - use single source of truth
-  const cardPlatform = getCardPlatform(platform);
-  const cardDimensions = PLATFORM_DIMENSIONS[cardPlatform];
-  
-  // Build card model from selection - single source of truth for both preview and export
-  // Apply privacy filtering to all text fields before generating share pack content
-  const buildCardModel = (sel: SharePackSelection) => {
-    // Get sanitized moments using pickTopMomentsForShare
-    let safeMoments: Array<{ date: string; preview: string; context?: string }> | undefined = undefined;
-    if (sel.topMoments && entries.length > 0 && distributionResult) {
-      const topSpikeDates = getTopSpikeDates(distributionResult, 3);
-      const pickedMoments = pickTopMomentsForShare(entries, topSpikeDates, 3);
-      // Add context to picked moments
-      safeMoments = pickedMoments.map(moment => ({
-        ...moment,
-        context: computeMomentContext(moment.date, entries, distributionResult),
-      }));
-    }
-    
-    // Sanitize mirror insight
-    let safeMirrorInsight: string | undefined = undefined;
-    if (sel.wholesomeMirror && mirrorInsight) {
-      const cleaned = cleanForShare(mirrorInsight);
-      if (cleaned && !isProbablySystemOrErrorText(cleaned)) {
-        safeMirrorInsight = cleaned;
-      } else {
-        // Fallback if filtered out
-        safeMirrorInsight = 'A quiet year can still be a powerful one. Your reflection is building underneath the surface.';
-      }
-    }
-    
-    return {
-      identitySentence: sel.yearSentence ? sanitizeText(identitySentence) : undefined,
-      archetype: sel.archetype ? sanitizeText(archetype) : undefined,
-      yearShape: sel.yearShape && yearShape ? yearShape : undefined,
-      numbers: sel.threeNumbers && numbers ? numbers : undefined,
-      moments: safeMoments,
-      mirrorInsight: safeMirrorInsight,
-    };
-  };
+  // Build SharePack for preview (live updates as selection changes)
+  const previewPack = useMemo(() => {
+    return buildCurrentSharePack(selection);
+  }, [selection, year, identitySentence, archetype, yearShape, moments, numbers, mirrorInsight, entries, distributionResult, windowDistribution, platform]);
 
   // Get included items list for display - updates immediately when checkboxes toggle
   const getIncludedItems = (sel: SharePackSelection): string[] => {
@@ -565,10 +413,11 @@ export function SharePackBuilder({
         </button>
       </div>
 
-      {/* Content selection */}
-      <div>
-        <label className="text-xs text-white/60 mb-2 block">Select content</label>
-        <div className="grid grid-cols-2 gap-2">
+      {/* Content selection - disabled when share is complete */}
+      {!shareComplete && (
+        <div>
+          <label className="text-xs text-white/60 mb-2 block">Select content</label>
+          <div className="grid grid-cols-2 gap-2">
           <label className="flex items-center gap-2 p-2 rounded-lg border border-white/10 bg-black/30 cursor-pointer hover:bg-black/50 transition-colors">
             <input
               type="checkbox"
@@ -632,9 +481,10 @@ export function SharePackBuilder({
             </label>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
-      {/* Platform selector */}
+      {/* Platform selector - always visible, regenerates when changed during share complete */}
       <div>
         <label className="text-xs text-white/60 mb-2 block">Platform</label>
         <div className="flex flex-wrap gap-2">
@@ -644,9 +494,26 @@ export function SharePackBuilder({
               type="button"
               onClick={() => {
                 setPlatform(p);
-                setGeneratedTexts(null); // Reset when platform changes
-                setGeneratedSelection(null);
-                setShowConfirmation(false); // Reset confirmation when platform changes
+                if (shareComplete && generatedSelection) {
+                  // Regenerate SharePack and caption for new platform
+                  const pack = buildCurrentSharePack(generatedSelection);
+                  setGeneratedPack(pack);
+                  
+                  const content = {
+                    identitySentence: generatedSelection.yearSentence ? identitySentence : undefined,
+                    archetype: generatedSelection.archetype ? archetype : undefined,
+                    hasYearShape: generatedSelection.yearShape && !!yearShape,
+                    hasMoments: generatedSelection.topMoments && !!moments,
+                    numbers: generatedSelection.threeNumbers ? numbers : undefined,
+                    mirrorInsight: generatedSelection.wholesomeMirror ? mirrorInsight : undefined,
+                  };
+                  const texts = buildShareText(p, content);
+                  setGeneratedTexts(texts);
+                } else {
+                  // Normal behavior: reset when platform changes
+                  setGeneratedTexts(null);
+                  setGeneratedSelection(null);
+                }
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 platform === p
@@ -660,16 +527,18 @@ export function SharePackBuilder({
         </div>
       </div>
 
-      {/* Privacy badge */}
-      <div className="flex items-center gap-2">
-        <span className={`text-xs px-2 py-1 rounded ${
-          hasPersonalContent
-            ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-            : 'bg-green-500/20 text-green-300 border border-green-500/30'
-        }`}>
-          {privacyBadge}
-        </span>
-      </div>
+      {/* Privacy badge - hidden when share is complete */}
+      {!shareComplete && (
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded ${
+            hasPersonalContent
+              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+              : 'bg-green-500/20 text-green-300 border border-green-500/30'
+          }`}>
+            {privacyBadge}
+          </span>
+        </div>
+      )}
 
       {/* Generate button */}
       <button
@@ -737,35 +606,61 @@ export function SharePackBuilder({
               )}
 
               {/* Card container - centered */}
-              <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-                {/* Empty preview placeholder - shown before generation */}
-                {!generatedSelection ? (
-                  <div 
-                    className="flex flex-col items-center justify-center"
-                    style={{
-                      minHeight: '400px',
-                      border: '2px dashed rgba(255, 255, 255, 0.2)',
-                      borderRadius: '8px',
-                      padding: '48px 24px',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <p className="text-sm text-white/70 mb-2">
-                      Generate a preview to review your card before sharing.
-                    </p>
+              <div className="rounded-xl border border-white/10 bg-black/30 p-4 overflow-auto">
+                {/* Preview using ShareCardRenderer - shows live updates */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ transform: 'scale(0.5)', transformOrigin: 'top center' }}>
+                    <ShareCardRenderer
+                      pack={previewPack}
+                      frame={getFrameForPlatform(mapPlatform(platform))}
+                    />
                   </div>
-                ) : (
-                  /* PreviewCard - semantic preview, separate from export */
-                  <PreviewCard
-                    year={year}
-                    content={buildCardModel(generatedSelection)}
-                  />
-                )}
+                </div>
               </div>
             </div>
 
-            {/* Right column: Caption and actions - only show after Generate */}
-            {generatedTexts && generatedSelection && (
+            {/* Right column: Caption and actions - show when generated, or share complete panel */}
+            {shareComplete ? (
+              /* Share Complete Panel */
+              <div className="space-y-4">
+                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-white mb-1">
+                      Your Yearly Wrap is ready to share.
+                    </p>
+                    <p className="text-xs text-white/60 mb-1">
+                      Image saved locally.
+                    </p>
+                    <p className="text-xs text-white/60">
+                      Nothing uploaded.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyCaption}
+                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+                    >
+                      Copy caption
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleShareAnotherPlatform}
+                      className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+                    >
+                      Share another platform
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDone}
+                      className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : generatedTexts && generatedSelection ? (
               <div className="space-y-4">
                 {/* Caption */}
                 <div>
@@ -835,62 +730,20 @@ export function SharePackBuilder({
                 <p className="text-xs text-white/40">
                   Computed locally. Nothing uploaded.
                 </p>
-
-                {/* Post-export confirmation banner */}
-                {showConfirmation && (
-                  <div className="border-t border-white/10 pt-4 mt-4">
-                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-white mb-1">
-                          Your Yearly Wrap is ready to share.
-                        </p>
-                        <p className="text-xs text-white/60">
-                          Image saved. Caption copied. Nothing uploaded.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={handleCopyCaption}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Copy caption
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleShareAnotherPlatform}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Share another platform
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleDone}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Hidden export card - rendered in isolation at 1x scale for crisp export */}
-          {/* Uses generatedSelection to ensure export matches what was generated */}
-          {/* Apply same privacy filtering to export */}
-          {generatedSelection && (
+          {/* Uses generatedPack to ensure export matches what was generated */}
+          {generatedPack && (
             <div
               id="yearly-share-export-card"
               style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
             >
-              <YearlyShareCard
-                year={year}
-                {...buildCardModel(generatedSelection)}
-                mode="export"
-                platform={cardPlatform}
+              <ShareCardRenderer
+                pack={generatedPack}
+                frame={getFrameForPlatform(generatedPack.platform)}
               />
             </div>
           )}
