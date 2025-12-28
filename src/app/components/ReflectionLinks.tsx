@@ -29,6 +29,9 @@ import { useRouter } from 'next/navigation';
 // Defaults to false (disabled) if env var is missing or not "true"
 const ENABLE_BACKLINKS = process.env.NEXT_PUBLIC_ENABLE_BACKLINKS === "true";
 
+// Dev mode check for local debug toggle
+const isDev = process.env.NODE_ENV === 'development';
+
 type LinkType = 'tag' | 'reflection' | 'source';
 
 interface ReflectionLinksProps {
@@ -54,6 +57,11 @@ export function ReflectionLinks({
   const [relationshipId, setRelationshipId] = useState<string | null>(null);
   const [backlinks, setBacklinks] = useState<Array<{ reflectionId: string; nodeId: string }>>([]);
   const [loadingBacklinks, setLoadingBacklinks] = useState(false);
+
+  // Compute backlinksEnabled inside component to access localStorage
+  const backlinksEnabled = useMemo(() => {
+    return ENABLE_BACKLINKS || (isDev && typeof window !== 'undefined' && localStorage.getItem('soe:debug:backlinks') === 'true');
+  }, []);
 
   // Load relationships for this reflection
   const loadRelationships = useCallback(async () => {
@@ -114,7 +122,7 @@ export function ReflectionLinks({
 
   // Load backlinks by scanning all relationship payloads
   const loadBacklinks = useCallback(async () => {
-    if (!ENABLE_BACKLINKS) return;
+    if (!backlinksEnabled) return;
     if (!encryptionReady || !sessionKey || !walletAddress || !reflectionId) return;
 
     setLoadingBacklinks(true);
@@ -179,7 +187,7 @@ export function ReflectionLinks({
   // Load on mount and when dependencies change
   useEffect(() => {
     loadRelationships();
-    if (ENABLE_BACKLINKS) {
+    if (backlinksEnabled) {
       loadBacklinks();
     }
   }, [loadRelationships, loadBacklinks]);
@@ -546,8 +554,23 @@ export function ReflectionLinks({
 
       {/* Backlinks section - read-only */}
       <div className="pt-2 border-t border-white/10 mt-2">
-        {!ENABLE_BACKLINKS ? (
-          <p className="text-xs text-white/40 italic">Backlinks coming soon</p>
+        {!backlinksEnabled ? (
+          <div className="space-y-2">
+            <p className="text-xs text-white/40 italic">Backlinks coming soon</p>
+            {isDev && (
+              <button
+                onClick={() => {
+                  const currentValue = localStorage.getItem('soe:debug:backlinks') === 'true';
+                  localStorage.setItem('soe:debug:backlinks', (!currentValue).toString());
+                  window.location.reload();
+                }}
+                className="text-xs text-amber-400/70 hover:text-amber-400 transition-colors underline"
+                title="Toggle Backlinks in development mode"
+              >
+                Enable Backlinks (dev only)
+              </button>
+            )}
+          </div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-1.5">
