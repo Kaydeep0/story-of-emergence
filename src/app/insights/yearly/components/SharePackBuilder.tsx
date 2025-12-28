@@ -85,6 +85,33 @@ function getPlatformMicroCopy(platform: Platform): string {
   return microCopy[platform] || '';
 }
 
+// Get platform-specific share intent URL and label
+function getPlatformShareIntent(platform: Platform): { label: string; url: string } {
+  const intents: Record<Platform, { label: string; url: string }> = {
+    instagram: {
+      label: 'Open Instagram',
+      url: 'https://www.instagram.com/',
+    },
+    linkedin: {
+      label: 'Open LinkedIn',
+      url: 'https://www.linkedin.com/feed/',
+    },
+    tiktok: {
+      label: 'Open TikTok',
+      url: 'https://www.tiktok.com/',
+    },
+    threads: {
+      label: 'Open Threads',
+      url: 'https://www.threads.net/',
+    },
+    x: {
+      label: 'Open X',
+      url: 'https://x.com/compose/tweet',
+    },
+  };
+  return intents[platform] || { label: 'Open platform', url: 'https://www.instagram.com/' };
+}
+
 export interface SharePackBuilderProps {
   year: number;
   identitySentence: string;
@@ -327,6 +354,15 @@ export function SharePackBuilder({
       console.error('Failed to copy caption:', err);
       toast.error('Failed to copy caption');
     }
+  };
+
+  const handleOpenPlatform = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const intent = getPlatformShareIntent(platform);
+    // Open platform in new tab - no file upload, no API calls, just navigation
+    window.open(intent.url, '_blank', 'noopener,noreferrer');
   };
 
   const handleCopyTikTokOverlay = async () => {
@@ -671,8 +707,15 @@ export function SharePackBuilder({
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={handleCopyCaption}
+                      onClick={handleOpenPlatform}
                       className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+                    >
+                      {getPlatformShareIntent(platform).label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyCaption}
+                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
                     >
                       Copy caption
                     </button>
