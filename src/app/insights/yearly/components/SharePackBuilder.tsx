@@ -286,6 +286,7 @@ export function SharePackBuilder({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTexts, setGeneratedTexts] = useState<{ caption: string; tiktokOverlay?: string[] } | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showPlatformTooltip, setShowPlatformTooltip] = useState<Platform | null>(null);
   const expandedPanelRef = useRef<HTMLDivElement>(null);
 
   // Compute contextual fact for a moment based on entries and distribution
@@ -358,6 +359,9 @@ export function SharePackBuilder({
 
   // Check if selections changed after generation
   const selectionsChanged = generatedSelection && JSON.stringify(selection) !== JSON.stringify(generatedSelection);
+  
+  // Check if Web Share API is available
+  const canUseWebShare = typeof navigator !== 'undefined' && 'share' in navigator;
 
   // Auto-scroll to expanded panel when it opens
   useEffect(() => {
@@ -390,9 +394,24 @@ export function SharePackBuilder({
   };
 
   const handleDownloadImage = async () => {
+    // Ensure we have generated texts - generate on demand if needed
+    if (!generatedTexts || !generatedSelection) {
+      const content = {
+        identitySentence: selection.yearSentence ? identitySentence : undefined,
+        archetype: selection.archetype ? archetype : undefined,
+        hasYearShape: selection.yearShape && !!yearShape,
+        hasMoments: selection.topMoments && !!moments,
+        numbers: selection.threeNumbers ? numbers : undefined,
+        mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+      };
+      const texts = buildShareText(platform, content);
+      setGeneratedTexts(texts);
+      setGeneratedSelection({ ...selection });
+    }
+
     const exportCard = document.getElementById('yearly-share-export-card');
     if (!exportCard) {
-      toast.error('Share card not ready. Generate share pack first.');
+      toast.error('Share card not ready.');
       return;
     }
 
@@ -402,9 +421,21 @@ export function SharePackBuilder({
       await exportPng(exportCard as HTMLElement, filename);
       
       // Auto-copy caption after successful download
-      if (generatedTexts?.caption) {
+      const textsToUse = generatedTexts || (() => {
+        const content = {
+          identitySentence: selection.yearSentence ? identitySentence : undefined,
+          archetype: selection.archetype ? archetype : undefined,
+          hasYearShape: selection.yearShape && !!yearShape,
+          hasMoments: selection.topMoments && !!moments,
+          numbers: selection.threeNumbers ? numbers : undefined,
+          mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+        };
+        return buildShareText(platform, content);
+      })();
+      
+      if (textsToUse.caption) {
         try {
-          await navigator.clipboard.writeText(generatedTexts.caption);
+          await navigator.clipboard.writeText(textsToUse.caption);
         } catch (err) {
           // Silent fail - caption copy is nice-to-have
         }
@@ -431,13 +462,21 @@ export function SharePackBuilder({
 
 
   const handleCopyCaption = async () => {
-    if (!generatedTexts) {
-      toast.error('Generate share pack first');
-      return;
-    }
+    // Generate texts if not already generated
+    const textsToUse = generatedTexts || (() => {
+      const content = {
+        identitySentence: selection.yearSentence ? identitySentence : undefined,
+        archetype: selection.archetype ? archetype : undefined,
+        hasYearShape: selection.yearShape && !!yearShape,
+        hasMoments: selection.topMoments && !!moments,
+        numbers: selection.threeNumbers ? numbers : undefined,
+        mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+      };
+      return buildShareText(platform, content);
+    })();
 
     try {
-      await navigator.clipboard.writeText(generatedTexts.caption);
+      await navigator.clipboard.writeText(textsToUse.caption);
       toast.success('Caption copied to clipboard');
     } catch (err: any) {
       console.error('Failed to copy caption:', err);
@@ -446,18 +485,122 @@ export function SharePackBuilder({
   };
 
   const handleCopyTikTokOverlay = async () => {
-    if (!generatedTexts?.tiktokOverlay) {
+    // Generate texts if not already generated
+    const textsToUse = generatedTexts || (() => {
+      const content = {
+        identitySentence: selection.yearSentence ? identitySentence : undefined,
+        archetype: selection.archetype ? archetype : undefined,
+        hasYearShape: selection.yearShape && !!yearShape,
+        hasMoments: selection.topMoments && !!moments,
+        numbers: selection.threeNumbers ? numbers : undefined,
+        mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+      };
+      return buildShareText(platform, content);
+    })();
+
+    if (!textsToUse.tiktokOverlay) {
       toast.error('TikTok overlay not available');
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(generatedTexts.tiktokOverlay.join('\n'));
+      await navigator.clipboard.writeText(textsToUse.tiktokOverlay.join('\n'));
       toast.success('TikTok overlay copied');
     } catch (err: any) {
       console.error('Failed to copy TikTok overlay:', err);
       toast.error('Failed to copy TikTok overlay');
     }
+  };
+
+  const handleWebShare = async () => {
+    if (!canUseWebShare) {
+      toast.error('Web Share API not available');
+      return;
+    }
+
+    // Ensure we have generated texts - generate on demand if needed
+    let textsToUse = generatedTexts;
+    if (!textsToUse || !generatedSelection) {
+      const content = {
+        identitySentence: selection.yearSentence ? identitySentence : undefined,
+        archetype: selection.archetype ? archetype : undefined,
+        hasYearShape: selection.yearShape && !!yearShape,
+        hasMoments: selection.topMoments && !!moments,
+        numbers: selection.threeNumbers ? numbers : undefined,
+        mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+      };
+      textsToUse = buildShareText(platform, content);
+      setGeneratedTexts(textsToUse);
+      setGeneratedSelection({ ...selection });
+    }
+
+    // Get the image data URL from the export card
+    const exportCard = document.getElementById('yearly-share-export-card');
+    if (!exportCard) {
+      toast.error('Share card not ready.');
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      
+      // Convert card to blob
+      const { toBlob } = await import('html-to-image');
+      const blob = await toBlob(exportCard as HTMLElement, {
+        quality: 1.0,
+        pixelRatio: 1,
+        backgroundColor: '#000000',
+        cacheBust: true,
+      });
+
+      if (!blob) {
+        throw new Error('Failed to generate image');
+      }
+
+      const file = new File([blob], getDownloadFilename(platform, year), { type: 'image/png' });
+
+      await navigator.share({
+        title: `My ${year} Yearly Wrap`,
+        text: textsToUse.caption,
+        files: [file],
+      });
+
+      toast.success('Shared successfully');
+    } catch (err: any) {
+      // User cancelled or error occurred
+      if (err.name !== 'AbortError') {
+        console.error('Failed to share:', err);
+        toast.error('Failed to share');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const getPlatformUrl = (platform: Platform): string => {
+    const urls: Record<Platform, string> = {
+      instagram: 'https://www.instagram.com',
+      linkedin: 'https://www.linkedin.com',
+      x: 'https://x.com',
+      tiktok: 'https://www.tiktok.com',
+      threads: 'https://www.threads.net',
+    };
+    return urls[platform];
+  };
+
+  const getPlatformTooltip = (platform: Platform): string => {
+    const tooltips: Record<Platform, string> = {
+      instagram: 'Open Instagram to create a new post',
+      linkedin: 'Open LinkedIn to create a new post',
+      x: 'Open X to create a new post',
+      tiktok: 'Open TikTok to create a new post',
+      threads: 'Open Threads to create a new post',
+    };
+    return tooltips[platform];
+  };
+
+  const handlePlatformClick = (platform: Platform) => {
+    window.open(getPlatformUrl(platform), '_blank', 'noopener,noreferrer');
   };
 
   // Determine privacy badge based on what could show personal text
@@ -634,9 +777,9 @@ export function SharePackBuilder({
         </div>
       </div>
 
-      {/* Platform selector */}
+      {/* Platform selector - for image format only */}
       <div>
-        <label className="text-xs text-white/60 mb-2 block">Platform</label>
+        <label className="text-xs text-white/60 mb-2 block">Image format</label>
         <div className="flex flex-wrap gap-2">
           {(['instagram', 'linkedin', 'x', 'tiktok', 'threads'] as Platform[]).map((p) => (
             <button
@@ -671,14 +814,6 @@ export function SharePackBuilder({
         </span>
       </div>
 
-      {/* Generate button */}
-      <button
-        type="button"
-        onClick={handleGenerate}
-        className="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-      >
-        Generate Share Pack
-      </button>
 
       {/* Preview - always shows current selection (live updates) */}
       {/* Show preview even before Generate is clicked */}
@@ -729,93 +864,93 @@ export function SharePackBuilder({
                 </div>
               </div>
 
-              {/* Out of date badge - shown when selections change after generation */}
-              {selectionsChanged && (
-                <div className="mb-3 text-xs text-orange-300 bg-orange-500/20 border border-orange-500/30 rounded-lg px-3 py-2">
-                  Selections changed, regenerate to update preview.
-                </div>
-              )}
-
-              {/* Card container - centered */}
+              {/* Card container - always show preview of current selection */}
               <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-                {/* Empty preview placeholder - shown before generation */}
-                {!generatedSelection ? (
-                  <div 
-                    className="flex flex-col items-center justify-center"
-                    style={{
-                      minHeight: '400px',
-                      border: '2px dashed rgba(255, 255, 255, 0.2)',
-                      borderRadius: '8px',
-                      padding: '48px 24px',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <p className="text-sm text-white/70 mb-2">
-                      Generate a preview to review your card before sharing.
-                    </p>
-                  </div>
-                ) : (
-                  /* PreviewCard - semantic preview, separate from export */
+                {/* PreviewCard - shows current selection, updates live */}
+                <div className="flex justify-center">
                   <PreviewCard
                     year={year}
-                    content={buildCardModel(generatedSelection)}
+                    content={buildCardModel(selection)}
                   />
-                )}
+                </div>
               </div>
             </div>
 
-            {/* Right column: Caption and actions - only show after Generate */}
-            {generatedTexts && generatedSelection && (
-              <div className="space-y-4">
-                {/* Caption */}
-                <div>
-                  <label className="text-xs text-white/60 mb-1 block">Caption</label>
-                  <textarea
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/80 resize-none"
-                    rows={6}
-                    value={generatedTexts.caption}
-                    readOnly
-                  />
-                </div>
-
-                {/* TikTok overlay */}
-                {platform === 'tiktok' && generatedTexts.tiktokOverlay && (
+            {/* Right column: Caption and actions - always show */}
+            <div className="space-y-4">
+              {/* Caption - generate on demand */}
+              {generatedTexts ? (
+                <>
                   <div>
-                    <label className="text-xs text-white/60 mb-1 block">TikTok Overlay</label>
+                    <label className="text-xs text-white/60 mb-1 block">Caption</label>
                     <textarea
                       className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/80 resize-none"
-                      rows={3}
-                      value={generatedTexts.tiktokOverlay.join('\n')}
+                      rows={6}
+                      value={generatedTexts.caption}
                       readOnly
                     />
                   </div>
-                )}
 
-                {/* Action buttons */}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadImage}
-                    disabled={isGenerating || selectionsChanged || !generatedSelection}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    title={
-                      !generatedSelection 
-                        ? 'Generate a preview first' 
-                        : selectionsChanged 
-                        ? 'Regenerate to apply changes before downloading' 
-                        : undefined
-                    }
-                  >
-                    {isGenerating ? 'Generating...' : getDownloadLabel(platform)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyCaption}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                  >
-                    Copy caption
-                  </button>
+                  {/* TikTok overlay */}
                   {platform === 'tiktok' && generatedTexts.tiktokOverlay && (
+                    <div>
+                      <label className="text-xs text-white/60 mb-1 block">TikTok Overlay</label>
+                      <textarea
+                        className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/80 resize-none"
+                        rows={3}
+                        value={generatedTexts.tiktokOverlay.join('\n')}
+                        readOnly
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-xs text-white/50 italic">
+                  Generate share pack to create caption and download image.
+                </div>
+              )}
+
+              {/* Action buttons - always available */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadImage}
+                  disabled={isGenerating}
+                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {isGenerating ? 'Generating...' : getDownloadLabel(platform)}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyCaption}
+                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
+                >
+                  Copy caption
+                </button>
+                {canUseWebShare && (
+                  <button
+                    type="button"
+                    onClick={handleWebShare}
+                    disabled={isGenerating}
+                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Share
+                  </button>
+                )}
+                {platform === 'tiktok' && (() => {
+                  // Generate texts on demand to check for TikTok overlay
+                  const textsToCheck = generatedTexts || (() => {
+                    const content = {
+                      identitySentence: selection.yearSentence ? identitySentence : undefined,
+                      archetype: selection.archetype ? archetype : undefined,
+                      hasYearShape: selection.yearShape && !!yearShape,
+                      hasMoments: selection.topMoments && !!moments,
+                      numbers: selection.threeNumbers ? numbers : undefined,
+                      mirrorInsight: selection.wholesomeMirror ? mirrorInsight : undefined,
+                    };
+                    return buildShareText(platform, content);
+                  })();
+                  return textsToCheck.tiktokOverlay ? (
                     <button
                       type="button"
                       onClick={handleCopyTikTokOverlay}
@@ -823,77 +958,100 @@ export function SharePackBuilder({
                     >
                       Copy TikTok overlay
                     </button>
-                  )}
+                  ) : null;
+                })()}
+              </div>
+
+              {/* Platform buttons - open platform URLs */}
+              <div>
+                <label className="text-xs text-white/60 mb-2 block">Share on platform</label>
+                <div className="flex flex-wrap gap-2">
+                  {(['instagram', 'linkedin', 'x', 'tiktok', 'threads'] as Platform[]).map((p) => (
+                    <div key={p} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => handlePlatformClick(p)}
+                        onMouseEnter={() => setShowPlatformTooltip(p)}
+                        onMouseLeave={() => setShowPlatformTooltip(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-white/70 border border-white/10 hover:bg-white/10 transition-colors"
+                      >
+                        {p === 'x' ? 'X' : p === 'threads' ? 'Threads' : p.charAt(0).toUpperCase() + p.slice(1)}
+                      </button>
+                      {showPlatformTooltip === p && (
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 text-white text-xs rounded whitespace-nowrap z-10">
+                          {getPlatformTooltip(p)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
+              </div>
 
-                {/* Platform-specific micro copy */}
-                <p className="text-xs text-white/50 italic">
-                  {getPlatformMicroCopy(platform)}
-                </p>
+              {/* Platform-specific micro copy */}
+              <p className="text-xs text-white/50 italic">
+                {getPlatformMicroCopy(platform)}
+              </p>
 
-                {/* Privacy reassurance */}
-                <p className="text-xs text-white/40">
-                  Computed locally. Nothing uploaded.
-                </p>
+              {/* Privacy reassurance */}
+              <p className="text-xs text-white/40">
+                Computed locally. Nothing uploaded.
+              </p>
 
-                {/* Post-export confirmation banner */}
-                {showConfirmation && (
-                  <div className="border-t border-white/10 pt-4 mt-4">
-                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-white mb-1">
-                          Your Yearly Wrap is ready to share.
-                        </p>
-                        <p className="text-xs text-white/60">
-                          Image saved. Caption copied. Nothing uploaded.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={handleCopyCaption}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Copy caption
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleShareAnotherPlatform}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Share another platform
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleDone}
-                          className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                        >
-                          Done
-                        </button>
-                      </div>
+              {/* Post-export confirmation banner */}
+              {showConfirmation && (
+                <div className="border-t border-white/10 pt-4 mt-4">
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-white mb-1">
+                        Your Yearly Wrap is ready to share.
+                      </p>
+                      <p className="text-xs text-white/60">
+                        Image saved. Caption copied. Nothing uploaded.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyCaption}
+                        className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
+                      >
+                        Copy caption
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShareAnotherPlatform}
+                        className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
+                      >
+                        Share another platform
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDone}
+                        className="px-3 py-1.5 rounded text-xs bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
+                      >
+                        Done
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Hidden export card - rendered in isolation at 1x scale for crisp export */}
-          {/* Uses generatedSelection to ensure export matches what was generated */}
+          {/* Uses current selection for export - always matches preview */}
           {/* Apply same privacy filtering to export */}
-          {generatedSelection && (
-            <div
-              id="yearly-share-export-card"
-              style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
-            >
-              <YearlyShareCard
-                year={year}
-                {...buildCardModel(generatedSelection)}
-                mode="export"
-                platform={cardPlatform}
-              />
-            </div>
-          )}
+          <div
+            id="yearly-share-export-card"
+            style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
+          >
+            <YearlyShareCard
+              year={year}
+              {...buildCardModel(selection)}
+              mode="export"
+              platform={cardPlatform}
+            />
+          </div>
         </div>
       </div>
     </div>
