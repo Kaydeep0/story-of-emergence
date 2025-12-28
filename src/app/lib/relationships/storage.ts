@@ -171,10 +171,12 @@ export async function loadAllRelationshipPayloads(
  * @returns Promise resolving when deletion is complete
  */
 export async function deleteRelationshipPayload(
-  walletAddress: string,
-  relationshipId: string
+  _walletAddress: string,
+  _relationshipId: string
 ): Promise<void> {
   // Stub implementation - no-op
   // In a real implementation, this would delete the relationship from storage
+  void _walletAddress;
+  void _relationshipId;
 }
 

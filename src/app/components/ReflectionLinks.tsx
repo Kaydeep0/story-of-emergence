@@ -50,7 +50,6 @@ export function ReflectionLinks({
   const router = useRouter();
   const [graph, setGraph] = useState<RelationshipGraph>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [linkType, setLinkType] = useState<LinkType>('tag');
   const [linkReference, setLinkReference] = useState('');
@@ -88,7 +87,7 @@ export function ReflectionLinks({
         };
         setGraph({ nodes: [reflectionNode], edges: [] });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load relationships', err);
       // Initialize empty graph on error
       const reflectionNode: ReflectionNode = {
@@ -103,22 +102,6 @@ export function ReflectionLinks({
     }
   }, [reflectionId, walletAddress, sessionKey, encryptionReady]);
 
-  // Save relationships
-  const saveRelationships = useCallback(async () => {
-    if (!encryptionReady || !sessionKey || !walletAddress || !relationshipId) return;
-
-    setSaving(true);
-    try {
-      const payload = await encryptRelationshipGraph(sessionKey, graph);
-      await saveRelationshipPayload(walletAddress, payload);
-      toast.success('Links saved');
-    } catch (err: any) {
-      console.error('Failed to save relationships', err);
-      toast.error('Failed to save links');
-    } finally {
-      setSaving(false);
-    }
-  }, [graph, walletAddress, sessionKey, encryptionReady, relationshipId]);
 
   // Load backlinks by scanning all relationship payloads
   const loadBacklinks = useCallback(async () => {
@@ -176,13 +159,13 @@ export function ReflectionLinks({
       }
 
       setBacklinks(foundBacklinks);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load backlinks', err);
       setBacklinks([]);
     } finally {
       setLoadingBacklinks(false);
     }
-  }, [reflectionId, walletAddress, sessionKey, encryptionReady]);
+  }, [reflectionId, walletAddress, sessionKey, encryptionReady, backlinksEnabled]);
 
   // Load on mount and when dependencies change
   useEffect(() => {
@@ -190,7 +173,7 @@ export function ReflectionLinks({
     if (backlinksEnabled) {
       loadBacklinks();
     }
-  }, [loadRelationships, loadBacklinks]);
+  }, [loadRelationships, loadBacklinks, backlinksEnabled]);
 
   // Get or create reflection node ID
   const reflectionNodeId = useMemo(() => {
@@ -349,7 +332,7 @@ export function ReflectionLinks({
       setLinkReference('');
       setShowAddForm(false);
       toast.success('Link added');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to add link', err);
       toast.error('Failed to add link');
     }
@@ -377,7 +360,7 @@ export function ReflectionLinks({
       await saveRelationshipPayload(walletAddress, payload, reflectionId);
 
       toast.success('Link removed');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to remove link', err);
       toast.error('Failed to remove link');
       // Revert on error
