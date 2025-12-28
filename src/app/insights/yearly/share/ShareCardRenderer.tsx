@@ -22,7 +22,7 @@ export interface ShareCardRendererProps {
 /**
  * Get dimensions for a frame type
  */
-function getFrameDimensions(frame: ShareCardFrame): { width: number; height: number } {
+export function getFrameDimensions(frame: ShareCardFrame): { width: number; height: number } {
   switch (frame) {
     case 'square':
       return { width: 1080, height: 1080 };

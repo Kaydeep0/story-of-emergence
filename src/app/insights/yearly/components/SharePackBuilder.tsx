@@ -16,7 +16,7 @@ import type { ReflectionEntry } from '../../../lib/insights/types';
 import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
-import { ShareCardRenderer, getFrameForPlatform } from '../share/ShareCardRenderer';
+import { ShareCardRenderer, getFrameForPlatform, getFrameDimensions } from '../share/ShareCardRenderer';
 
 // SharePackSelection is now imported from sharePack.ts
 
@@ -551,14 +551,14 @@ export function SharePackBuilder({
 
       {/* Preview - always shows current selection (live updates) */}
       {/* Show preview even before Generate is clicked */}
-      <div className="pt-4 border-t border-white/10">
+      <div className="pt-4 border-t border-white/10" style={{ overflow: 'visible' }}>
         {/* Max width container for whole Share Pack area */}
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-5xl mx-auto" style={{ overflow: 'visible' }}>
           {/* Two column layout: Preview left, Caption/actions right */}
           {/* Responsive: 1 column on mobile, 2 columns on desktop */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {/* Left column: Preview */}
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start" style={{ overflow: 'visible' }}>
+            {/* Left column: Preview - stage presentation */}
+            <div className="space-y-4" style={{ overflow: 'visible' }}>
               {/* Included items list - updates immediately when checkboxes toggle */}
               <div className="mb-3">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -605,16 +605,49 @@ export function SharePackBuilder({
                 </div>
               )}
 
-              {/* Card container - centered */}
-              <div className="rounded-xl border border-white/10 bg-black/30 p-4 overflow-auto">
-                {/* Preview using ShareCardRenderer - shows live updates */}
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <div style={{ transform: 'scale(0.5)', transformOrigin: 'top center' }}>
-                    <ShareCardRenderer
-                      pack={previewPack}
-                      frame={getFrameForPlatform(mapPlatform(platform))}
-                    />
-                  </div>
+              {/* Stage container - fixed dimensions matching export, centered with padding */}
+              <div className="rounded-xl border border-white/10 bg-black/30 p-6">
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center',
+                  alignItems: 'flex-start',
+                  width: '100%',
+                }}>
+                  {/* Stage frame - fixed dimensions matching export size, overflow hidden */}
+                  {(() => {
+                    const frame = getFrameForPlatform(mapPlatform(platform));
+                    const scale = 0.4;
+                    const dimensions = getFrameDimensions(frame);
+                    
+                    const stageWidth = dimensions.width * scale;
+                    const stageHeight = dimensions.height * scale;
+                    
+                    return (
+                      <div style={{
+                        width: `${stageWidth}px`,
+                        height: `${stageHeight}px`,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        backgroundColor: '#000000',
+                        borderRadius: '8px',
+                      }}>
+                        {/* Scaled layer - full export dimensions, scaled down */}
+                        <div style={{
+                          width: `${dimensions.width}px`,
+                          height: `${dimensions.height}px`,
+                          transform: `scale(${scale})`,
+                          transformOrigin: 'top left',
+                          position: 'relative',
+                        }}>
+                          {/* ShareCardRenderer at full export dimensions */}
+                          <ShareCardRenderer
+                            pack={previewPack}
+                            frame={frame}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
