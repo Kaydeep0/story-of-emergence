@@ -12,8 +12,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // Disable CSS processing for tests
-  css: false,
-  // Exclude CSS files from being processed
-  exclude: ['**/*.css', '**/*.scss', '**/*.sass', '**/*.less'],
 });
