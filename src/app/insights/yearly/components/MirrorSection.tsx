@@ -24,14 +24,7 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
   const [selectedMoment, setSelectedMoment] = useState<{ entryId: string; date: string } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  if (!mirrorInsights) {
-    return null;
-  }
-
-  // Use sanitized moments for display
-  const safeMoments = pickTopMomentsForShare(entries, topSpikeDates, 3);
-
-  // Create entriesById map for quick lookup
+  // Create entriesById map for quick lookup - must be called before any early returns
   const entriesById = useMemo(() => {
     const map: Record<string, ReflectionEntry> = {};
     entries.forEach(entry => {
@@ -39,6 +32,13 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
     });
     return map;
   }, [entries]);
+
+  if (!mirrorInsights) {
+    return null;
+  }
+
+  // Use sanitized moments for display
+  const safeMoments = pickTopMomentsForShare(entries, topSpikeDates, 3);
 
   const handleMomentClick = (moment: { entryId: string; date: string }) => {
     setSelectedMoment(moment);
