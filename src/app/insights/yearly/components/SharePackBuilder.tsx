@@ -11,6 +11,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { buildShareText, type Platform, pickTopMomentsForShare, isProbablySystemOrErrorText, cleanForShare } from '../../../lib/share/buildShareText';
 import { exportPng } from '../../../lib/share/exportPng';
+import { toPng } from 'html-to-image';
 import { toast } from 'sonner';
 import type { ReflectionEntry } from '../../../lib/insights/types';
 import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
@@ -94,11 +95,11 @@ function getPlatformShareIntent(platform: Platform): { label: string; url: strin
     },
     linkedin: {
       label: 'Open LinkedIn',
-      url: 'https://www.linkedin.com/feed/',
+      url: 'https://www.linkedin.com/feed/?shareActive=true',
     },
     tiktok: {
       label: 'Open TikTok',
-      url: 'https://www.tiktok.com/',
+      url: 'https://www.tiktok.com/upload',
     },
     threads: {
       label: 'Open Threads',
@@ -110,6 +111,18 @@ function getPlatformShareIntent(platform: Platform): { label: string; url: strin
     },
   };
   return intents[platform] || { label: 'Open platform', url: 'https://www.instagram.com/' };
+}
+
+// Get platform-specific instruction text
+function getPlatformInstruction(platform: Platform): string {
+  const instructions: Record<Platform, string> = {
+    instagram: 'Click Create, select the saved image, paste caption.',
+    linkedin: 'Click Start a post, upload the saved image, paste caption.',
+    tiktok: 'Upload the saved image, paste caption.',
+    threads: 'Upload the saved image, paste caption.',
+    x: 'Upload the saved image, paste caption.',
+  };
+  return instructions[platform] || 'Upload the saved image, paste caption.';
 }
 
 export interface SharePackBuilderProps {
@@ -160,7 +173,86 @@ export function SharePackBuilder({
   const [generatedTexts, setGeneratedTexts] = useState<{ caption: string; tiktokOverlay?: string[] } | null>(null);
   const [shareComplete, setShareComplete] = useState(false);
   const [lastExport, setLastExport] = useState<{ platform: Platform; filename?: string } | null>(null);
+  const [lastPngBlob, setLastPngBlob] = useState<Blob | null>(null);
+  const [isGeneratingBlob, setIsGeneratingBlob] = useState(false);
+  const [isFirstGeneration, setIsFirstGeneration] = useState(true);
+  const [containerMinHeight, setContainerMinHeight] = useState<number | null>(null);
   const expandedPanelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastGeneratedPackKeyRef = useRef<string | null>(null);
+
+  // Generate PNG blob immediately after pack is generated and rendered
+  useEffect(() => {
+    // Only generate if we have a pack, texts, and not already generating
+    if (!generatedPack || !generatedTexts || isGeneratingBlob) {
+      return;
+    }
+
+    // Create a unique key for this pack generation (platform + year + pack year)
+    const packKey = `${platform}-${year}-${generatedPack.year}`;
+    
+    // Skip if we already generated for this exact pack
+    if (shareComplete && lastPngBlob && lastGeneratedPackKeyRef.current === packKey) {
+      return;
+    }
+
+    // Mark that we're generating for this pack
+    lastGeneratedPackKeyRef.current = packKey;
+
+    const generateBlobAsync = async () => {
+      setIsGeneratingBlob(true);
+      
+      try {
+        // Wait for React to render the export card
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const exportCard = document.getElementById('yearly-share-export-card');
+        if (!exportCard) {
+          console.warn('Export card not found, retrying...');
+          // Retry after a bit more time
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const retryCard = document.getElementById('yearly-share-export-card');
+          if (!retryCard) {
+            console.error('Export card still not found after retry');
+            setIsGeneratingBlob(false);
+            return;
+          }
+        }
+
+        const card = exportCard || document.getElementById('yearly-share-export-card');
+        if (!card) {
+          console.error('Failed to find export card');
+          setIsGeneratingBlob(false);
+          return;
+        }
+
+        const filename = getDownloadFilename(platform, year);
+        
+        // Generate PNG blob
+        const blob = await generatePngBlob(card as HTMLElement);
+        
+        // Store blob and filename
+        setLastPngBlob(blob);
+        setLastExport({ platform, filename });
+        
+        // Set share complete state immediately
+        setShareComplete(true);
+        
+        // Release minHeight after shareComplete is set to allow natural layout
+        setContainerMinHeight(null);
+      } catch (err: any) {
+        console.error('Failed to generate PNG blob:', err);
+        toast.error('Failed to generate image. Please try again.');
+        setShareComplete(false);
+        // Release minHeight on error too
+        setContainerMinHeight(null);
+      } finally {
+        setIsGeneratingBlob(false);
+      }
+    };
+
+    generateBlobAsync();
+  }, [generatedPack, generatedTexts, platform, year, isGeneratingBlob, shareComplete, lastPngBlob]);
 
   // Compute contextual fact for a moment based on entries and distribution
   const computeMomentContext = (
@@ -233,12 +325,12 @@ export function SharePackBuilder({
   // Check if selections changed after generation
   const selectionsChanged = generatedSelection && JSON.stringify(selection) !== JSON.stringify(generatedSelection);
 
-  // Auto-scroll to expanded panel when it opens
+  // Auto-scroll to expanded panel when it opens (but not during generation)
   useEffect(() => {
-    if (isExpanded && expandedPanelRef.current) {
+    if (isExpanded && expandedPanelRef.current && !isGeneratingBlob) {
       expandedPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, [isExpanded]);
+  }, [isExpanded, isGeneratingBlob]);
 
   const toggleSelection = (key: keyof SharePackSelection) => {
     setSelection(prev => ({
@@ -271,6 +363,16 @@ export function SharePackBuilder({
   };
 
   const handleGenerate = () => {
+    // Capture container height to prevent layout jump
+    if (containerRef.current) {
+      const height = containerRef.current.getBoundingClientRect().height;
+      setContainerMinHeight(height);
+    }
+
+    // Track if this is the first generation (no blob existed before)
+    const wasFirstGeneration = !lastPngBlob;
+    setIsFirstGeneration(wasFirstGeneration);
+
     // Build SharePack
     const pack = buildCurrentSharePack(selection);
     setGeneratedPack(pack);
@@ -288,20 +390,72 @@ export function SharePackBuilder({
     const texts = buildShareText(platform, content);
     setGeneratedTexts(texts);
     setGeneratedSelection({ ...selection }); // Store snapshot of selection
-    setShareComplete(false); // Reset completion state when regenerating
+    // Reset completion state when regenerating - useEffect will set it to true after blob generation
+    setShareComplete(false);
+    setLastPngBlob(null); // Clear previous blob
+    setLastExport(null); // Clear previous export
+    lastGeneratedPackKeyRef.current = null; // Reset pack key to allow regeneration
+  };
+
+  // Generate PNG blob from export card element using an offscreen clone
+  const generatePngBlob = async (element: HTMLElement): Promise<Blob> => {
+    // Clone the element to avoid modifying the live preview
+    const clone = element.cloneNode(true) as HTMLElement;
+    
+    // Style clone so it cannot be seen
+    clone.style.position = 'fixed';
+    clone.style.left = '-10000px';
+    clone.style.top = '0';
+    clone.style.opacity = '0';
+    clone.style.pointerEvents = 'none';
+    clone.style.transform = 'none';
+    clone.style.visibility = 'visible';
+    clone.style.zIndex = '-1';
+    
+    // Append clone to document.body
+    document.body.appendChild(clone);
+    
+    try {
+      // Small delay to ensure rendering
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Export to PNG with high quality settings
+      const dataUrl = await toPng(clone, {
+        quality: 1.0,
+        pixelRatio: 1,
+        backgroundColor: '#000000',
+        cacheBust: true,
+      });
+
+      // Convert data URL to blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      return blob;
+    } finally {
+      // Remove clone from DOM
+      if (clone.parentNode) {
+        clone.parentNode.removeChild(clone);
+      }
+    }
+  };
+
+  // Download blob as file
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleDownloadImage = async () => {
-    const exportCard = document.getElementById('yearly-share-export-card');
-    if (!exportCard) {
-      toast.error('Share card not ready. Generate share pack first.');
-      return;
-    }
-
-    try {
-      setIsGenerating(true);
-      const filename = getDownloadFilename(platform, year);
-      await exportPng(exportCard as HTMLElement, filename);
+    // Use stored blob if available, otherwise generate
+    if (lastPngBlob && lastExport?.filename) {
+      downloadBlob(lastPngBlob, lastExport.filename);
       
       // Auto-copy caption after successful download
       if (generatedTexts?.caption) {
@@ -311,15 +465,41 @@ export function SharePackBuilder({
           // Silent fail - caption copy is nice-to-have
         }
       }
+      return;
+    }
+
+    // Fallback: generate if blob not available
+    const exportCard = document.getElementById('yearly-share-export-card');
+    if (!exportCard) {
+      toast.error('Share card not ready. Generate share pack first.');
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      const filename = getDownloadFilename(platform, year);
       
-      // Set share complete state
-      setShareComplete(true);
+      // Generate PNG blob
+      const blob = await generatePngBlob(exportCard as HTMLElement);
+      
+      // Download the blob
+      downloadBlob(blob, filename);
+      
+      // Store blob and filename for later use
+      setLastPngBlob(blob);
       setLastExport({ platform, filename });
+      
+      // Auto-copy caption after successful download
+      if (generatedTexts?.caption) {
+        try {
+          await navigator.clipboard.writeText(generatedTexts.caption);
+        } catch (err) {
+          // Silent fail - caption copy is nice-to-have
+        }
+      }
     } catch (err: any) {
       console.error('Failed to export image:', err);
       toast.error(err?.message ?? 'Failed to export image');
-      // Keep shareComplete false on error
-      setShareComplete(false);
     } finally {
       setIsGenerating(false);
     }
@@ -336,6 +516,7 @@ export function SharePackBuilder({
     // Reset completion state and clear transient export state
     setShareComplete(false);
     setLastExport(null);
+    setLastPngBlob(null);
     // Optionally collapse the share section
     // For now, just reset to pre-export state without navigation
   };
@@ -363,6 +544,54 @@ export function SharePackBuilder({
     const intent = getPlatformShareIntent(platform);
     // Open platform in new tab - no file upload, no API calls, just navigation
     window.open(intent.url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopyImage = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!lastPngBlob) {
+      toast.error('No image available. Generate share pack first.');
+      return;
+    }
+
+    if (!navigator.clipboard || !navigator.clipboard.write) {
+      toast.error('Clipboard API not supported');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': lastPngBlob }),
+      ]);
+      toast.success('Image copied');
+    } catch (err: any) {
+      console.error('Failed to copy image:', err);
+      toast.error('Failed to copy image');
+    }
+  };
+
+  const handleDownloadAgain = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!lastPngBlob || !lastExport?.filename) {
+      toast.error('No image available. Generate again.');
+      return;
+    }
+
+    // After first download, mark as not first generation
+    if (isFirstGeneration) {
+      setIsFirstGeneration(false);
+    }
+
+    try {
+      downloadBlob(lastPngBlob, lastExport.filename);
+      toast.success('Downloaded again');
+    } catch (err: any) {
+      console.error('Failed to download again:', err);
+      toast.error('Failed to download again');
+    }
   };
 
   const handleCopyTikTokOverlay = async () => {
@@ -429,7 +658,18 @@ export function SharePackBuilder({
   // Expanded state: Show full share UI
   // Main container - no overflow clipping to allow preview to display fully
   return (
-    <div ref={expandedPanelRef} className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6 space-y-6" style={{ overflow: 'visible' }}>
+    <div 
+      ref={(node) => {
+        expandedPanelRef.current = node;
+        containerRef.current = node;
+      }}
+      className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6 space-y-6" 
+      style={{ 
+        overflow: 'visible',
+        minHeight: containerMinHeight ? `${containerMinHeight}px` : undefined,
+        transition: containerMinHeight ? 'none' : 'min-height 0.2s ease-out',
+      }}
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <h3 className="text-lg font-semibold mb-2">Share this year</h3>
@@ -648,6 +888,7 @@ export function SharePackBuilder({
                   justifyContent: 'center',
                   alignItems: 'flex-start',
                   width: '100%',
+                  position: 'relative',
                 }}>
                   {/* Stage frame - fixed dimensions matching export size, overflow hidden */}
                   {(() => {
@@ -675,12 +916,32 @@ export function SharePackBuilder({
                           transformOrigin: 'top left',
                           position: 'relative',
                         }}>
-                          {/* ShareCardRenderer at full export dimensions */}
+                          {/* ShareCardRenderer at full export dimensions - always mounted */}
                           <ShareCardRenderer
                             pack={previewPack}
                             frame={frame}
                           />
                         </div>
+                        {/* Loading overlay - shown during blob generation */}
+                        {isGeneratingBlob && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '8px',
+                              zIndex: 10,
+                            }}
+                          >
+                            <div className="text-white/80 text-sm">Generating...</div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -698,12 +959,20 @@ export function SharePackBuilder({
                       Your Yearly Wrap is ready to share.
                     </p>
                     <p className="text-xs text-white/60 mb-1">
-                      Image saved locally.
-                    </p>
-                    <p className="text-xs text-white/60">
-                      Nothing uploaded.
+                      Image saved locally. Nothing uploaded.
                     </p>
                   </div>
+
+                  {/* Saved filename */}
+                  {lastExport?.filename && (
+                    <div className="pt-2 border-t border-white/10">
+                      <div className="text-xs text-white/60 mb-1">Saved file</div>
+                      <div className="text-xs text-white font-mono break-all">
+                        {lastExport.filename}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -711,6 +980,20 @@ export function SharePackBuilder({
                       className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
                     >
                       {getPlatformShareIntent(platform).label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyImage}
+                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
+                    >
+                      Copy image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadAgain}
+                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
+                    >
+                      {isFirstGeneration ? 'Download image' : 'Download again'}
                     </button>
                     <button
                       type="button"
@@ -734,6 +1017,9 @@ export function SharePackBuilder({
                       Done
                     </button>
                   </div>
+                  <p className="text-xs text-white/50">
+                    {getPlatformInstruction(platform)}
+                  </p>
                 </div>
               </div>
             ) : generatedTexts && generatedSelection ? (
