@@ -24,6 +24,9 @@ import {
 } from '../lib/relationships/storage';
 import { useRouter } from 'next/navigation';
 
+// Feature flag: disable Backlinks scanning until ready
+const ENABLE_BACKLINKS = false;
+
 type LinkType = 'tag' | 'reflection' | 'source';
 
 interface ReflectionLinksProps {
@@ -109,7 +112,8 @@ export function ReflectionLinks({
 
   // Load backlinks by scanning all relationship payloads
   const loadBacklinks = useCallback(async () => {
-    if (!encryptionReady || !sessionKey || !walletAddress) return;
+    if (!ENABLE_BACKLINKS) return;
+    if (!encryptionReady || !sessionKey || !walletAddress || !reflectionId) return;
 
     setLoadingBacklinks(true);
     try {
@@ -127,19 +131,20 @@ export function ReflectionLinks({
           const otherGraph = await decryptRelationshipGraph(sessionKey, payload);
           
           // Find edges that point TO the current reflection
+          // Check edges where toId (target node) equals the current reflectionId
           for (const edge of otherGraph.edges) {
             if (edge.deletedAt) continue;
 
-            // Check if this edge points to the current reflection
+            // Get the target node (where the edge points TO)
             const targetNode = otherGraph.nodes.find((n) => n.id === edge.toNodeId);
             if (!targetNode) continue;
 
-            // Check if target node is the current reflection
+            // Check if target node is a reflection node with the current reflectionId
             if (
               targetNode.type === 'reflection' &&
               (targetNode as ReflectionNode).reflectionId === reflectionId
             ) {
-              // Found a backlink! Get the source reflection
+              // Found a backlink! Get the source reflection (where the edge comes FROM)
               const sourceNode = otherGraph.nodes.find((n) => n.id === edge.fromNodeId);
               if (sourceNode && sourceNode.type === 'reflection') {
                 const sourceReflectionId = (sourceNode as ReflectionNode).reflectionId;
@@ -154,7 +159,8 @@ export function ReflectionLinks({
             }
           }
         } catch (err) {
-          // Skip payloads that can't be decrypted (might be from different sessions)
+          // Skip payloads that can't be decrypted (might be from different sessions or corrupted)
+          // Handle failures gracefully - just skip this payload
           console.debug(`Could not decrypt payload for reflection ${otherReflectionId}`, err);
         }
       }
@@ -171,7 +177,9 @@ export function ReflectionLinks({
   // Load on mount and when dependencies change
   useEffect(() => {
     loadRelationships();
-    loadBacklinks();
+    if (ENABLE_BACKLINKS) {
+      loadBacklinks();
+    }
   }, [loadRelationships, loadBacklinks]);
 
   // Get or create reflection node ID
@@ -379,6 +387,12 @@ export function ReflectionLinks({
     return node.id;
   };
 
+  // Format reflection ID to short format (first 6 and last 4 characters)
+  const formatShortReflectionId = (id: string): string => {
+    if (id.length <= 10) return id;
+    return `${id.slice(0, 6)}…${id.slice(-4)}`;
+  };
+
   const hasLinks = edgesByType.tag.length > 0 || edgesByType.reflection.length > 0 || edgesByType.source.length > 0;
 
   return (
@@ -530,39 +544,56 @@ export function ReflectionLinks({
 
       {/* Backlinks section - read-only */}
       <div className="pt-2 border-t border-white/10 mt-2">
-        <p className="text-xs text-white/60 mb-1.5">Linked from</p>
-        {loadingBacklinks ? (
-          <p className="text-xs text-white/40">Scanning…</p>
-        ) : backlinks.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {backlinks.map((backlink) => (
-              <button
-                key={backlink.reflectionId}
-                onClick={() => {
-                  router.push(`/?focus=${backlink.reflectionId}`);
-                }}
-                className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/40 transition-colors"
-                title={`View reflection ${backlink.reflectionId}`}
-              >
-                <span>{backlink.reflectionId}</span>
-                <svg
-                  className="w-3 h-3 ml-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-                  />
-                </svg>
-              </button>
-            ))}
-          </div>
+        {!ENABLE_BACKLINKS ? (
+          <p className="text-xs text-white/40 italic">Backlinks coming soon</p>
         ) : (
-          <p className="text-xs text-white/30 italic">No other reflections link to this one</p>
+          <>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs text-white/60">Backlinks</p>
+              {!loadingBacklinks && (
+                <button
+                  onClick={loadBacklinks}
+                  className="text-xs text-white/50 hover:text-white/70 transition-colors"
+                  title="Rescan for backlinks"
+                >
+                  Rescan
+                </button>
+              )}
+            </div>
+            {loadingBacklinks ? (
+              <p className="text-xs text-white/40">Scanning…</p>
+            ) : backlinks.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {backlinks.map((backlink) => (
+                  <button
+                    key={backlink.reflectionId}
+                    onClick={() => {
+                      router.push(`/?focus=${encodeURIComponent(backlink.reflectionId)}`);
+                    }}
+                    className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/40 transition-colors"
+                    title={`View reflection ${backlink.reflectionId}`}
+                  >
+                    <span>Reflection {formatShortReflectionId(backlink.reflectionId)}</span>
+                    <svg
+                      className="w-3 h-3 ml-1"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                      />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-white/30 italic">No other reflections link to this one</p>
+            )}
+          </>
         )}
       </div>
     </div>
