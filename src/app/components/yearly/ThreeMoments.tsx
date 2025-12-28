@@ -1,6 +1,8 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import type { ReflectionEntry } from '../../lib/insights/types';
+import { MomentEntryModal } from '../../insights/yearly/components/MomentEntryModal';
 
 interface ThreeMomentsProps {
   entries: ReflectionEntry[];
@@ -28,6 +30,9 @@ function sanitizeText(text: string): string | null {
 }
 
 export function ThreeMoments({ entries, topSpikeDate, formatDate }: ThreeMomentsProps) {
+  const [selectedMoment, setSelectedMoment] = useState<{ entryId: string; date: string } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  
   const moments: Array<{ date: string; preview: string; entryId: string }> = [];
 
   // 1. Highest entry count day
@@ -89,6 +94,25 @@ export function ThreeMoments({ entries, topSpikeDate, formatDate }: ThreeMoments
     }
   }
 
+  // Create entriesById map for quick lookup
+  const entriesById = useMemo(() => {
+    const map: Record<string, ReflectionEntry> = {};
+    entries.forEach(entry => {
+      map[entry.id] = entry;
+    });
+    return map;
+  }, [entries]);
+
+  const handleMomentClick = (moment: { entryId: string; date: string }) => {
+    setSelectedMoment(moment);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setSelectedMoment(null);
+  };
+
   if (moments.length === 0) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -101,34 +125,43 @@ export function ThreeMoments({ entries, topSpikeDate, formatDate }: ThreeMoments
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h3 className="text-lg font-semibold mb-4">Three moments</h3>
-      <div className="grid gap-4 md:grid-cols-3">
-        {moments.map((moment) => (
-          <div key={moment.entryId} className="rounded-lg border border-white/10 bg-black/30 p-3">
-            <div className="text-xs text-white/60 mb-2">{formatDate(moment.date)}</div>
-            <p className="text-xs text-white/80 leading-relaxed mb-2">{moment.preview}</p>
+    <>
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h3 className="text-lg font-semibold mb-4">Three moments</h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          {moments.map((moment) => (
             <button
+              key={moment.entryId}
               type="button"
-              onClick={() => {
-                // Navigate to entry - simplified for now
-                window.location.href = `/?highlight=${moment.entryId}`;
-              }}
-              className="text-xs text-white/60 hover:text-white/80 transition-colors"
+              onClick={() => handleMomentClick(moment)}
+              className="text-left rounded-lg border border-white/10 bg-black/30 p-3 hover:border-white/20 hover:bg-black/40 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black"
             >
-              View →
+              <div className="text-xs text-white/60 mb-2">{formatDate(moment.date)}</div>
+              <p className="text-xs text-white/80 leading-relaxed mb-2">{moment.preview}</p>
+              <div className="text-xs text-white/60 hover:text-white/80 transition-colors">
+                View →
+              </div>
             </button>
-          </div>
-        ))}
-        {moments.length < 3 && (
-          <div className="rounded-lg border border-white/10 bg-black/30 p-3 flex items-center justify-center">
-            <p className="text-xs text-white/50 text-center">
-              {moments.length === 1 ? 'Keep writing for more moments.' : 'One more moment coming soon.'}
-            </p>
-          </div>
-        )}
+          ))}
+          {moments.length < 3 && (
+            <div className="rounded-lg border border-white/10 bg-black/30 p-3 flex items-center justify-center">
+              <p className="text-xs text-white/50 text-center">
+                {moments.length === 1 ? 'Keep writing for more moments.' : 'One more moment coming soon.'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Moment Entry Modal */}
+      <MomentEntryModal
+        open={modalOpen}
+        onOpenChange={handleCloseModal}
+        moment={selectedMoment}
+        entriesById={entriesById}
+        formatDate={formatDate}
+      />
+    </>
   );
 }
 

@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { pickTopMomentsForShare } from '../../../lib/share/buildShareText';
+import type { ReflectionEntry } from '../../../lib/insights/types';
+import { MomentEntryModal } from './MomentEntryModal';
 
 interface MirrorSectionProps {
   mirrorInsights: {
@@ -12,14 +15,40 @@ interface MirrorSectionProps {
     moments: Array<{ date: string; preview: string }>;
   } | null;
   formatDate: (dateStr: string) => string;
+  entries: ReflectionEntry[];
+  topSpikeDates: string[];
 }
 
-export function MirrorSection({ mirrorInsights, formatDate }: MirrorSectionProps) {
+export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDates }: MirrorSectionProps) {
   const [showDeeperPatterns, setShowDeeperPatterns] = useState(false);
+  const [selectedMoment, setSelectedMoment] = useState<{ entryId: string; date: string } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   if (!mirrorInsights) {
     return null;
   }
+
+  // Use sanitized moments for display
+  const safeMoments = pickTopMomentsForShare(entries, topSpikeDates, 3);
+
+  // Create entriesById map for quick lookup
+  const entriesById = useMemo(() => {
+    const map: Record<string, ReflectionEntry> = {};
+    entries.forEach(entry => {
+      map[entry.id] = entry;
+    });
+    return map;
+  }, [entries]);
+
+  const handleMomentClick = (moment: { entryId: string; date: string }) => {
+    setSelectedMoment(moment);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setSelectedMoment(null);
+  };
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -47,18 +76,31 @@ export function MirrorSection({ mirrorInsights, formatDate }: MirrorSectionProps
 
         {/* Three moments - always visible */}
         <div>
-          <h3 className="text-sm font-semibold text-white/90 mb-3">Three moments</h3>
-          {mirrorInsights.moments.length > 0 ? (
+          <h3 className="text-sm font-semibold text-white/90 mb-1">Three moments</h3>
+          <p className="text-xs text-white/50 mb-3">
+            These moments reflect days with unusual activity, emotional density, or sustained focus.
+          </p>
+          {safeMoments.length > 0 ? (
             <div className="space-y-3">
-              {mirrorInsights.moments.slice(0, 3).map((moment) => (
-                <div key={moment.date} className="rounded-lg border border-white/10 bg-black/30 p-3">
+              {safeMoments.map((moment) => (
+                <button
+                  key={moment.date}
+                  type="button"
+                  onClick={() => handleMomentClick(moment)}
+                  className="w-full text-left rounded-lg border border-white/10 bg-black/30 p-3 hover:border-white/20 hover:bg-black/40 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-black min-h-[80px]"
+                >
                   <div className="text-xs text-white/60 mb-1">{formatDate(moment.date)}</div>
                   <p className="text-xs text-white/80 leading-relaxed">{moment.preview}</p>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-white/60">Not enough entries yet.</p>
+            <div className="rounded-lg border border-white/10 bg-black/30 p-4 min-h-[80px]">
+              <div className="text-xs font-semibold text-white/90 mb-1">Moments will appear here</div>
+              <p className="text-xs text-white/60 leading-relaxed">
+                As you write, Story of Emergence will surface your strongest days automatically. Keep going.
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -120,6 +162,15 @@ export function MirrorSection({ mirrorInsights, formatDate }: MirrorSectionProps
           </div>
         )}
       </div>
+
+      {/* Moment Entry Modal */}
+      <MomentEntryModal
+        open={modalOpen}
+        onOpenChange={handleCloseModal}
+        moment={selectedMoment}
+        entriesById={entriesById}
+        formatDate={formatDate}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
+import { isProbablySystemOrErrorText, cleanForShare } from '../../lib/share/buildShareText';
 
 export type ShareCardPlatform = 'instagram-portrait' | 'instagram-square' | 'linkedin-square' | 'tiktok';
 
@@ -225,34 +226,65 @@ export const YearlyShareCard = forwardRef<HTMLDivElement, YearlyShareCardProps>(
         )}
 
         {/* Top moments */}
-        {moments && moments.length > 0 && (
+        {moments && moments.length > 0 ? (
           <div style={{ marginBottom: spacing.sectionGap }}>
             <div style={{ ...typography.metricLabel, marginBottom: spacing.metricLabelGap }}>
               Top Moments
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {moments.slice(0, 3).map((moment, idx) => (
-                <div key={idx}>
-                  <div style={{ fontSize: '20px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.8)', marginBottom: moment.context ? '4px' : '0' }}>
-                    {moment.preview}
-                  </div>
-                  {moment.context && (
-                    <div style={{ fontSize: '16px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.6)', fontStyle: 'italic' }}>
-                      {moment.context}
+              {moments.slice(0, 3).map((moment, idx) => {
+                // Sanitize preview text
+                const cleanedPreview = cleanForShare(moment.preview);
+                const isSafe = cleanedPreview && !isProbablySystemOrErrorText(cleanedPreview);
+                
+                if (!isSafe) return null;
+                
+                return (
+                  <div key={idx}>
+                    <div style={{ fontSize: '20px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.8)', marginBottom: moment.context ? '4px' : '0' }}>
+                      {cleanedPreview}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {moment.context && (
+                      <div style={{ fontSize: '16px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.6)', fontStyle: 'italic' }}>
+                        {moment.context}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom: spacing.sectionGap }}>
+            <div style={{ ...typography.metricLabel, marginBottom: spacing.metricLabelGap }}>
+              Top Moments
+            </div>
+            <div style={{ fontSize: '18px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.7)', fontStyle: 'italic' }}>
+              Moments will appear here. As you write, Story of Emergence will surface your strongest days automatically. Keep going.
             </div>
           </div>
         )}
 
         {/* Mirror insight */}
-        {mirrorInsight && (
-          <div style={{ marginBottom: spacing.sectionGap, fontSize: '24px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>
-            {mirrorInsight}
-          </div>
-        )}
+        {mirrorInsight ? (() => {
+          const cleaned = cleanForShare(mirrorInsight);
+          const isSafe = cleaned && !isProbablySystemOrErrorText(cleaned);
+          
+          if (isSafe) {
+            return (
+              <div style={{ marginBottom: spacing.sectionGap, fontSize: '24px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>
+                {cleaned}
+              </div>
+            );
+          }
+          
+          // Fallback if mirror insight is filtered out
+          return (
+            <div style={{ marginBottom: spacing.sectionGap, fontSize: '24px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>
+              A quiet year can still be a powerful one. Your reflection is building underneath the surface.
+            </div>
+          );
+        })() : null}
 
         {/* Footer - Authority line only, no URLs or CTAs */}
         {/* marginTop: 'auto' pushes footer to bottom, creating intentional negative space above */}

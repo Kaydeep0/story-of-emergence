@@ -1,12 +1,21 @@
 'use client';
 
+/**
+ * Share Pack Builder - Yearly Wrap v1
+ * 
+ * Generates shareable content from Yearly Wrap data only.
+ * Uses: identitySentence, archetype, yearShape, moments, numbers, mirrorInsight from Yearly Wrap.
+ * No fallbacks to lifetime data or external sources.
+ */
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { YearlyShareCard, type ShareCardPlatform, PLATFORM_DIMENSIONS } from '../../../components/share/YearlyShareCard';
-import { buildShareText, type Platform } from '../../../lib/share/buildShareText';
+import { buildShareText, type Platform, pickTopMomentsForShare, isProbablySystemOrErrorText, cleanForShare } from '../../../lib/share/buildShareText';
 import { exportPng } from '../../../lib/share/exportPng';
 import { toast } from 'sonner';
 import type { ReflectionEntry } from '../../../lib/insights/types';
 import type { DistributionResult } from '../../../lib/insights/distributionLayer';
+import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 
 // Share pack selection type - drives which modules render
 export interface SharePackSelection {
@@ -420,70 +429,6 @@ export function SharePackBuilder({
     setShowConfirmation(false);
   };
 
-  // Privacy filter: Remove decrypt errors, JSON, and system messages from share content
-  // Strips tokens matching: "decrypt", "Unable to decrypt", "entryid", "rpc", "supabase", stack traces, JSON error blobs
-  // Also computes contextual facts for each moment
-  const filterSafeMoments = (moments?: Array<{ date: string; preview: string }>): Array<{ date: string; preview: string; context?: string }> | undefined => {
-    if (!moments || moments.length === 0) return undefined;
-    
-    const safeMoments = moments.filter((moment) => {
-      const text = (moment.preview || '').trim();
-      
-      // Exclude empty or too short
-      if (!text || text.length < 20) return false;
-      
-      // Exclude JSON structures
-      if (text.startsWith('{') || text.includes('"metadata"') || text.includes('"note":') || text.includes('"text":')) {
-        return false;
-      }
-      
-      // Exclude decrypt errors and system messages
-      const lowerText = text.toLowerCase();
-      if (
-        lowerText.includes('decrypt') ||
-        lowerText.includes('unable to decrypt') ||
-        lowerText.includes('decrypt error') ||
-        lowerText.includes('decryption failed') ||
-        lowerText.includes('entryid') ||
-        lowerText.includes('entry id') ||
-        lowerText.includes('rpc') ||
-        lowerText.includes('supabase') ||
-        lowerText.includes('error:') ||
-        lowerText.includes('exception:') ||
-        lowerText.includes('at src') ||
-        lowerText.includes('build error') ||
-        lowerText.includes('system error') ||
-        lowerText.includes('internal error') ||
-        lowerText.includes('failed to') ||
-        lowerText.includes('stack trace') ||
-        lowerText.includes('checking') ||
-        lowerText.includes('debug')
-      ) {
-        return false;
-      }
-      
-      // Exclude lines that look like stack traces
-      if (text.includes(' at ') && (text.includes('.ts') || text.includes('.js') || text.includes('.tsx'))) {
-        return false;
-      }
-      
-      // Exclude JSON-like content (braces)
-      if (text.includes('{') || text.includes('}')) {
-        return false;
-      }
-      
-      return true;
-    });
-    
-    // If no safe moments, return undefined (section will be hidden)
-    if (safeMoments.length === 0) return undefined;
-    
-    // Compute context for each safe moment
-    return safeMoments.slice(0, 3).map(moment => ({
-      ...moment,
-      context: computeMomentContext(moment.date, entries, distributionResult),
-    }));
-  };
 
   const handleCopyCaption = async () => {
     if (!generatedTexts) {
@@ -527,14 +472,40 @@ export function SharePackBuilder({
   
   // Build card model from selection - single source of truth for both preview and export
   // Apply privacy filtering to all text fields before generating share pack content
-  const buildCardModel = (sel: SharePackSelection) => ({
-    identitySentence: sel.yearSentence ? sanitizeText(identitySentence) : undefined,
-    archetype: sel.archetype ? sanitizeText(archetype) : undefined,
-    yearShape: sel.yearShape && yearShape ? yearShape : undefined,
-    numbers: sel.threeNumbers && numbers ? numbers : undefined,
-    moments: sel.topMoments ? filterSafeMoments(moments) : undefined,
-    mirrorInsight: sel.wholesomeMirror ? sanitizeText(mirrorInsight) : undefined,
-  });
+  const buildCardModel = (sel: SharePackSelection) => {
+    // Get sanitized moments using pickTopMomentsForShare
+    let safeMoments: Array<{ date: string; preview: string; context?: string }> | undefined = undefined;
+    if (sel.topMoments && entries.length > 0 && distributionResult) {
+      const topSpikeDates = getTopSpikeDates(distributionResult, 3);
+      const pickedMoments = pickTopMomentsForShare(entries, topSpikeDates, 3);
+      // Add context to picked moments
+      safeMoments = pickedMoments.map(moment => ({
+        ...moment,
+        context: computeMomentContext(moment.date, entries, distributionResult),
+      }));
+    }
+    
+    // Sanitize mirror insight
+    let safeMirrorInsight: string | undefined = undefined;
+    if (sel.wholesomeMirror && mirrorInsight) {
+      const cleaned = cleanForShare(mirrorInsight);
+      if (cleaned && !isProbablySystemOrErrorText(cleaned)) {
+        safeMirrorInsight = cleaned;
+      } else {
+        // Fallback if filtered out
+        safeMirrorInsight = 'A quiet year can still be a powerful one. Your reflection is building underneath the surface.';
+      }
+    }
+    
+    return {
+      identitySentence: sel.yearSentence ? sanitizeText(identitySentence) : undefined,
+      archetype: sel.archetype ? sanitizeText(archetype) : undefined,
+      yearShape: sel.yearShape && yearShape ? yearShape : undefined,
+      numbers: sel.threeNumbers && numbers ? numbers : undefined,
+      moments: safeMoments,
+      mirrorInsight: safeMirrorInsight,
+    };
+  };
 
   // Get included items list for display - updates immediately when checkboxes toggle
   const getIncludedItems = (sel: SharePackSelection): string[] => {

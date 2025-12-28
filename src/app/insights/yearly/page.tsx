@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * Yearly Wrap v1 - Locked
+ * 
+ * This page provides a complete, stable view of a user's reflection patterns over the past year.
+ * 
+ * Scope: Single year analysis (365 days) using decrypted reflection entries.
+ * Data source: Yearly Wrap only - no fallbacks, no lifetime data, no external sources.
+ * 
+ * Locked as v1: No new features, no expansion. This is a finished artifact.
+ */
+
 import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../../lib/useLogEvent';
@@ -13,13 +24,18 @@ import { useHighlights } from '../../lib/insights/useHighlights';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
 import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
-import { exportPng } from '../../lib/share/exportPng';
 import { extractKeywords, computeWordShift, getMoments, MeaningCard, Glossary } from './components/YearlyMeaning';
 import { IdentityLine } from '../../components/yearly/IdentityLine';
 import { YearShapeGlyph } from '../../components/yearly/YearShapeGlyph';
 import { GrowthStory } from '../../components/yearly/GrowthStory';
 import { ThreeMoments } from '../../components/yearly/ThreeMoments';
 import { determineArchetype } from '../../lib/yearlyArchetype';
+import { SharePackBuilder } from './components/SharePackBuilder';
+import { UnderlyingRhythmCard } from './components/UnderlyingRhythmCard';
+import { MirrorSection } from './components/MirrorSection';
+
+// Yearly Wrap v1 - Locked
+const YEARLY_WRAP_VERSION = 'v1' as const;
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -34,8 +50,6 @@ export default function YearlyWrapPage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [windowDistribution, setWindowDistribution] = useState<WindowDistribution | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [lastGeneratedAt, setLastGeneratedAt] = useState<Date | null>(null);
   const [identitySentence, setIdentitySentence] = useState<string>('');
   const [includeNumbers, setIncludeNumbers] = useState(false);
   const [privateMode, setPrivateMode] = useState(true);
@@ -232,51 +246,6 @@ export default function YearlyWrapPage() {
     return distributionResult.topDays[0]?.date;
   }, [distributionResult]);
 
-  // Handle downloading PNG
-  const handleDownloadPng = async () => {
-    const exportCard = document.getElementById('yearly-wrap-export-card');
-    if (!exportCard) {
-      toast.error('Share card not ready');
-      return;
-    }
-
-    try {
-      setIsGenerating(true);
-      await exportPng(exportCard as HTMLElement);
-      setLastGeneratedAt(new Date());
-      toast.success('Share card downloaded');
-    } catch (err: any) {
-      console.error('Failed to export PNG:', err);
-      toast.error(err?.message ?? 'Failed to export PNG');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Handle copying caption
-  const handleCopyCaption = async () => {
-    if (!distributionResult || !windowDistribution) {
-      toast.error('No data available');
-      return;
-    }
-
-    let caption = identitySentence || 'My year in reflection.';
-    
-    if (includeNumbers) {
-      const activeDays = computeActiveDays(distributionResult.dailyCounts);
-      caption += ` ${distributionResult.totalEntries} entries across ${activeDays} active days.`;
-    }
-    
-    caption += ' Computed locally in Story of Emergence.';
-
-    try {
-      await navigator.clipboard.writeText(caption);
-      toast.success('Caption copied to clipboard');
-    } catch (err: any) {
-      console.error('Failed to copy caption:', err);
-      toast.error('Failed to copy caption');
-    }
-  };
 
   // Handle saving highlight
   const handleSaveHighlight = async () => {
@@ -394,335 +363,124 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Yearly Wrap Content */}
-        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
-          <div className="space-y-6">
-            {/* Share this year section */}
-            {windowDistribution && (() => {
-              const activeDays = computeActiveDays(distributionResult.dailyCounts);
-              const classificationLabel = formatClassification(windowDistribution.classification);
-              
-              return (
-                <div className="w-full">
-                  {/* Hidden full-size card for export - fixed 1080x1350 */}
-                  <div 
-                    style={{ 
-                      position: 'absolute', 
-                      left: '-9999px', 
-                      top: 0,
-                      visibility: 'hidden',
-                    }}
-                  >
-                    <YearlyWrapShareCard
-                      id="yearly-wrap-export-card"
-                      mode="export"
-                      year={new Date().getFullYear()}
-                      classificationLabel={classificationLabel}
-                      totalEntries={distributionResult.totalEntries}
-                      activeDays={activeDays}
-                      spikeRatio={distributionResult.stats.spikeRatio}
-                      top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                    />
-                  </div>
-
-                  {/* Two-column layout: preview left, controls right */}
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Left column: Preview card + Year shape glyph */}
-                    <div className="space-y-6">
-                      <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
-                        <YearlyWrapShareCard
-                          mode="preview"
-                          year={new Date().getFullYear()}
-                          classificationLabel={classificationLabel}
-                          totalEntries={distributionResult.totalEntries}
-                          activeDays={activeDays}
-                          spikeRatio={distributionResult.stats.spikeRatio}
-                          top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                        />
-                      </div>
-                      
-                      {/* Year shape glyph */}
-                      {distributionResult.dailyCounts.length > 0 && (
-                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
-                          <YearShapeGlyph
-                            dailyCounts={distributionResult.dailyCounts}
-                            topSpikeDates={getTopSpikeDates(distributionResult, 3)}
-                            mode="page"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right column: Share panel with headline, archetype, controls */}
-                    <div className="space-y-6">
-                      {/* Share this year panel */}
-                      <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
-                        <h3 className="text-lg font-semibold mb-2">Share this year</h3>
-                        <p className="text-sm text-white/60 mb-4">
-                          Export a card you can post anywhere.
-                        </p>
-
-                        {/* Headline */}
-                        {identitySentence && (
-                          <div className="text-base font-medium text-white/90 mb-3">
-                            {identitySentence}
-                          </div>
-                        )}
-
-                        {/* Archetype badge */}
-                        {archetype && (
-                          <div className="mb-4">
-                            <div className={`inline-block px-3 py-1.5 rounded-lg border text-sm font-medium ${
-                              archetype.name.includes('Sprinter') 
-                                ? 'bg-orange-500/20 text-orange-300 border-orange-500/30'
-                                : archetype.name.includes('Deep Diver')
-                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                                : archetype.name.includes('Steady')
-                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                : 'bg-white/10 text-white/70 border-white/20'
-                            }`}>
-                              {archetype.name}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
-                        <div className="flex flex-wrap gap-3 mb-4">
-                          <button
-                            type="button"
-                            onClick={handleDownloadPng}
-                            disabled={isGenerating}
-                            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                          >
-                            {isGenerating ? 'Generating...' : 'Download PNG'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleCopyCaption}
-                            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                          >
-                            Copy Caption
-                          </button>
-                        </div>
-
-                        {/* Toggles */}
-                        <div className="flex flex-wrap gap-4 mb-4 text-xs">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includeNumbers}
-                              onChange={(e) => setIncludeNumbers(e.target.checked)}
-                              className="rounded border-white/20"
-                            />
-                            <span className="text-white/70">Include numbers</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={privateMode}
-                              onChange={(e) => setPrivateMode(e.target.checked)}
-                              className="rounded border-white/20"
-                            />
-                            <span className="text-white/70">Private mode</span>
-                          </label>
-                        </div>
-
-                        {/* Caption textarea */}
-                        <div>
-                          <label className="text-xs text-white/60">Caption</label>
-                          <textarea
-                            className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white/80 resize-none"
-                            rows={4}
-                            value={
-                              identitySentence 
-                                ? `${identitySentence}${includeNumbers ? ` ${distributionResult.totalEntries} entries across ${activeDays} active days.` : ''} Computed locally in Story of Emergence.`
-                                : `My year in reflection.${includeNumbers ? ` ${distributionResult.totalEntries} entries across ${activeDays} active days.` : ''} Computed locally in Story of Emergence.`
-                            }
-                            readOnly
-                          />
-                        </div>
-                      </div>
-
-                      {/* Your year, in one sentence */}
-                      {windowDistribution && (
-                        <IdentityLine
-                          totalEntries={distributionResult.totalEntries}
-                          activeDays={activeDays}
-                          spikeRatio={distributionResult.stats.spikeRatio}
-                          top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                          classification={windowDistribution.classification}
-                          onSentenceChange={setIdentitySentence}
-                        />
-                      )}
-
-                      {/* Your year, interpreted */}
-                      {windowDistribution && (
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Your year, interpreted</h3>
-                          <div className="space-y-3">
-                            <MeaningCard
-                              title={formatClassification(windowDistribution.classification) + ' rhythm'}
-                              explanation={`Your writing follows a ${formatClassification(windowDistribution.classification).toLowerCase()} pattern.`}
-                              rhythmNote={windowDistribution.classification === 'lognormal' 
-                                ? 'This suggests steady baseline days with occasional intense bursts—common in creative work.'
-                                : windowDistribution.classification === 'powerlaw'
-                                ? 'This suggests a few massive days drive most of your output—highly concentrated energy.'
-                                : 'This suggests consistent daily volume with moderate variation.'}
-                              metricChip={formatClassification(windowDistribution.classification)}
-                            />
-                            <MeaningCard
-                              title="Variance"
-                              explanation={`Your days vary by ${distributionResult.stats.variance.toFixed(1)} entries on average.`}
-                              rhythmNote={distributionResult.stats.variance > 5 
-                                ? 'High variance means quiet stretches followed by big bursts.'
-                                : 'Low variance means you maintain a steady daily rhythm.'}
-                              metricChip={`${distributionResult.stats.variance.toFixed(1)}`}
-                            />
-                            <MeaningCard
-                              title="Spike ratio"
-                              explanation={`Your biggest day was ${distributionResult.stats.spikeRatio.toFixed(1)}x your typical day.`}
-                              rhythmNote={distributionResult.stats.spikeRatio > 3
-                                ? 'You tend to pour it all out in intense sessions rather than steady daily output.'
-                                : 'Your output stays relatively consistent day to day.'}
-                              metricChip={`${distributionResult.stats.spikeRatio.toFixed(1)}x`}
-                            />
-                            <MeaningCard
-                              title="Top 10% days share"
-                              explanation={`${(distributionResult.stats.top10PercentDaysShare * 100).toFixed(0)}% of your writing happened on your busiest days.`}
-                              rhythmNote={distributionResult.stats.top10PercentDaysShare > 0.5
-                                ? 'Your year was driven by a few "gravity well" days that pulled everything together.'
-                                : 'Your writing was spread more evenly across the year.'}
-                              metricChip={`${(distributionResult.stats.top10PercentDaysShare * 100).toFixed(0)}%`}
-                            />
-                            {mostCommonDayCount !== null && (
-                              <MeaningCard
-                                title="Most common day"
-                                explanation={`Your most typical day had ${mostCommonDayCount} ${mostCommonDayCount === 1 ? 'entry' : 'entries'}.`}
-                                rhythmNote="This is your baseline rhythm—the daily output level you naturally gravitate toward."
-                                metricChip={`${mostCommonDayCount}`}
-                              />
-                            )}
-                          </div>
-                          <Glossary />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Mirror: what you wrote about */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold mb-6">Mirror: what you wrote about</h2>
-              
-              <div className="grid gap-6 lg:grid-cols-3">
-                {/* Recurring words */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90 mb-3">Recurring words</h3>
-                  {mirrorInsights && mirrorInsights.keywords.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {mirrorInsights.keywords.map((word) => (
-                        <span
-                          key={word}
-                          className="px-2 py-1 rounded-lg bg-white/10 text-white/80 text-xs"
-                        >
-                          {word}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-white/60">Write a few more reflections to see themes appear here.</p>
-                  )}
-                </div>
-
-                {/* Your shift this year - using GrowthStory component */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90 mb-3">Your shift this year</h3>
-                  {mirrorInsights && mirrorInsights.wordShift.rising.length > 0 ? (
-                    <div className="space-y-3">
-                      {mirrorInsights.wordShift.rising.length > 0 && (
-                        <div>
-                          <div className="text-xs text-white/60 mb-1">Rising</div>
-                          <div className="flex flex-wrap gap-2">
-                            {mirrorInsights.wordShift.rising.map(({ word }) => (
-                              <span
-                                key={word}
-                                className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs"
-                              >
-                                {word}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {mirrorInsights.wordShift.fading.length > 0 && (
-                        <div>
-                          <div className="text-xs text-white/60 mb-1">Fading</div>
-                          <div className="flex flex-wrap gap-2">
-                            {mirrorInsights.wordShift.fading.map(({ word }) => (
-                              <span
-                                key={word}
-                                className="px-2 py-1 rounded-lg bg-white/10 text-white/50 text-xs"
-                              >
-                                {word}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-white/60">Not enough data to compare halves.</p>
-                  )}
-                </div>
-
-                {/* Three moments placeholder - will be replaced by component below */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90 mb-3">Three moments</h3>
-                  {mirrorInsights && mirrorInsights.moments.length > 0 ? (
-                    <div className="space-y-3">
-                      {mirrorInsights.moments.slice(0, 3).map((moment) => (
-                        <div key={moment.date} className="rounded-lg border border-white/10 bg-black/30 p-3">
-                          <div className="text-xs text-white/60 mb-1">{formatDate(moment.date)}</div>
-                          <p className="text-xs text-white/80 leading-relaxed">{moment.preview}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-white/60">Not enough entries yet.</p>
-                  )}
-                </div>
-              </div>
+        {/* Yearly Wrap Content - 5 Narrative Beats: Identity → Behavior → Pattern → Memory → Implication */}
+        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && windowDistribution && (
+          <div className="space-y-8">
+            {/* Year in review header context */}
+            <div className="pb-4">
+              <p className="text-sm text-white/60 italic">
+                A reflection of how this year concentrated your attention, effort, and emotion.
+              </p>
             </div>
 
-            {/* Growth Story */}
-            <GrowthStory entries={reflections} />
+            {/* Hidden export card for share */}
+            <div 
+              style={{ 
+                position: 'absolute', 
+                left: '-9999px', 
+                top: 0,
+                visibility: 'hidden',
+              }}
+            >
+              <YearlyWrapShareCard
+                id="yearly-wrap-export-card"
+                mode="export"
+                year={new Date().getFullYear()}
+                classificationLabel={formatClassification(windowDistribution.classification)}
+                totalEntries={distributionResult.totalEntries}
+                activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                spikeRatio={distributionResult.stats.spikeRatio}
+                top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+              />
+            </div>
 
-            {/* Three Moments */}
+            {/* 1️⃣ IDENTITY: Year, Badge (smaller), Sentence (larger) */}
+            <IdentityLine
+              totalEntries={distributionResult.totalEntries}
+              activeDays={computeActiveDays(distributionResult.dailyCounts)}
+              spikeRatio={distributionResult.stats.spikeRatio}
+              top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+              classification={windowDistribution.classification}
+              onSentenceChange={setIdentitySentence}
+            />
+
+            {/* 3️⃣ BEHAVIOR: The shape of your year (moved immediately after Identity) */}
+            {distributionResult.dailyCounts.length > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
+                <p className="text-sm text-white/70 mb-4 italic">This is how your attention actually moved.</p>
+                <YearShapeGlyph
+                  dailyCounts={distributionResult.dailyCounts}
+                  topSpikeDates={getTopSpikeDates(distributionResult, 3)}
+                  mode="page"
+                />
+              </div>
+            )}
+
+            {/* Divider before pattern analysis */}
+            <div className="border-t border-white/10" />
+
+            {/* 2️⃣ PATTERN: Your underlying rhythm (collapsible) */}
+            <UnderlyingRhythmCard
+              distributionResult={distributionResult}
+              windowDistribution={windowDistribution}
+              mostCommonDayCount={mostCommonDayCount}
+              formatClassification={formatClassification}
+            />
+
+            {/* Why this mattered - Emotional hinge */}
+            <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
+              <h3 className="text-lg font-semibold mb-3">Why this mattered</h3>
+              <p className="text-sm sm:text-base text-white/80 leading-relaxed">
+                You didn&apos;t spread your attention thin. You let quiet stretches do their work, then arrived fully when something was ready to move. This rhythm favors depth over noise—and it compounds more than it appears.
+              </p>
+            </div>
+
+            {/* Share Pack Builder - Secondary, collapsible */}
+            <SharePackBuilder
+              year={new Date().getFullYear()}
+              identitySentence={identitySentence || 'My year in reflection.'}
+              archetype={archetype?.name}
+              yearShape={
+                distributionResult.dailyCounts.length > 0
+                  ? {
+                      dailyCounts: distributionResult.dailyCounts,
+                      topSpikeDates: getTopSpikeDates(distributionResult, 3),
+                    }
+                  : undefined
+              }
+              moments={mirrorInsights?.moments.map(m => ({
+                date: m.date,
+                preview: m.preview,
+              }))}
+              numbers={{
+                totalEntries: distributionResult.totalEntries,
+                activeDays: computeActiveDays(distributionResult.dailyCounts),
+                spikeRatio: distributionResult.stats.spikeRatio,
+              }}
+              mirrorInsight={narrativeInsight?.explanation}
+              entries={reflections}
+              distributionResult={distributionResult}
+            />
+
+            {/* 4️⃣ MEMORY: Mirror section (Recurring words + Three moments, word shift hidden by default) */}
+            <MirrorSection
+              mirrorInsights={mirrorInsights}
+              formatDate={formatDate}
+              entries={reflections}
+              topSpikeDates={distributionResult ? getTopSpikeDates(distributionResult, 3) : []}
+            />
+
+            {/* Growth Story - Keep but less prominent */}
+            {reflections.length >= 10 && <GrowthStory entries={reflections} />}
+
+            {/* Three Moments - Keep */}
             <ThreeMoments
               entries={reflections}
               topSpikeDate={topSpikeDate}
               formatDate={formatDate}
             />
 
-            {/* Future facing closing line */}
-            {archetype && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h3 className="text-lg font-semibold mb-3">If you keep this rhythm…</h3>
-                <p className="text-sm text-white/80">
-                  {archetype.name.includes('Deep Diver')
-                    ? 'Your insight compounds in the pauses. Protect the quiet, then return.'
-                    : archetype.name.includes('Steady Builder')
-                    ? 'Consistency is your superpower. Next year becomes a foundation.'
-                    : archetype.name.includes('Sprinter')
-                    ? 'Your bursts move mountains. A simple cadence will make them gentler.'
-                    : 'Your writing rhythm will continue to evolve. Trust the process.'}
-                </p>
-              </div>
-            )}
-
-            {/* Narrative Insight Card */}
+            {/* Narrative Insight Card - Keep */}
             {narrativeInsight && (
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
                 <div className="flex items-start justify-between">
@@ -759,48 +517,7 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Metrics Grid */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold mb-4">Year in Numbers</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Total Entries</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.totalEntries}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Active Days</div>
-                  <div className="text-2xl font-bold text-white">{computeActiveDays(distributionResult.dailyCounts)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
-                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Variance</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Classification</div>
-                  <div className="text-2xl font-bold text-white">
-                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                      windowDistribution?.classification === 'normal' 
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                        : windowDistribution?.classification === 'lognormal'
-                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                        : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                    }`}>
-                      {windowDistribution ? formatClassification(windowDistribution.classification) : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Top 10 Days */}
+            {/* Top 10 Days - Keep but less prominent */}
             {distributionResult.topDays.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h3 className="text-md font-semibold mb-3">Top 10 Days</h3>
@@ -815,49 +532,36 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Distribution Table (365d window) */}
-            {windowDistribution && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Window</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Classification</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Top 3 Spike Dates</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Explanation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-white/5 last:border-0">
-                      <td className="p-4 text-white/90 font-medium">365d</td>
-                      <td className="p-4">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                          windowDistribution.classification === 'normal' 
-                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                            : windowDistribution.classification === 'lognormal'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                        }`}>
-                          {formatClassification(windowDistribution.classification)}
-                        </span>
-                      </td>
-                      <td className="p-4 text-white/70 text-sm">
-                        {windowDistribution.topSpikeDates.length > 0 ? (
-                          <ul className="space-y-1">
-                            {windowDistribution.topSpikeDates.map((date, idx) => (
-                              <li key={idx}>{formatDate(date)}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-white/40">No spikes</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-white/70 text-sm">{windowDistribution.explanation}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            {/* 5️⃣ IMPLICATION: Future rhythm (Last section, emphasized) */}
+            {archetype && (
+              <div className="rounded-2xl border-2 border-white/20 bg-white/10 p-8 sm:p-10">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-4">If you keep this rhythm…</h3>
+                <p className="text-base sm:text-lg text-white/90 leading-relaxed">
+                  {archetype.name.includes('Deep Diver')
+                    ? 'Your insight compounds in the pauses. Protect the quiet, then return.'
+                    : archetype.name.includes('Steady Builder')
+                    ? 'Consistency is your superpower. Next year becomes a foundation.'
+                    : archetype.name.includes('Sprinter')
+                    ? 'Your bursts move mountains. A simple cadence will make them gentler.'
+                    : 'Your writing rhythm will continue to evolve. Trust the process.'}
+                </p>
               </div>
             )}
+
+            {/* Closing Reflection - Final section */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
+              <h3 className="text-lg font-semibold mb-3">A year, observed</h3>
+              <p className="text-sm sm:text-base text-white/75 leading-relaxed">
+                This wasn&apos;t a highlight reel. It was a record of attention, taken as it actually moved. Nothing here was optimized—only noticed.
+              </p>
+            </div>
+
+            {/* Footer note */}
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-xs text-white/40 text-center">
+                Yearly Wrap · Private · Computed Locally
+              </p>
+            </div>
           </div>
         )}
       </section>

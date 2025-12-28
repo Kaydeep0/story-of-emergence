@@ -9,6 +9,7 @@ interface IdentityLineProps {
   top10PercentShare: number;
   classification: 'normal' | 'lognormal' | 'powerlaw';
   onSentenceChange?: (sentence: string) => void;
+  readOnly?: boolean; // Hide shuffle button in share view
 }
 
 export function IdentityLine({
@@ -18,15 +19,16 @@ export function IdentityLine({
   top10PercentShare,
   classification,
   onSentenceChange,
+  readOnly = false,
 }: IdentityLineProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Generate 3 alternative sentences
+  // Generate 3 alternative sentences (tighter, sharper copy)
   const sentences = [
     // Sentence 1: Focus on rhythm pattern
     classification === 'lognormal'
       ? spikeRatio >= 4
-        ? 'You moved in quiet stretches, then showed up in powerful bursts when it mattered.'
+        ? 'You moved quietly, then arrived decisively when it mattered.'
         : 'Steady baseline days, punctuated by deep dives. Your growth happened between sessions.'
       : classification === 'powerlaw'
       ? 'A few days carried everything. Your year was shaped by concentrated surges.'
@@ -61,12 +63,26 @@ export function IdentityLine({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
-      <h3 className="text-lg font-semibold mb-3">Your year, in one sentence</h3>
-      <p className="text-lg text-white/90 mb-4 leading-relaxed min-h-[3rem]">
-        {currentSentence}
-      </p>
-      {sentences.length > 1 && (
+    <div className="rounded-2xl border border-white/10 bg-black/40 p-6 sm:p-8">
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex-1">
+          <div className="text-4xl sm:text-5xl font-bold mb-4">{new Date().getFullYear()}</div>
+          <p className="text-xl sm:text-2xl text-white font-medium leading-relaxed min-h-[3rem]">
+            {currentSentence}
+          </p>
+        </div>
+        {/* Classification badge - smaller, secondary */}
+        <div className={`inline-block px-3 py-1.5 rounded-lg border text-xs font-medium shrink-0 ${
+          classification === 'normal'
+            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+            : classification === 'lognormal'
+            ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+            : 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+        }`}>
+          {classification === 'lognormal' ? 'Log Normal' : classification === 'powerlaw' ? 'Power Law' : 'Normal'}
+        </div>
+      </div>
+      {!readOnly && sentences.length > 1 && (
         <button
           type="button"
           onClick={handleShuffle}
