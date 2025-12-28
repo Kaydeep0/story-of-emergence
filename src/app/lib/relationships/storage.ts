@@ -1,43 +1,88 @@
 // src/app/lib/relationships/storage.ts
-// Stubbed save and load functions for relationship storage
+// Save and load functions for relationship storage
 // These functions accept and return ciphertext only (no decryption)
 
 import type { EncryptedRelationshipPayload } from './types';
 
 /**
- * Save an encrypted relationship payload
- * This is a stub function that accepts ciphertext only
+ * Get storage key for a relationship by reflection ID
+ */
+function getStorageKey(walletAddress: string, reflectionId: string): string {
+  return `relationships_${walletAddress.toLowerCase()}_reflection_${reflectionId}`;
+}
+
+/**
+ * Save an encrypted relationship payload for a reflection
+ * This function accepts ciphertext only and stores it without decrypting
  * @param walletAddress - Wallet address of the user
  * @param payload - Encrypted relationship payload
+ * @param reflectionId - Optional reflection ID to associate with this relationship
  * @returns Promise resolving to the saved relationship ID
  */
 export async function saveRelationshipPayload(
   walletAddress: string,
-  payload: EncryptedRelationshipPayload
+  payload: EncryptedRelationshipPayload,
+  reflectionId?: string
 ): Promise<{ id: string }> {
-  // Stub implementation - returns a placeholder ID
-  // In a real implementation, this would persist the ciphertext to storage
-  // without decrypting it
-  return {
-    id: `relationship_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-  };
+  if (typeof window === 'undefined') {
+    // Server-side: return placeholder ID
+    return {
+      id: `relationship_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    };
+  }
+
+  // If reflectionId is provided, use it; otherwise generate a new ID
+  const relationshipId = reflectionId
+    ? `reflection_${reflectionId}`
+    : `relationship_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+  const storageKey = getStorageKey(walletAddress, reflectionId || relationshipId);
+
+  try {
+    // Store ciphertext only (no decryption)
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+    return { id: relationshipId };
+  } catch (err) {
+    console.error('Failed to save relationship payload', err);
+    // Fallback: return placeholder ID
+    return {
+      id: `relationship_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    };
+  }
 }
 
 /**
- * Load an encrypted relationship payload by ID
- * This is a stub function that returns ciphertext only
+ * Load an encrypted relationship payload by reflection ID
+ * This function returns ciphertext only without decrypting
  * @param walletAddress - Wallet address of the user
- * @param relationshipId - ID of the relationship to load
+ * @param relationshipId - ID of the relationship to load (can be reflection ID or relationship ID)
  * @returns Promise resolving to the encrypted relationship payload
  */
 export async function loadRelationshipPayload(
   walletAddress: string,
   relationshipId: string
 ): Promise<EncryptedRelationshipPayload | null> {
-  // Stub implementation - returns null (not found)
-  // In a real implementation, this would fetch the ciphertext from storage
-  // without decrypting it
-  return null;
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // Try both reflection ID format and direct relationship ID format
+  const reflectionId = relationshipId.startsWith('reflection_')
+    ? relationshipId.replace('reflection_', '')
+    : relationshipId;
+
+  const storageKey = getStorageKey(walletAddress, reflectionId);
+
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return null;
+
+    const payload = JSON.parse(stored) as EncryptedRelationshipPayload;
+    return payload;
+  } catch (err) {
+    console.error('Failed to load relationship payload', err);
+    return null;
+  }
 }
 
 /**
