@@ -40,7 +40,7 @@ import { listExternalEntries } from "./lib/useSources";
 
 // react + ui
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from "sonner";
 import { useAccount, useBalance, useSignMessage, useSwitchChain, useChainId } from 'wagmi';
 import { baseSepolia } from 'viem/chains';
@@ -69,6 +69,7 @@ export default function HomeClient() {
   const { address, isConnected } = useAccount();
   const signLockRef = useRef(false);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const focusId = searchParams.get('focus');
 
   const chainId = useChainId();
@@ -265,6 +266,8 @@ const [loadingMore, setLoadingMore] = useState(false);
 
 // Focus tracking ref to prevent duplicate scrolls
 const lastFocusedIdRef = useRef<string | null>(null);
+const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+const retryCountRef = useRef<number>(0);
 
 
 
@@ -279,17 +282,33 @@ useEffect(() => {
 
 // Handle focus param: scroll to reflection and highlight it
 useEffect(() => {
-  if (!focusId || !mounted) return;
+  // Cleanup any pending retries
+  if (retryTimeoutRef.current) {
+    clearTimeout(retryTimeoutRef.current);
+    retryTimeoutRef.current = null;
+  }
+
+  if (!focusId || !mounted) {
+    // Clear ref when no focus param (allows re-triggering when focus param is set again)
+    lastFocusedIdRef.current = null;
+    return;
+  }
   
-  // Only run if focusId has changed from what we last processed
+  // Only attempt if focusId has changed from what we last processed
+  // This prevents duplicate scrolls within the same render cycle, but allows
+  // re-triggering when the same focusId is set again after being cleared
   if (lastFocusedIdRef.current === focusId) return;
   
-  // Wait for items to be loaded and rendered
-  if (visibleItems.length === 0 && !loadingList) return;
+  // Reset retry count for new focusId
+  retryCountRef.current = 0;
   
-  // Small delay to ensure DOM is ready
-  const timeoutId = setTimeout(() => {
+  // Retry logic: try to find element up to 10 times with 100ms delay
+  const maxRetries = 10;
+  const retryDelay = 100;
+  
+  const attemptScroll = () => {
     const element = document.querySelector(`[data-entry-id="${focusId}"]`) as HTMLElement;
+    
     if (element) {
       // Scroll to element
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -302,13 +321,48 @@ useEffect(() => {
         element.removeAttribute('data-focus');
       }, 2500);
       
-      // Update ref to prevent duplicate scrolls for the same focusId
+      // Update ref to prevent duplicate scrolls within same render cycle
       lastFocusedIdRef.current = focusId;
+      
+      // Clear focus param after successful scroll (allow re-triggering on next navigation)
+      // Use replace to avoid adding to history
+      const currentPath = window.location.pathname;
+      router.replace(currentPath);
+      
+      // Note: We don't clear lastFocusedIdRef here. Instead, when the focus param
+      // is cleared (router.replace), the effect will re-run with focusId = null,
+      // and the early return will clear lastFocusedIdRef.current = null.
+      // This allows the same focusId to trigger again on the next click.
+      
+      // Reset retry count
+      retryCountRef.current = 0;
+      
+      // Clear any pending retries
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    } else if (retryCountRef.current < maxRetries) {
+      // Element not found, retry after delay
+      retryCountRef.current++;
+      retryTimeoutRef.current = setTimeout(attemptScroll, retryDelay);
+    } else {
+      // Max retries reached, reset counter
+      retryCountRef.current = 0;
     }
-  }, 100);
+    // If max retries reached and element still not found, silently fail (no-op)
+  };
   
-  return () => clearTimeout(timeoutId);
-}, [focusId, mounted, visibleItems.length]);
+  // Small initial delay to ensure DOM is ready
+  retryTimeoutRef.current = setTimeout(attemptScroll, 100);
+  
+  return () => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  };
+}, [focusId, mounted, visibleItems.length, router, searchParams]);
 
 
 
@@ -1114,6 +1168,12 @@ async function createShare() {
         walletAddress={address ?? ''}
         sessionKey={sessionKey ?? null}
         encryptionReady={encryptionReady}
+        reflections={items.filter((item) => !item.deleted_at).map((item) => ({
+          id: item.id,
+          ts: item.ts,
+          note: item.note,
+          deleted_at: item.deleted_at,
+        }))}
       />
         </div>
       ))}
