@@ -1,6 +1,17 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+/**
+ * Yearly Wrap v1 - Locked
+ * 
+ * This page provides a complete, stable view of a user's reflection patterns over the past year.
+ * 
+ * Scope: Single year analysis (365 days) using decrypted reflection entries.
+ * Data source: Yearly Wrap only - no fallbacks, no lifetime data, no external sources.
+ * 
+ * Locked as v1: No new features, no expansion. This is a finished artifact.
+ */
+
+import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../../lib/useLogEvent';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
@@ -13,7 +24,18 @@ import { useHighlights } from '../../lib/insights/useHighlights';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
 import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
-import { exportPng } from '../../lib/share/exportPng';
+import { extractKeywords, computeWordShift, getMoments, MeaningCard, Glossary } from './components/YearlyMeaning';
+import { IdentityLine } from '../../components/yearly/IdentityLine';
+import { YearShapeGlyph } from '../../components/yearly/YearShapeGlyph';
+import { GrowthStory } from '../../components/yearly/GrowthStory';
+import { ThreeMoments } from '../../components/yearly/ThreeMoments';
+import { determineArchetype } from '../../lib/yearlyArchetype';
+import { SharePackBuilder } from './components/SharePackBuilder';
+import { UnderlyingRhythmCard } from './components/UnderlyingRhythmCard';
+import { MirrorSection } from './components/MirrorSection';
+
+// Yearly Wrap v1 - Locked
+const YEARLY_WRAP_VERSION = 'v1' as const;
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -28,10 +50,9 @@ export default function YearlyWrapPage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [windowDistribution, setWindowDistribution] = useState<WindowDistribution | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [lastGeneratedAt, setLastGeneratedAt] = useState<Date | null>(null);
-  
-  const shareCardRef = useRef<HTMLDivElement>(null);
+  const [identitySentence, setIdentitySentence] = useState<string>('');
+  const [includeNumbers, setIncludeNumbers] = useState(false);
+  const [privateMode, setPrivateMode] = useState(true);
 
   const connected = isConnected && !!address;
 
@@ -171,46 +192,60 @@ export default function YearlyWrapPage() {
     };
   }, [distributionResult, windowDistribution]);
 
-  // Handle downloading PNG
-  const handleDownloadPng = async () => {
-    if (!shareCardRef.current) {
-      toast.error('Share card not ready');
-      return;
+  // Compute Mirror insights (keywords, word shift, moments)
+  const mirrorInsights = useMemo(() => {
+    if (reflections.length === 0 || !distributionResult) {
+      return null;
     }
 
-    try {
-      setIsGenerating(true);
-      await exportPng(shareCardRef.current);
-      setLastGeneratedAt(new Date());
-      toast.success('Share card downloaded');
-    } catch (err: any) {
-      console.error('Failed to export PNG:', err);
-      toast.error(err?.message ?? 'Failed to export PNG');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+    const keywords = extractKeywords(reflections, 14);
+    const wordShift = computeWordShift(reflections);
+    const topSpikeDates = getTopSpikeDates(distributionResult, 3);
+    const moments = getMoments(reflections, topSpikeDates);
 
-  // Handle copying caption
-  const handleCopyCaption = async () => {
-    if (!distributionResult || !windowDistribution) {
-      toast.error('No data available');
-      return;
+    return {
+      keywords,
+      wordShift,
+      moments,
+    };
+  }, [reflections, distributionResult]);
+
+  // Compute most common day count - FIX CRASH: compute before any use
+  const mostCommonDayCount = useMemo(() => {
+    if (!distributionResult || !distributionResult.dailyCounts || distributionResult.dailyCounts.length === 0) {
+      return null;
     }
 
-    const activeDays = computeActiveDays(distributionResult.dailyCounts);
-    const classificationLabel = formatClassification(windowDistribution.classification);
-    
-    const caption = `My year followed a ${classificationLabel.toLowerCase()} pattern. ${distributionResult.totalEntries} entries across ${activeDays} active days. Computed locally in Story of Emergence.`;
+    const counts = distributionResult.dailyCounts.filter(c => c > 0);
+    if (counts.length === 0) return null;
 
-    try {
-      await navigator.clipboard.writeText(caption);
-      toast.success('Caption copied to clipboard');
-    } catch (err: any) {
-      console.error('Failed to copy caption:', err);
-      toast.error('Failed to copy caption');
-    }
-  };
+    const frequency = new Map<number, number>();
+    counts.forEach(count => {
+      frequency.set(count, (frequency.get(count) || 0) + 1);
+    });
+
+    const sorted = Array.from(frequency.entries()).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? sorted[0][0] : null;
+  }, [distributionResult]);
+
+  // Compute archetype
+  const archetype = useMemo(() => {
+    if (!distributionResult || !windowDistribution) return null;
+    return determineArchetype({
+      classification: windowDistribution.classification,
+      spikeRatio: distributionResult.stats.spikeRatio,
+      top10Share: distributionResult.stats.top10PercentDaysShare,
+      activeDays: computeActiveDays(distributionResult.dailyCounts),
+      variance: distributionResult.stats.variance,
+    });
+  }, [distributionResult, windowDistribution]);
+
+  // Get top spike date
+  const topSpikeDate = useMemo(() => {
+    if (!distributionResult || distributionResult.topDays.length === 0) return undefined;
+    return distributionResult.topDays[0]?.date;
+  }, [distributionResult]);
+
 
   // Handle saving highlight
   const handleSaveHighlight = async () => {
@@ -253,7 +288,7 @@ export default function YearlyWrapPage() {
           activeDays,
           topDays: distributionResult.topDays.slice(0, 10),
           spikeDates: topSpikeDates,
-          mostCommonDayCount: distributionResult.stats.mostCommonDayCount,
+          mostCommonDayCount: mostCommonDayCount ?? 0,
           variance: distributionResult.stats.variance,
           spikeRatio: distributionResult.stats.spikeRatio,
           top10PercentDaysShare: distributionResult.stats.top10PercentDaysShare,
@@ -328,68 +363,125 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Yearly Wrap Content */}
-        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
-          <div className="space-y-6">
-            {/* Share this year section */}
-            {windowDistribution && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
-                <h2 className="text-lg font-semibold">Share this year</h2>
-                
-                {/* Hidden full-size card for export */}
-                <div 
-                  ref={shareCardRef}
-                  style={{ position: 'absolute', left: '-9999px', top: 0 }}
-                >
-                  <YearlyWrapShareCard
-                    year={new Date().getFullYear()}
-                    classificationLabel={formatClassification(windowDistribution.classification)}
-                    totalEntries={distributionResult.totalEntries}
-                    activeDays={computeActiveDays(distributionResult.dailyCounts)}
-                    spikeRatio={distributionResult.stats.spikeRatio}
-                    top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                  />
-                </div>
+        {/* Yearly Wrap Content - 5 Narrative Beats: Identity → Behavior → Pattern → Memory → Implication */}
+        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && windowDistribution && (
+          <div className="space-y-8">
+            {/* Year in review header context */}
+            <div className="pb-4">
+              <p className="text-sm text-white/60 italic">
+                A reflection of how this year concentrated your attention, effort, and emotion.
+              </p>
+            </div>
 
-                {/* Preview - scaled down */}
-                <div className="flex justify-center overflow-hidden">
-                  <div 
-                    className="scale-[0.3] origin-top"
-                    style={{ transform: 'scale(0.3)', transformOrigin: 'top center' }}
-                  >
-                    <YearlyWrapShareCard
-                      year={new Date().getFullYear()}
-                      classificationLabel={formatClassification(windowDistribution.classification)}
-                      totalEntries={distributionResult.totalEntries}
-                      activeDays={computeActiveDays(distributionResult.dailyCounts)}
-                      spikeRatio={distributionResult.stats.spikeRatio}
-                      top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-                    />
-                  </div>
-                </div>
+            {/* Hidden export card for share */}
+            <div 
+              style={{ 
+                position: 'absolute', 
+                left: '-9999px', 
+                top: 0,
+                visibility: 'hidden',
+              }}
+            >
+              <YearlyWrapShareCard
+                id="yearly-wrap-export-card"
+                mode="export"
+                year={new Date().getFullYear()}
+                classificationLabel={formatClassification(windowDistribution.classification)}
+                totalEntries={distributionResult.totalEntries}
+                activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                spikeRatio={distributionResult.stats.spikeRatio}
+                top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+              />
+            </div>
 
-                {/* Buttons */}
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={handleDownloadPng}
-                    disabled={isGenerating}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGenerating ? 'Generating...' : 'Download PNG'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyCaption}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors"
-                  >
-                    Copy Caption
-                  </button>
-                </div>
+            {/* 1️⃣ IDENTITY: Year, Badge (smaller), Sentence (larger) */}
+            <IdentityLine
+              totalEntries={distributionResult.totalEntries}
+              activeDays={computeActiveDays(distributionResult.dailyCounts)}
+              spikeRatio={distributionResult.stats.spikeRatio}
+              top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+              classification={windowDistribution.classification}
+              onSentenceChange={setIdentitySentence}
+            />
+
+            {/* 3️⃣ BEHAVIOR: The shape of your year (moved immediately after Identity) */}
+            {distributionResult.dailyCounts.length > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
+                <p className="text-sm text-white/70 mb-4 italic">This is how your attention actually moved.</p>
+                <YearShapeGlyph
+                  dailyCounts={distributionResult.dailyCounts}
+                  topSpikeDates={getTopSpikeDates(distributionResult, 3)}
+                  mode="page"
+                />
               </div>
             )}
 
-            {/* Narrative Insight Card */}
+            {/* Divider before pattern analysis */}
+            <div className="border-t border-white/10" />
+
+            {/* 2️⃣ PATTERN: Your underlying rhythm (collapsible) */}
+            <UnderlyingRhythmCard
+              distributionResult={distributionResult}
+              windowDistribution={windowDistribution}
+              mostCommonDayCount={mostCommonDayCount}
+              formatClassification={formatClassification}
+            />
+
+            {/* Why this mattered - Emotional hinge */}
+            <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
+              <h3 className="text-lg font-semibold mb-3">Why this mattered</h3>
+              <p className="text-sm sm:text-base text-white/80 leading-relaxed">
+                You didn&apos;t spread your attention thin. You let quiet stretches do their work, then arrived fully when something was ready to move. This rhythm favors depth over noise—and it compounds more than it appears.
+              </p>
+            </div>
+
+            {/* Share Pack Builder - Secondary, collapsible */}
+            <SharePackBuilder
+              year={new Date().getFullYear()}
+              identitySentence={identitySentence || 'My year in reflection.'}
+              archetype={archetype?.name}
+              yearShape={
+                distributionResult.dailyCounts.length > 0
+                  ? {
+                      dailyCounts: distributionResult.dailyCounts,
+                      topSpikeDates: getTopSpikeDates(distributionResult, 3),
+                    }
+                  : undefined
+              }
+              moments={mirrorInsights?.moments.map(m => ({
+                date: m.date,
+                preview: m.preview,
+              }))}
+              numbers={{
+                totalEntries: distributionResult.totalEntries,
+                activeDays: computeActiveDays(distributionResult.dailyCounts),
+                spikeRatio: distributionResult.stats.spikeRatio,
+              }}
+              mirrorInsight={narrativeInsight?.explanation}
+              entries={reflections}
+              distributionResult={distributionResult}
+              windowDistribution={windowDistribution}
+            />
+
+            {/* 4️⃣ MEMORY: Mirror section (Recurring words + Three moments, word shift hidden by default) */}
+            <MirrorSection
+              mirrorInsights={mirrorInsights}
+              formatDate={formatDate}
+              entries={reflections}
+              topSpikeDates={distributionResult ? getTopSpikeDates(distributionResult, 3) : []}
+            />
+
+            {/* Growth Story - Keep but less prominent */}
+            {reflections.length >= 10 && <GrowthStory entries={reflections} />}
+
+            {/* Three Moments - Keep */}
+            <ThreeMoments
+              entries={reflections}
+              topSpikeDate={topSpikeDate}
+              formatDate={formatDate}
+            />
+
+            {/* Narrative Insight Card - Keep */}
             {narrativeInsight && (
               <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
                 <div className="flex items-start justify-between">
@@ -426,48 +518,7 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Metrics Grid */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold mb-4">Year in Numbers</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Total Entries</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.totalEntries}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Active Days</div>
-                  <div className="text-2xl font-bold text-white">{computeActiveDays(distributionResult.dailyCounts)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
-                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Variance</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Classification</div>
-                  <div className="text-2xl font-bold text-white">
-                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                      windowDistribution?.classification === 'normal' 
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                        : windowDistribution?.classification === 'lognormal'
-                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                        : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                    }`}>
-                      {windowDistribution ? formatClassification(windowDistribution.classification) : 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Top 10 Days */}
+            {/* Top 10 Days - Keep but less prominent */}
             {distributionResult.topDays.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <h3 className="text-md font-semibold mb-3">Top 10 Days</h3>
@@ -482,49 +533,36 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Distribution Table (365d window) */}
-            {windowDistribution && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Window</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Classification</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Top 3 Spike Dates</th>
-                      <th className="text-left p-4 text-sm font-semibold text-white/80">Explanation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-white/5 last:border-0">
-                      <td className="p-4 text-white/90 font-medium">365d</td>
-                      <td className="p-4">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                          windowDistribution.classification === 'normal' 
-                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                            : windowDistribution.classification === 'lognormal'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                        }`}>
-                          {formatClassification(windowDistribution.classification)}
-                        </span>
-                      </td>
-                      <td className="p-4 text-white/70 text-sm">
-                        {windowDistribution.topSpikeDates.length > 0 ? (
-                          <ul className="space-y-1">
-                            {windowDistribution.topSpikeDates.map((date, idx) => (
-                              <li key={idx}>{formatDate(date)}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-white/40">No spikes</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-white/70 text-sm">{windowDistribution.explanation}</td>
-                    </tr>
-                  </tbody>
-                </table>
+            {/* 5️⃣ IMPLICATION: Future rhythm (Last section, emphasized) */}
+            {archetype && (
+              <div className="rounded-2xl border-2 border-white/20 bg-white/10 p-8 sm:p-10">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-4">If you keep this rhythm…</h3>
+                <p className="text-base sm:text-lg text-white/90 leading-relaxed">
+                  {archetype.name.includes('Deep Diver')
+                    ? 'Your insight compounds in the pauses. Protect the quiet, then return.'
+                    : archetype.name.includes('Steady Builder')
+                    ? 'Consistency is your superpower. Next year becomes a foundation.'
+                    : archetype.name.includes('Sprinter')
+                    ? 'Your bursts move mountains. A simple cadence will make them gentler.'
+                    : 'Your writing rhythm will continue to evolve. Trust the process.'}
+                </p>
               </div>
             )}
+
+            {/* Closing Reflection - Final section */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
+              <h3 className="text-lg font-semibold mb-3">A year, observed</h3>
+              <p className="text-sm sm:text-base text-white/75 leading-relaxed">
+                This wasn&apos;t a highlight reel. It was a record of attention, taken as it actually moved. Nothing here was optimized—only noticed.
+              </p>
+            </div>
+
+            {/* Footer note */}
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-xs text-white/40 text-center">
+                Yearly Wrap · Private · Computed Locally
+              </p>
+            </div>
           </div>
         )}
       </section>
