@@ -445,6 +445,15 @@ export function ReflectionLinks({
       await saveRelationshipPayload(walletAddress, payload, reflectionId);
 
       toast.success('Link removed');
+
+      // Rescan backlinks after removal to reflect updated state
+      // This ensures that if we removed a link from A to B, B's backlinks will update
+      if (backlinksEnabled) {
+        // Small delay to ensure the save has completed
+        setTimeout(() => {
+          loadBacklinks();
+        }, 100);
+      }
     } catch (err: unknown) {
       console.error('Failed to remove link', err);
       toast.error('Failed to remove link');
