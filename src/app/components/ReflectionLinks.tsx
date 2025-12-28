@@ -25,7 +25,9 @@ import {
 import { useRouter } from 'next/navigation';
 
 // Feature flag: disable Backlinks scanning until ready
-const ENABLE_BACKLINKS = false;
+// Controlled via NEXT_PUBLIC_ENABLE_BACKLINKS environment variable
+// Defaults to false (disabled) if env var is missing or not "true"
+const ENABLE_BACKLINKS = process.env.NEXT_PUBLIC_ENABLE_BACKLINKS === "true";
 
 type LinkType = 'tag' | 'reflection' | 'source';
 
