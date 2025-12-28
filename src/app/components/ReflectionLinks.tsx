@@ -50,6 +50,7 @@ export function ReflectionLinks({
   const router = useRouter();
   const [graph, setGraph] = useState<RelationshipGraph>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [linkType, setLinkType] = useState<LinkType>('tag');
   const [linkReference, setLinkReference] = useState('');
@@ -221,6 +222,7 @@ export function ReflectionLinks({
     }
 
     try {
+      setSaving(true);
       // Create or find target node
       let targetNode: AnyRelationshipNode;
       let targetNodeId: string;
@@ -335,6 +337,8 @@ export function ReflectionLinks({
     } catch (err: unknown) {
       console.error('Failed to add link', err);
       toast.error('Failed to add link');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -576,9 +580,11 @@ export function ReflectionLinks({
                   <button
                     key={backlink.reflectionId}
                     onClick={() => {
+                      // Navigate to reflection with focus query param
+                      // HomeClient will handle scrolling to the reflection if already loaded
                       router.push(`/?focus=${encodeURIComponent(backlink.reflectionId)}`);
                     }}
-                    className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/40 transition-colors"
+                    className="inline-flex items-center rounded-full bg-amber-500/20 border border-amber-500/30 px-2 py-1 text-xs text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/40 transition-colors cursor-pointer"
                     title={`View reflection ${backlink.reflectionId}`}
                   >
                     <span>Reflection {formatShortReflectionId(backlink.reflectionId)}</span>
