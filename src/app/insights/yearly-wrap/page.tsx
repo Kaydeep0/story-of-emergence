@@ -29,7 +29,7 @@ import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
-import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId } from '../../lib/clusters/conceptualClusters';
+import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase } from '../../lib/clusters/conceptualClusters';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -373,11 +373,17 @@ export default function YearlyWrapPage() {
                         {associations.map((assoc) => {
                           const associatedClusterId = getAssociatedClusterId(assoc, cluster.id);
                           const associatedCluster = conceptualClusters.find(c => c.id === associatedClusterId);
-                          return associatedCluster ? (
+                          if (!associatedCluster) return null;
+                          
+                          // Calculate distance for this association
+                          const distance = calculateClusterDistance(cluster, associatedCluster);
+                          const distancePhrase = getDistancePhrase(distance);
+                          
+                          return (
                             <li key={assoc.fromClusterId + assoc.toClusterId} className="text-gray-600">
-                              – {associatedCluster.label}
+                              – {associatedCluster.label} <span className="text-gray-500">({distancePhrase})</span>
                             </li>
-                          ) : null;
+                          );
                         })}
                       </ul>
                     </div>

@@ -335,3 +335,73 @@ export function getAssociatedClusterId(
     : association.fromClusterId;
 }
 
+/**
+ * Calculate conceptual distance between two clusters
+ * Distance is inverse of shared periods: more shared periods = closer distance
+ * Values remain internal only, not shown to user
+ * Distance is NOT a score, rank, weight, or value judgment
+ */
+export function calculateClusterDistance(
+  clusterA: ConceptualCluster,
+  clusterB: ConceptualCluster
+): number {
+  const periodsA = new Set(clusterA.sourcePeriods);
+  const periodsB = new Set(clusterB.sourcePeriods);
+  
+  // Count shared periods
+  const sharedPeriods = Array.from(periodsA).filter(p => periodsB.has(p)).length;
+  
+  // Total unique periods across both clusters
+  const totalPeriods = new Set([...periodsA, ...periodsB]).size;
+  
+  // Distance is inverse of shared period ratio
+  // More shared periods = closer distance (lower value)
+  // If no shared periods, distance is maximum (1.0)
+  if (sharedPeriods === 0) {
+    return 1.0;
+  }
+  
+  // Distance = 1 - (sharedPeriods / totalPeriods)
+  // This gives us a value between 0 (very close) and 1 (very far)
+  const sharedRatio = sharedPeriods / totalPeriods;
+  return 1.0 - sharedRatio;
+}
+
+/**
+ * Map distance into language buckets
+ * Deterministic mapping, no numbers exposed
+ */
+export type DistanceLabel = 'usually' | 'sometimes' | 'rarely';
+
+export function getDistanceLabel(distance: number): DistanceLabel {
+  // Distance ranges:
+  // 0.0 - 0.33: "usually nearby" (close)
+  // 0.34 - 0.66: "sometimes nearby" (moderate)
+  // 0.67 - 1.0: "rarely nearby" (far)
+  
+  if (distance <= 0.33) {
+    return 'usually';
+  } else if (distance <= 0.66) {
+    return 'sometimes';
+  } else {
+    return 'rarely';
+  }
+}
+
+/**
+ * Get distance phrase for display
+ * Exposes distance ONLY using specific phrasing
+ */
+export function getDistancePhrase(distance: number): string {
+  const label = getDistanceLabel(distance);
+  
+  switch (label) {
+    case 'usually':
+      return 'usually nearby';
+    case 'sometimes':
+      return 'sometimes nearby';
+    case 'rarely':
+      return 'rarely nearby';
+  }
+}
+
