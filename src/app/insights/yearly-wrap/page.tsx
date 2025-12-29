@@ -50,6 +50,8 @@ import { mapToViewModel, type FinalizedInferenceOutputs } from '../../representa
 import { witnessTemporalPatterns } from '../../lib/temporal';
 import { TemporalWitnessView } from '../../components/temporal/TemporalWitnessView';
 import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } from '../../lib/decay';
+import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
+import { hasReinforcingNovelty } from '../../lib/novelty';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1000,10 +1002,139 @@ export default function YearlyWrapPage() {
     return state;
   }, [reflections, sessionStart]);
 
-  // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, and entropic decay gating
+  // Emergence saturation ceiling - enforce hard cap on concurrent meaning
+  // Prevents runaway emergence, over-interpretation, or conceptual inflation
+  // Deterministic: same reflections → same saturation outcome
+  const saturationState = useMemo(() => {
+    if (shouldSuppressMeaning(entropicDecayState)) {
+      // If decay has collapsed meaning, saturation is irrelevant
+      return {
+        activeNodes: [],
+        saturated: false,
+        displacedNodes: [],
+      };
+    }
+
+    // Collect all candidate meaning nodes
+    const candidateNodes: MeaningNode[] = [];
+
+    // Add narrative fragment if present
+    if (regimeNarrative) {
+      // Compute novelty for narrative (based on most recent reflection)
+      const mostRecentReflection = reflections.length > 0
+        ? reflections[reflections.length - 1]
+        : null;
+      const priorReflections = reflections.slice(0, -1);
+      const novelty = mostRecentReflection && priorReflections.length > 0
+        ? hasReinforcingNovelty([mostRecentReflection], priorReflections) ? 0.7 : 0.3
+        : 1.0; // First reflection = full novelty
+
+      candidateNodes.push({
+        id: regimeNarrative.id,
+        type: 'narrative',
+        strength: entropicDecayState.decayFactor, // Decay-adjusted strength
+        novelty,
+        persistence: 0.5, // Default persistence (can be refined)
+        createdAt: reflections.length > 0
+          ? reflections[reflections.length - 1].createdAt
+          : new Date().toISOString(),
+        priority: 0, // Will be computed
+      });
+    }
+
+    // Add continuations
+    continuations.forEach(continuation => {
+      const mostRecentReflection = reflections.length > 0
+        ? reflections[reflections.length - 1]
+        : null;
+      const priorReflections = reflections.slice(0, -1);
+      const novelty = mostRecentReflection && priorReflections.length > 0
+        ? hasReinforcingNovelty([mostRecentReflection], priorReflections) ? 0.7 : 0.3
+        : 1.0;
+
+      candidateNodes.push({
+        id: continuation.id,
+        type: 'continuation',
+        strength: entropicDecayState.decayFactor * 0.8, // Continuations slightly weaker than narrative
+        novelty,
+        persistence: 0.3, // Lower persistence for continuations
+        createdAt: reflections.length > 0
+          ? reflections[reflections.length - 1].createdAt
+          : new Date().toISOString(),
+        priority: 0, // Will be computed
+      });
+    });
+
+    // Add conceptual clusters (as meaning nodes)
+    conceptualClusters.forEach(cluster => {
+      candidateNodes.push({
+        id: cluster.id,
+        type: 'cluster',
+        strength: entropicDecayState.decayFactor * 0.6, // Clusters weaker than narrative/continuations
+        novelty: cluster.sourcePeriods.length > 1 ? 0.2 : 0.8, // Recurring = lower novelty
+        persistence: Math.min(1, cluster.sourcePeriods.length / 3), // Persistence based on period count
+        createdAt: cluster.sourcePeriods.length > 0
+          ? `${cluster.sourcePeriods[0]}-01-01T00:00:00Z` // Approximate from first period
+          : new Date().toISOString(),
+        priority: 0, // Will be computed
+      });
+    });
+
+    // Add observer position if present
+    if (observerPosition) {
+      candidateNodes.push({
+        id: `position-${observerPosition.phrase.slice(0, 20)}`,
+        type: 'position',
+        strength: entropicDecayState.decayFactor * 0.5, // Position weaker than narrative
+        novelty: 0.4, // Position has moderate novelty
+        persistence: 0.4,
+        createdAt: reflections.length > 0
+          ? reflections[reflections.length - 1].createdAt
+          : new Date().toISOString(),
+        priority: 0, // Will be computed
+      });
+    }
+
+    // Add positional drift if present
+    if (positionalDrift) {
+      candidateNodes.push({
+        id: `drift-${positionalDrift.phrase.slice(0, 20)}`,
+        type: 'drift',
+        strength: entropicDecayState.decayFactor * 0.4, // Drift weakest
+        novelty: 0.5, // Drift has moderate novelty
+        persistence: 0.2, // Drift has low persistence
+        createdAt: reflections.length > 0
+          ? reflections[reflections.length - 1].createdAt
+          : new Date().toISOString(),
+        priority: 0, // Will be computed
+      });
+    }
+
+    // Compute saturation ceiling
+    return computeSaturationCeiling({
+      candidateNodes,
+      maxConcurrentMeaning: 8, // Hard ceiling: max 8 concurrent meaning nodes
+      currentTime: new Date().toISOString(),
+    });
+  }, [
+    entropicDecayState,
+    regimeNarrative,
+    continuations,
+    conceptualClusters,
+    observerPosition,
+    positionalDrift,
+    reflections,
+  ]);
+
+  // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
   // When epistemicallyClosed is true: all narrative generation paths disabled
   const effectiveRegimeNarrative = useMemo(() => {
+    // Saturation gate: suppress if displaced by saturation ceiling
+    if (regimeNarrative && shouldSuppressDueToSaturation(regimeNarrative.id, saturationState)) {
+      return null;
+    }
+
     // Epistemic boundary gate: when closed, all narrative generation paths are disabled
     if (epistemicBoundarySeal.epistemicallyClosed) {
       return null;
@@ -1092,13 +1223,18 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, regimeNarrative]);
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, saturationState, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
     // Entropic decay gate: suppress meaning when decay threshold crossed
     if (shouldSuppressMeaning(entropicDecayState)) {
       return [];
     }
+
+    // Saturation gate: filter out continuations displaced by saturation ceiling
+    const filteredContinuations = continuations.filter(continuation =>
+      !shouldSuppressDueToSaturation(continuation.id, saturationState)
+    );
 
     // Epistemic boundary gate: when closed, multiplicity is capped at 0 or 1
     // Only minimal factual summaries allowed
@@ -1124,7 +1260,7 @@ export default function YearlyWrapPage() {
           feedbackMode === 'OBSERVER_DOMINANT' &&
           interpretiveLoad !== 'minimal') {
         // Allow limited continuations under extreme evidence (max 1)
-        return continuations.slice(0, 1);
+        return filteredContinuations.slice(0, 1);
       } else {
         // Suppress continuations (not extreme enough)
         return [];
@@ -1133,18 +1269,18 @@ export default function YearlyWrapPage() {
     
     // Load gate: minimal load allows silence or single weak interpretation
     if (interpretiveLoad === 'minimal') {
-      return continuations.slice(0, 1);
+      return filteredContinuations.slice(0, 1);
     }
     
     // Load gate: constrained load allows limited multiplicity (max 2)
     if (interpretiveLoad === 'constrained') {
-      return continuations.slice(0, 2);
+      return filteredContinuations.slice(0, 2);
     }
     
     // Load gate: saturated load allows compression only (no new interpretations)
     // Limit to 1 continuation for saturated
     if (interpretiveLoad === 'saturated') {
-      return continuations.slice(0, 1);
+      return filteredContinuations.slice(0, 1);
     }
     
     // Collapse rule: suppress all continuations when emergence has collapsed
@@ -1157,45 +1293,45 @@ export default function YearlyWrapPage() {
       // Persistent emergence: allow full multiplicity based on emergence signal strength
       // But respect load limits (max 2 from constrained load)
       if (emergenceSignal === 'strong') {
-        return continuations.slice(0, 2); // Respect load limit
+        return filteredContinuations.slice(0, 2); // Respect load limit
       } else if (emergenceSignal === 'weak') {
-        return continuations.slice(0, 2);
+        return filteredContinuations.slice(0, 2);
       }
-      return continuations.slice(0, 1);
+      return filteredContinuations.slice(0, 1);
     }
     
     // Transient emergence: allow brief multiplicity then silence
     if (emergencePersistence === 'transient') {
-      return continuations.slice(0, 1); // Limit to 1 for transient
+      return filteredContinuations.slice(0, 1); // Limit to 1 for transient
     }
     
     // No persistence: suppress multiplicity
     if (emergencePersistence === 'none') {
-      return continuations.slice(0, 1); // Suppress multiplicity
+      return filteredContinuations.slice(0, 1); // Suppress multiplicity
     }
     
     // Fallback to emergence signal gating (but respect load limits)
     if (emergenceSignal === 'none') {
-      return continuations.slice(0, 1);
+      return filteredContinuations.slice(0, 1);
     } else if (emergenceSignal === 'weak') {
-      return continuations.slice(0, 2);
+      return filteredContinuations.slice(0, 2);
     } else if (emergenceSignal === 'strong') {
-      return continuations.slice(0, 2); // Respect load limit (max 2)
+      return filteredContinuations.slice(0, 2); // Respect load limit (max 2)
     }
     
     // ENVIRONMENT_DOMINANT: allow fewer continuations (limit to 1)
     if (feedbackMode === 'ENVIRONMENT_DOMINANT') {
-      return continuations.slice(0, 1);
+      return filteredContinuations.slice(0, 1);
     }
     
     // OBSERVER_DOMINANT: allow more continuations (but respect load limits)
     if (feedbackMode === 'OBSERVER_DOMINANT') {
-      return continuations.slice(0, 2); // Respect load limit (max 2)
+      return filteredContinuations.slice(0, 2); // Respect load limit (max 2)
     }
     
     // COUPLED: normal behavior (existing limits apply, but respect load)
-    return continuations.slice(0, 2); // Default to max 2
-  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, continuations]);
+    return filteredContinuations.slice(0, 2); // Default to max 2
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, saturationState, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
