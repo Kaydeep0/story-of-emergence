@@ -29,6 +29,7 @@ import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
+import { generateConceptualClusters } from '../../lib/clusters/conceptualClusters';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -163,6 +164,15 @@ export default function YearlyWrapPage() {
     }
 
     return generateYearlyContinuity(yearlyWrap, priorYearWrap);
+  }, [yearlyWrap, reflections]);
+
+  // Generate conceptual clusters
+  const conceptualClusters = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return [];
+    }
+
+    return generateConceptualClusters(reflections, yearlyWrap);
   }, [yearlyWrap, reflections]);
 
   const handleExport = () => {
@@ -331,6 +341,23 @@ export default function YearlyWrapPage() {
           <p className="text-base text-gray-700 leading-relaxed">
             {continuityNote.text}
           </p>
+        </div>
+      )}
+
+      {/* Recurring regions - Conceptual clusters */}
+      {conceptualClusters.length > 0 && (
+        <div className="mb-16 pt-12 border-t border-gray-200">
+          <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
+          <div className="space-y-4">
+            {conceptualClusters.map((cluster) => (
+              <div key={cluster.id} className="text-base text-gray-700">
+                <p className="font-normal mb-1">{cluster.label}</p>
+                {cluster.description && (
+                  <p className="text-sm text-gray-600 leading-relaxed">{cluster.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </YearlyWrapContainer>
