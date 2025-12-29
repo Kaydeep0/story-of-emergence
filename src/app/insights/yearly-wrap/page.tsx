@@ -38,7 +38,9 @@ import { generateRegimeNarrative } from '../../lib/narrative/generateRegimeNarra
 import { inferObserverPosition } from '../../lib/position/inferObserverPosition';
 import { inferPositionalDrift } from '../../lib/position/inferPositionalDrift';
 import { inferObservationClosure } from '../../lib/closure/inferObservationClosure';
+import { inferObserverEnvironmentFeedback } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { Regime } from '../../lib/regime/detectRegime';
+import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -514,11 +516,86 @@ export default function YearlyWrapPage() {
     });
   }, [regime, conceptualClusters, clusterAssociations, positionalDrift, continuations, observerPosition]);
 
-  // Suppress outputs when period is closed
-  // When closed: narrative returns null, continuations suppressed, drift not displayed
-  const effectiveRegimeNarrative = observationClosure === 'closed' ? null : regimeNarrative;
-  const effectiveContinuations = observationClosure === 'closed' ? [] : continuations;
-  const effectivePositionalDrift = observationClosure === 'closed' ? null : positionalDrift;
+  // Infer observer-environment feedback mode (internal only, gates interpretation density)
+  const feedbackMode = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return inferObserverEnvironmentFeedback({
+      regime,
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      currentPeriod: currentYear,
+      continuityNote,
+      closure: observationClosure,
+      positionalDrift,
+    });
+  }, [regime, conceptualClusters, clusterAssociations, continuityNote, observationClosure, positionalDrift]);
+
+  // Apply feedback mode gating (subtle adjustments to interpretation density)
+  // ENVIRONMENT_DOMINANT: fewer continuations, more compressed narrative, omit position
+  // OBSERVER_DOMINANT: allow more continuations, allow more detail, include position
+  // COUPLED: normal behavior
+  const effectiveRegimeNarrative = useMemo(() => {
+    if (observationClosure === 'closed') {
+      return null;
+    }
+    
+    // ENVIRONMENT_DOMINANT: suppress narrative if it's too detailed (compression)
+    if (feedbackMode === 'ENVIRONMENT_DOMINANT' && regimeNarrative) {
+      // Suppress narrative if it describes variation or change (environment dominant = stability)
+      if (regimeNarrative.text.includes('varied') || regimeNarrative.text.includes('change') || 
+          regimeNarrative.text.includes('shift') || regimeNarrative.text.includes('instability')) {
+        return null;
+      }
+    }
+    
+    return regimeNarrative;
+  }, [observationClosure, feedbackMode, regimeNarrative]);
+
+  const effectiveContinuations = useMemo(() => {
+    if (observationClosure === 'closed') {
+      return [];
+    }
+    
+    // ENVIRONMENT_DOMINANT: allow fewer continuations (limit to 1)
+    if (feedbackMode === 'ENVIRONMENT_DOMINANT') {
+      return continuations.slice(0, 1);
+    }
+    
+    // OBSERVER_DOMINANT: allow more continuations (up to 3)
+    if (feedbackMode === 'OBSERVER_DOMINANT') {
+      return continuations.slice(0, 3);
+    }
+    
+    // COUPLED: normal behavior (existing limits apply)
+    return continuations;
+  }, [observationClosure, feedbackMode, continuations]);
+
+  const effectivePositionalDrift = useMemo(() => {
+    if (observationClosure === 'closed') {
+      return null;
+    }
+    
+    // ENVIRONMENT_DOMINANT: suppress positional drift (environment dominant = stability)
+    if (feedbackMode === 'ENVIRONMENT_DOMINANT') {
+      return null;
+    }
+    
+    return positionalDrift;
+  }, [observationClosure, feedbackMode, positionalDrift]);
+
+  // Observer position: omit for ENVIRONMENT_DOMINANT when narrative is suppressed
+  const effectiveObserverPosition = useMemo(() => {
+    if (observationClosure === 'closed') {
+      return null;
+    }
+    
+    // ENVIRONMENT_DOMINANT: omit position if narrative is suppressed (stability focus)
+    if (feedbackMode === 'ENVIRONMENT_DOMINANT' && !effectiveRegimeNarrative) {
+      return null;
+    }
+    
+    return observerPosition;
+  }, [observationClosure, feedbackMode, effectiveRegimeNarrative, observerPosition]);
 
   const handleExport = () => {
     window.print();
@@ -726,13 +803,14 @@ export default function YearlyWrapPage() {
                 {effectiveRegimeNarrative.text}
               </p>
               {/* Observer position - field position descriptor */}
-              {observerPosition && (
+              {/* Gated by feedback mode: omitted for ENVIRONMENT_DOMINANT when narrative suppressed */}
+              {effectiveObserverPosition && (
                 <div className="mt-3">
                   <p className="text-xs text-gray-500 italic">
-                    {observerPosition.phrase}
+                    {effectiveObserverPosition.phrase}
                   </p>
                   {/* Positional drift - difference across periods */}
-                  {/* Suppressed when period is closed */}
+                  {/* Suppressed when period is closed or ENVIRONMENT_DOMINANT */}
                   {effectivePositionalDrift && (
                     <p className="text-xs text-gray-400 mt-1 italic">
                       {effectivePositionalDrift.phrase}
@@ -744,14 +822,14 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Observer position standalone (if narrative is null but position exists) */}
-          {/* Position is frozen when closed, but still computed for closure detection */}
-          {!effectiveRegimeNarrative && observerPosition && observationClosure === 'open' && (
+          {/* Gated by feedback mode: omitted for ENVIRONMENT_DOMINANT */}
+          {!effectiveRegimeNarrative && effectiveObserverPosition && observationClosure === 'open' && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-gray-500 italic">
-                {observerPosition.phrase}
+                {effectiveObserverPosition.phrase}
               </p>
               {/* Positional drift - difference across periods */}
-              {/* Suppressed when period is closed */}
+              {/* Suppressed when period is closed or ENVIRONMENT_DOMINANT */}
               {effectivePositionalDrift && (
                 <p className="text-xs text-gray-400 mt-1 italic">
                   {effectivePositionalDrift.phrase}
