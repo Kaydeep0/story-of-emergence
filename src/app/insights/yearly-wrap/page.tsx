@@ -32,10 +32,12 @@ import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continui
 import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 import { detectRegime } from '../../lib/regime/detectRegime';
+import { stabilizeRegime, getStabilizedRegime, type StabilizedRegimeHistory } from '../../lib/regime/stabilizeRegime';
 import { generateContinuations } from '../../lib/continuations/generateContinuations';
 import { generateRegimeNarrative } from '../../lib/narrative/generateRegimeNarrative';
 import { inferObserverPosition } from '../../lib/position/inferObserverPosition';
 import { inferPositionalDrift } from '../../lib/position/inferPositionalDrift';
+import { inferObservationClosure } from '../../lib/closure/inferObservationClosure';
 import type { Regime } from '../../lib/regime/detectRegime';
 
 export default function YearlyWrapPage() {
@@ -173,14 +175,76 @@ export default function YearlyWrapPage() {
     return generateYearlyContinuity(yearlyWrap, priorYearWrap);
   }, [yearlyWrap, reflections]);
 
-  // Detect previous period's regime and position for drift comparison
-  const previousPeriodData = useMemo(() => {
+  // Build period data for regime stabilization
+  const periodDataForStabilization = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return [];
+    }
+
+    const currentYear = new Date().getFullYear();
+    const periods: Array<{
+      period: string;
+      clusters: ReturnType<typeof generateConceptualClusters>;
+      associations: ReturnType<typeof generateClusterAssociations>;
+    }> = [];
+
+    // Collect data for current year and up to 3 previous years
+    for (let yearOffset = 0; yearOffset <= 3; yearOffset++) {
+      const year = currentYear - yearOffset;
+      const yearWrap = yearOffset === 0
+        ? yearlyWrap
+        : buildPriorYearWrap(reflections, year);
+
+      if (!yearWrap) {
+        continue;
+      }
+
+      const clusters = generateConceptualClusters(reflections, yearWrap);
+      const yearStr = year.toString();
+      const associations = clusters.length >= 2
+        ? generateClusterAssociations(clusters, yearStr)
+        : [];
+
+      periods.push({
+        period: yearStr,
+        clusters,
+        associations,
+      });
+    }
+
+    return periods;
+  }, [yearlyWrap, reflections]);
+
+  // Compute raw regimes for all periods (needed for closure and stabilization)
+  const rawRegimesForPeriods = useMemo(() => {
+    const regimes = new Map<string, Regime>();
+    
+    for (const pd of periodDataForStabilization) {
+      const rawRegime = detectRegime({
+        clusters: pd.clusters,
+        associations: pd.associations,
+        currentPeriod: pd.period,
+      });
+      regimes.set(pd.period, rawRegime);
+    }
+    
+    return regimes;
+  }, [periodDataForStabilization]);
+
+  // Compute previous period data using raw regime (for closure detection)
+  const previousPeriodDataForClosure = useMemo(() => {
     if (!yearlyWrap || reflections.length === 0) {
       return { regime: null as Regime | null, position: null };
     }
 
     const currentYear = new Date().getFullYear();
     const previousYear = currentYear - 1;
+    const previousYearStr = previousYear.toString();
+
+    const previousRawRegime = rawRegimesForPeriods.get(previousYearStr);
+    if (!previousRawRegime) {
+      return { regime: null, position: null };
+    }
 
     // Build previous year's wrap
     const priorYearWrap = buildPriorYearWrap(reflections, previousYear);
@@ -190,48 +254,173 @@ export default function YearlyWrapPage() {
 
     // Generate previous year's clusters
     const previousClusters = generateConceptualClusters(reflections, priorYearWrap);
-    const previousYearStr = previousYear.toString();
     const previousAssociations = previousClusters.length >= 2
       ? generateClusterAssociations(previousClusters, previousYearStr)
       : [];
 
-    // Detect previous regime
-    const previousRegime = detectRegime({
-      clusters: previousClusters,
-      associations: previousAssociations,
-      currentPeriod: previousYearStr,
-    });
-
-    // Infer previous position
+    // Infer previous position (using raw regime for closure detection)
     const previousPosition = inferObserverPosition({
       clusters: previousClusters,
       associations: previousAssociations,
-      regime: previousRegime,
+      regime: previousRawRegime,
       currentPeriod: previousYearStr,
     });
 
-    return { regime: previousRegime, position: previousPosition };
+    return { regime: previousRawRegime, position: previousPosition };
+  }, [yearlyWrap, reflections, rawRegimesForPeriods]);
+
+  // Generate conceptual clusters for current period (needed for closure detection)
+  const currentPeriodClusters = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return [];
+    }
+    return generateConceptualClusters(reflections, yearlyWrap);
   }, [yearlyWrap, reflections]);
 
-  // Detect regime (internal only, never rendered)
-  const regime = useMemo(() => {
-    if (!yearlyWrap || reflections.length === 0) {
+  const currentPeriodAssociations = useMemo(() => {
+    if (currentPeriodClusters.length < 2) {
+      return [];
+    }
+    const currentYear = new Date().getFullYear().toString();
+    return generateClusterAssociations(currentPeriodClusters, currentYear);
+  }, [currentPeriodClusters]);
+
+  // Get raw regime for current period
+  const currentPeriodRawRegime = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return rawRegimesForPeriods.get(currentYear) || 'deterministic';
+  }, [rawRegimesForPeriods]);
+
+  // Infer observer position for closure detection
+  const observerPositionForClosure = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return inferObserverPosition({
+      clusters: currentPeriodClusters,
+      associations: currentPeriodAssociations,
+      regime: currentPeriodRawRegime,
+      currentPeriod: currentYear,
+    });
+  }, [currentPeriodClusters, currentPeriodAssociations, currentPeriodRawRegime]);
+
+  // Compute positional drift for closure detection
+  const positionalDriftForClosure = useMemo(() => {
+    if (!previousPeriodDataForClosure.position || !observerPositionForClosure) {
+      return null;
+    }
+    return inferPositionalDrift({
+      previous: previousPeriodDataForClosure.position,
+      current: observerPositionForClosure,
+      previousRegime: previousPeriodDataForClosure.regime!,
+      currentRegime: currentPeriodRawRegime,
+    });
+  }, [previousPeriodDataForClosure, observerPositionForClosure, currentPeriodRawRegime]);
+
+  // Compute continuations for closure detection
+  const continuationsForClosure = useMemo(() => {
+    if (currentPeriodClusters.length < 2) {
+      return [];
+    }
+    const currentYear = new Date().getFullYear().toString();
+    return generateContinuations({
+      clusters: currentPeriodClusters,
+      associations: currentPeriodAssociations,
+      regime: currentPeriodRawRegime,
+      currentPeriod: currentYear,
+    });
+  }, [currentPeriodClusters, currentPeriodAssociations, currentPeriodRawRegime]);
+
+  // Infer closure for current period
+  const currentPeriodClosure = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return inferObservationClosure({
+      regime: currentPeriodRawRegime,
+      clusters: currentPeriodClusters,
+      associations: currentPeriodAssociations,
+      currentPeriod: currentYear,
+      positionalDrift: positionalDriftForClosure,
+      continuations: continuationsForClosure,
+      observerPosition: observerPositionForClosure,
+    });
+  }, [
+    currentPeriodRawRegime,
+    currentPeriodClusters,
+    currentPeriodAssociations,
+    positionalDriftForClosure,
+    continuationsForClosure,
+    observerPositionForClosure,
+  ]);
+
+  // Stabilize regimes across periods (with hysteresis and persistence)
+  // Include closure data to prevent regime changes when closed
+  const stabilizedRegimeHistory = useMemo(() => {
+    if (periodDataForStabilization.length === 0) {
+      return [];
+    }
+
+    const currentYear = new Date().getFullYear().toString();
+
+    // Build period data with closure
+    const periodsWithClosure = periodDataForStabilization.map(pd => ({
+      period: pd.period,
+      clusters: pd.clusters,
+      associations: pd.associations,
+      closure: pd.period === currentYear ? currentPeriodClosure : undefined,
+    }));
+
+    return stabilizeRegime(periodsWithClosure);
+  }, [periodDataForStabilization, currentPeriodClosure]);
+
+  // Get stabilized regime for current period
+  const stabilizedRegime = useMemo(() => {
+    if (stabilizedRegimeHistory.length === 0) {
       return 'deterministic' as const;
     }
 
-    // Generate initial clusters for regime detection
-    const initialClusters = generateConceptualClusters(reflections, yearlyWrap);
     const currentYear = new Date().getFullYear().toString();
-    const initialAssociations = initialClusters.length >= 2
-      ? generateClusterAssociations(initialClusters, currentYear)
+    return getStabilizedRegime(currentYear, stabilizedRegimeHistory) || 'deterministic';
+  }, [stabilizedRegimeHistory]);
+
+  // Detect previous period's regime and position for drift comparison (using stabilized regime)
+  const previousPeriodData = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0 || stabilizedRegimeHistory.length === 0) {
+      return { regime: null as Regime | null, position: null };
+    }
+
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1;
+    const previousYearStr = previousYear.toString();
+
+    // Get stabilized regime for previous period
+    const previousStabilizedRegime = getStabilizedRegime(previousYearStr, stabilizedRegimeHistory);
+    if (!previousStabilizedRegime) {
+      return { regime: null, position: null };
+    }
+
+    // Build previous year's wrap
+    const priorYearWrap = buildPriorYearWrap(reflections, previousYear);
+    if (!priorYearWrap) {
+      return { regime: null, position: null };
+    }
+
+    // Generate previous year's clusters
+    const previousClusters = generateConceptualClusters(reflections, priorYearWrap);
+    const previousAssociations = previousClusters.length >= 2
+      ? generateClusterAssociations(previousClusters, previousYearStr)
       : [];
 
-    return detectRegime({
-      clusters: initialClusters,
-      associations: initialAssociations,
-      currentPeriod: currentYear,
+    // Infer previous position (using stabilized regime)
+    const previousPosition = inferObserverPosition({
+      clusters: previousClusters,
+      associations: previousAssociations,
+      regime: previousStabilizedRegime,
+      currentPeriod: previousYearStr,
     });
-  }, [yearlyWrap, reflections]);
+
+    return { regime: previousStabilizedRegime, position: previousPosition };
+  }, [yearlyWrap, reflections, stabilizedRegimeHistory]);
+
+  // Use stabilized regime for gating (internal only, never rendered)
+  const regime = stabilizedRegime;
 
   // Generate conceptual clusters (with regime gating)
   const conceptualClusters = useMemo(() => {
@@ -310,6 +499,26 @@ export default function YearlyWrapPage() {
       currentRegime: regime,
     });
   }, [previousPeriodData, observerPosition, regime]);
+
+  // Infer observation closure (determines if period is frozen)
+  const observationClosure = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return inferObservationClosure({
+      regime,
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      currentPeriod: currentYear,
+      positionalDrift,
+      continuations,
+      observerPosition,
+    });
+  }, [regime, conceptualClusters, clusterAssociations, positionalDrift, continuations, observerPosition]);
+
+  // Suppress outputs when period is closed
+  // When closed: narrative returns null, continuations suppressed, drift not displayed
+  const effectiveRegimeNarrative = observationClosure === 'closed' ? null : regimeNarrative;
+  const effectiveContinuations = observationClosure === 'closed' ? [] : continuations;
+  const effectivePositionalDrift = observationClosure === 'closed' ? null : positionalDrift;
 
   const handleExport = () => {
     window.print();
@@ -496,10 +705,11 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Continuations - conditional option space (only transitional/emergent) */}
-          {continuations.length > 0 && (
+          {/* Suppressed when period is closed */}
+          {effectiveContinuations.length > 0 && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <div className="space-y-3">
-                {continuations.map((continuation) => (
+                {effectiveContinuations.map((continuation) => (
                   <p key={continuation.id} className="text-sm text-gray-600 italic leading-relaxed">
                     {continuation.text}
                   </p>
@@ -509,10 +719,11 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Regime narrative - observational compression across time */}
-          {regimeNarrative && (
+          {/* Returns null when period is closed */}
+          {effectiveRegimeNarrative && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 leading-relaxed">
-                {regimeNarrative.text}
+                {effectiveRegimeNarrative.text}
               </p>
               {/* Observer position - field position descriptor */}
               {observerPosition && (
@@ -521,9 +732,10 @@ export default function YearlyWrapPage() {
                     {observerPosition.phrase}
                   </p>
                   {/* Positional drift - difference across periods */}
-                  {positionalDrift && (
+                  {/* Suppressed when period is closed */}
+                  {effectivePositionalDrift && (
                     <p className="text-xs text-gray-400 mt-1 italic">
-                      {positionalDrift.phrase}
+                      {effectivePositionalDrift.phrase}
                     </p>
                   )}
                 </div>
@@ -532,15 +744,17 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Observer position standalone (if narrative is null but position exists) */}
-          {!regimeNarrative && observerPosition && (
+          {/* Position is frozen when closed, but still computed for closure detection */}
+          {!effectiveRegimeNarrative && observerPosition && observationClosure === 'open' && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-gray-500 italic">
                 {observerPosition.phrase}
               </p>
               {/* Positional drift - difference across periods */}
-              {positionalDrift && (
+              {/* Suppressed when period is closed */}
+              {effectivePositionalDrift && (
                 <p className="text-xs text-gray-400 mt-1 italic">
-                  {positionalDrift.phrase}
+                  {effectivePositionalDrift.phrase}
                 </p>
               )}
             </div>
