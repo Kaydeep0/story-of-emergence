@@ -72,6 +72,13 @@ import { listExternalEntries } from '../lib/useSources';
 import { InsightsSourceCard } from '../components/InsightsSourceCard';
 import { useReflectionLinks } from '../lib/reflectionLinks';
 import { lifetimeWindow } from '../lib/insights/timeWindows';
+import { buildDistributionFromReflections } from '../lib/distributions/buildSeries';
+import { classifyDistribution } from '../lib/distributions/classify';
+import { generateDistributionInsight } from '../lib/distributions/insights';
+import { generateNarrative } from '../lib/distributions/narratives';
+import { inspectDistribution } from '../lib/distributions/inspect';
+import { fromNarrative } from '../lib/insights/viewModels';
+import { InsightPanel } from './components/InsightPanel';
 
 
 /**
@@ -1024,6 +1031,58 @@ export default function InsightsPage() {
       map.get(r.sourceId)!.push(r);
     });
     return map;
+  }, [summaryReflectionEntries]);
+
+  // Generate distribution narratives for week, month, year scopes
+  const distributionInsightCards = useMemo(() => {
+    if (summaryReflectionEntries.length === 0) {
+      return [];
+    }
+
+    const scopes: Array<'week' | 'month' | 'year'> = ['week', 'month', 'year'];
+    const buckets: Array<'day' | 'week' | 'month'> = ['day', 'week', 'month'];
+    const insightCards: ReturnType<typeof fromNarrative>[] = [];
+
+    for (let i = 0; i < scopes.length; i++) {
+      const scope = scopes[i];
+      const bucket = buckets[i];
+
+      // Build distribution series with placeholder shape (will be classified)
+      const series = buildDistributionFromReflections(
+        summaryReflectionEntries,
+        bucket,
+        'normal' // Placeholder shape, will be classified
+      );
+
+      // Classify the shape
+      const shape = classifyDistribution(series);
+
+      // Skip if insufficient data
+      if (shape === 'insufficient_data') {
+        continue;
+      }
+
+      // Update series with classified shape
+      const classifiedSeries = { ...series, shape };
+
+      // Generate insight
+      const insight = generateDistributionInsight(classifiedSeries, shape);
+      if (!insight) {
+        continue;
+      }
+
+      // Get stats for confidence adjustment
+      const stats = inspectDistribution(classifiedSeries);
+
+      // Generate narrative
+      const narrative = generateNarrative(scope, insight, stats.totalEvents);
+
+      // Convert to InsightCard via adapter
+      const card = fromNarrative(narrative);
+      insightCards.push(card);
+    }
+
+    return insightCards;
   }, [summaryReflectionEntries]);
 
   // Create a map of sourceId -> source title for quick lookups
@@ -2315,6 +2374,18 @@ export default function InsightsPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Distribution Insights Panel */}
+                {!summaryReflectionsLoading && !summaryReflectionsError && distributionInsightCards.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2 text-zinc-50">
+                      Distribution Insights
+                    </h2>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+                      <InsightPanel insights={distributionInsightCards} />
+                    </div>
+                  </div>
+                )}
 
                 {/* Highlights Section */}
                 <div className="space-y-4">
