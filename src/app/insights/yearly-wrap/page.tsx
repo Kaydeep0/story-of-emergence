@@ -26,6 +26,7 @@ import { buildYearlyWrap } from '../../lib/wrap/yearlyWrap';
 import type { ReflectionEntry } from '../../lib/insights/types';
 import type { InsightCard, InsightDeltaCard } from '../../lib/insights/viewModels';
 import { InsightPanel } from '../components/InsightPanel';
+import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -145,99 +146,130 @@ export default function YearlyWrapPage() {
     });
   }, [reflections]);
 
+  const handleExport = () => {
+    window.print();
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-semibold mb-8">Yearly Wrap</h1>
-          <p className="text-white/60">Loading reflections...</p>
-        </div>
-      </div>
+      <YearlyWrapContainer>
+        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
+        <p className="text-gray-600">Loading reflections...</p>
+      </YearlyWrapContainer>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-semibold mb-8">Yearly Wrap</h1>
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
-            <p className="text-sm text-rose-400">{error}</p>
-          </div>
+      <YearlyWrapContainer>
+        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
+        <div className="border border-red-200 bg-red-50 p-6 rounded">
+          <p className="text-sm text-red-800">{error}</p>
         </div>
-      </div>
+      </YearlyWrapContainer>
     );
   }
 
   if (!yearlyWrap) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-semibold mb-8">Yearly Wrap</h1>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-            <p className="text-sm text-white/60">
-              Not enough data to generate a yearly wrap. Keep reflecting to see your year in review.
-            </p>
-          </div>
+      <YearlyWrapContainer>
+        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
+        <div className="border border-gray-200 bg-gray-50 p-6 rounded">
+          <p className="text-sm text-gray-600">
+            Not enough data to generate a yearly wrap. Keep reflecting to see your year in review.
+          </p>
         </div>
-      </div>
+      </YearlyWrapContainer>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-2xl font-semibold">Yearly Wrap</h1>
-
-        {/* Headline */}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-          <h2 className="text-xl font-semibold mb-2">{yearlyWrap.headline}</h2>
-          <p className="text-white/80 leading-relaxed">{yearlyWrap.summary}</p>
-        </div>
-
-        {/* Dominant Pattern */}
-        {yearlyWrap.dominantPattern && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-            <h3 className="text-sm font-semibold text-white/60 mb-2">Dominant Pattern</h3>
-            <p className="text-white/80">{yearlyWrap.dominantPattern}</p>
-          </div>
-        )}
-
-        {/* Key Moments */}
-        {yearlyWrap.keyMoments.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Key Moments</h3>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-              <InsightPanel insights={yearlyWrap.keyMoments} />
-            </div>
-          </div>
-        )}
-
-        {/* Shifts */}
-        {yearlyWrap.shifts.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Shifts</h3>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-              <div className="space-y-3">
-                {yearlyWrap.shifts.map((shift) => (
-                  <div key={shift.id} className="flex items-start gap-2 text-sm">
-                    <span className="text-white/50 mt-0.5 shrink-0">
-                      {shift.direction === 'intensifying' ? '↑' : 
-                       shift.direction === 'stabilizing' ? '→' : 
-                       shift.direction === 'fragmenting' ? '↯' : '—'}
-                    </span>
-                    <div className="flex-1">
-                      <p className="font-medium text-white/90">{shift.headline}</p>
-                      <p className="text-white/60 mt-0.5">{shift.summary}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+    <YearlyWrapContainer>
+      {/* Export button - hidden in print */}
+      <div className="mb-8 print:hidden">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-4 py-2 bg-white hover:bg-gray-50 transition-colors"
+        >
+          Export Yearly Wrap
+        </button>
       </div>
-    </div>
+
+      {/* Headline */}
+      <div className="mb-16">
+        <h1 className="text-4xl font-normal text-gray-900 mb-6 leading-tight">
+          {yearlyWrap.headline}
+        </h1>
+        <p className="text-lg text-gray-700 leading-relaxed max-w-[65ch]">
+          {yearlyWrap.summary}
+        </p>
+      </div>
+
+      {/* Density and Cadence Labels */}
+      {(yearlyWrap.densityLabel || yearlyWrap.cadenceLabel) && (
+        <div className="mb-16 flex gap-2 flex-wrap">
+          {yearlyWrap.densityLabel && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
+              {yearlyWrap.densityLabel.charAt(0).toUpperCase() + yearlyWrap.densityLabel.slice(1)} density
+            </span>
+          )}
+          {yearlyWrap.cadenceLabel && (
+            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
+              {yearlyWrap.cadenceLabel.charAt(0).toUpperCase() + yearlyWrap.cadenceLabel.slice(1)} cadence
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Dominant Pattern */}
+      {yearlyWrap.dominantPattern && (
+        <div className="mb-16 pb-12 border-b border-gray-200">
+          <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Dominant Pattern</h3>
+          <p className="text-base text-gray-800">{yearlyWrap.dominantPattern}</p>
+        </div>
+      )}
+
+      {/* Key Moments */}
+      {yearlyWrap.keyMoments.length > 0 && (
+        <div className="mb-16">
+          <h3 className="text-lg font-normal text-gray-900 mb-8">Key Moments</h3>
+          <div className="space-y-8">
+            {yearlyWrap.keyMoments.map((moment) => (
+              <div key={moment.id} className="space-y-3">
+                <h4 className="text-base font-medium text-gray-900">{moment.headline}</h4>
+                {moment.label && (
+                  <p className="text-xs text-gray-500">{moment.label}</p>
+                )}
+                <p className="text-sm text-gray-700 leading-relaxed">{moment.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Shifts */}
+      {yearlyWrap.shifts.length > 0 && (
+        <div className="mb-16 pt-12 border-t border-gray-200">
+          <h3 className="text-sm font-normal text-gray-600 mb-6">Shifts</h3>
+          <div className="space-y-4">
+            {yearlyWrap.shifts.map((shift) => (
+              <div key={shift.id} className="flex items-start gap-3 text-sm">
+                <span className="text-gray-400 mt-0.5 shrink-0 text-base">
+                  {shift.direction === 'intensifying' ? '↑' : 
+                   shift.direction === 'stabilizing' ? '→' : 
+                   shift.direction === 'fragmenting' ? '↯' : '—'}
+                </span>
+                <div className="flex-1">
+                  <p className="font-normal text-gray-700 mb-1">{shift.headline}</p>
+                  <p className="text-gray-600 leading-relaxed">{shift.summary}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </YearlyWrapContainer>
   );
 }
 
