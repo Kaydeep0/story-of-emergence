@@ -1,12 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useHighlights } from '../lib/insights/useHighlights';
 import { useInternalEvents } from '../lib/internalEvents';
 import { useInsightEngine } from '../lib/insights/useInsightEngine';
 
 export default function DebugInsightStrip() {
-  const { highlights } = useHighlights();
   const { events } = useInternalEvents();
   const engine = useInsightEngine();
 
@@ -38,7 +36,6 @@ export default function DebugInsightStrip() {
     }}>
       <strong>Insight Debug</strong>  
       <div>Events loaded: {events?.length ?? 0}</div>
-      <div>Highlights: {highlights?.length ?? 0}</div>
       <div>Engine: {engine?.status ?? 'unknown'}</div>
       <div>Recipes computed: {engine?.recipes?.length ?? 0}</div>
       <div>Sources: {engine?.external?.length ?? 0}</div>

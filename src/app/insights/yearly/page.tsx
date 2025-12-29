@@ -20,7 +20,6 @@ import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights
 import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
-import { useHighlights } from '../../lib/insights/useHighlights';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
 import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
@@ -42,7 +41,6 @@ export default function YearlyWrapPage() {
   const { logEvent } = useLogEvent();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   const { getSourceIdFor } = useReflectionLinks(address);
-  const { isHighlighted, toggleHighlight } = useHighlights();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -298,8 +296,7 @@ export default function YearlyWrapPage() {
       };
 
       await rpcInsertEntry(address, sessionKey, highlightPayload);
-      toggleHighlight(narrativeInsight);
-      toast.success('Saved to Highlights');
+      toast.success('Saved');
     } catch (err: any) {
       console.error('Failed to save highlight', err);
       toast.error(err?.message ?? 'Failed to save highlight');
@@ -489,28 +486,6 @@ export default function YearlyWrapPage() {
                     <h3 className="font-medium text-orange-200">{narrativeInsight.title}</h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isHighlighted(narrativeInsight)) {
-                          toggleHighlight(narrativeInsight);
-                        } else {
-                          handleSaveHighlight();
-                        }
-                      }}
-                      className="p-1 rounded-full transition-colors hover:bg-white/10"
-                      title={isHighlighted(narrativeInsight) ? 'Remove from highlights' : 'Save to Highlights'}
-                    >
-                      {isHighlighted(narrativeInsight) ? (
-                        <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                        </svg>
-                      )}
-                    </button>
                   </div>
                 </div>
                 <p className="text-sm text-white/70">{narrativeInsight.explanation}</p>

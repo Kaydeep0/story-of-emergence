@@ -55,14 +55,11 @@ import { rpcFetchEntries } from '../lib/entries';
 import { computeTimelineSpikes, itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
 import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
 import { computeLinkClusters } from '../lib/insights/linkClusters';
-import { computeStreakCoach } from '../lib/insights/streakCoach';
 import { computeTopicDrift } from '../lib/insights/topicDrift';
 import { computeContrastPairs } from '../lib/insights/contrastPairs';
 import { computeUnifiedSourceInsights, type UnifiedSourceInsights, type SourceEntryLite } from '../lib/insights/fromSources';
 import type { ContrastPair } from '../lib/insights/contrastPairs';
-import { useHighlights } from '../lib/insights/useHighlights';
-import { useFeedback, sortByRecipeScore } from '../lib/insights/feedbackStore';
-import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard, StreakCoachCard, InsightCard } from '../lib/insights/types';
+import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard, InsightCard } from '../lib/insights/types';
 import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
@@ -396,54 +393,6 @@ function Sparkline({
   );
 }
 
-// Feedback buttons component for insight cards
-function FeedbackButtons({
-  insightId,
-  recipeId,
-  getFeedback,
-  toggleFeedback,
-}: {
-  insightId: string;
-  recipeId: string;
-  getFeedback: (id: string) => 'positive' | 'negative' | null;
-  toggleFeedback: (id: string, recipe: string, direction: 'up' | 'down') => void;
-}) {
-  const current = getFeedback(insightId);
-  
-  return (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        onClick={() => toggleFeedback(insightId, recipeId, 'up')}
-        className={`p-1.5 rounded-full transition-colors ${
-          current === 'positive'
-            ? 'bg-emerald-500/20 text-emerald-400'
-            : 'text-white/40 hover:text-emerald-400 hover:bg-white/5'
-        }`}
-        title="Helpful insight"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        onClick={() => toggleFeedback(insightId, recipeId, 'down')}
-        className={`p-1.5 rounded-full transition-colors ${
-          current === 'negative'
-            ? 'bg-rose-500/20 text-rose-400'
-            : 'text-white/40 hover:text-rose-400 hover:bg-white/5'
-        }`}
-        title="Not helpful"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7.498 15.25H4.372c-1.026 0-1.945-.694-2.054-1.715a12.137 12.137 0 0 1-.068-1.285c0-2.848.992-5.464 2.649-7.521C5.287 4.247 5.886 4 6.504 4h4.016a4.5 4.5 0 0 1 1.423.23l3.114 1.04a4.5 4.5 0 0 0 1.423.23h1.294M7.498 15.25c.618 0 .991.724.725 1.282A7.471 7.471 0 0 0 7.5 19.75 2.25 2.25 0 0 0 9.75 22a.75.75 0 0 0 .75-.75v-.633c0-.573.11-1.14.322-1.672.304-.76.93-1.33 1.653-1.715a9.04 9.04 0 0 0 2.86-2.4c.498-.634 1.226-1.08 2.032-1.08h.384m-10.253 1.5H9.7m8.075-9.75c.01.05.027.1.05.148.593 1.2.925 2.55.925 3.977 0 1.487-.36 2.89-.999 4.125m.999-8.25c-.023-.417-.07-.83-.14-1.238a12.13 12.13 0 0 0-.26-1.137" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
 type InsightsMode = 'weekly' | 'timeline' | 'summary' | 'yearly' | 'lifetime';
 
 type SimpleEvent = {
@@ -527,9 +476,6 @@ export default function InsightsPage() {
   // Link clusters state (computed from decrypted reflections)
   const [clusterInsights, setClusterInsights] = useState<LinkClusterCard[]>([]);
 
-  // Streak coach state (computed from decrypted reflections)
-  const [coachInsights, setCoachInsights] = useState<StreakCoachCard[]>([]);
-
   // Topic drift state (computed from decrypted reflections)
   const [topicDrift, setTopicDrift] = useState<TopicDriftBucket[]>([]);
 
@@ -552,12 +498,6 @@ export default function InsightsPage() {
   // Expansion state for spike cards (tracks which dates are expanded)
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
-  // Highlights state (backed by localStorage)
-  const { highlights, isHighlighted, toggleHighlight } = useHighlights();
-
-  // Feedback state (backed by localStorage)
-  const { getFeedback, toggleFeedback, recipeScores, insightScores, hydrateFromStorage } = useFeedback();
-
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<NormalizedInsight | null>(null);
@@ -566,10 +506,6 @@ export default function InsightsPage() {
   // Distribution insights view toggle
   const [insightView, setInsightView] = useState<'panel' | 'timeline'>('panel');
 
-  // Hydrate feedback scores from localStorage on mount to ensure stable ordering
-  useEffect(() => {
-    hydrateFromStorage();
-  }, [hydrateFromStorage]);
 
   // Helper to check if a spike card is expanded
   function isExpanded(dateKey: string): boolean {
@@ -963,14 +899,12 @@ export default function InsightsPage() {
         // Compute all insights (pure functions, no network calls)
         const spikes = computeTimelineSpikes(reflectionEntries);
         const clusters = computeLinkClusters(reflectionEntries);
-        const coach = computeStreakCoach(reflectionEntries);
         const drift = computeTopicDrift(reflectionEntries);
         const contrasts = computeContrastPairs(drift);
 
         if (!cancelled) {
           setSpikeInsights(spikes);
           setClusterInsights(clusters);
-          setCoachInsights(coach);
           setTopicDrift(drift);
           setContrastPairs(contrasts);
           setTimelineReflectionEntries(reflectionEntries);
@@ -1328,15 +1262,13 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && !reflectionsError && spikeInsights.length > 0 && (
                   <div className="space-y-4">
-                    {sortByRecipeScore(spikeInsights, recipeScores, insightScores).map((spike) => {
+                    {spikeInsights.map((spike) => {
                       const dateKey = spike.data.date;
                       const expanded = isExpanded(dateKey);
                       const visibleCount = expanded ? spike.evidence.length : 5;
                       const visibleEntries = spike.evidence.slice(0, visibleCount);
                       const hiddenCount = spike.evidence.length - 5;
                       const hasMore = spike.evidence.length > 5;
-
-                      const highlighted = isHighlighted(spike);
 
                       return (
                         <div
@@ -1373,28 +1305,6 @@ export default function InsightsPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <FeedbackButtons
-                                insightId={spike.id}
-                                recipeId={spike.kind}
-                                getFeedback={getFeedback}
-                                toggleFeedback={toggleFeedback}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => toggleHighlight(spike)}
-                                className="p-1 rounded-full transition-colors hover:bg-white/10"
-                                title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-                              >
-                                {highlighted ? (
-                                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                                  </svg>
-                                )}
-                              </button>
                               <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
                                 {spike.data.count} entries
                               </span>
@@ -1449,140 +1359,6 @@ export default function InsightsPage() {
               </div>
             )}
 
-            {/* Streak Coach Section */}
-            {connected && encryptionReady && (
-              <div className="space-y-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" />
-                  </svg>
-                  Streak Coach
-                </h2>
-
-                {reflectionsLoading && (
-                  <TimelineSectionSkeleton />
-                )}
-
-                {!reflectionsLoading && coachInsights.length === 0 && (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-                    <p className="text-sm text-white/60">
-                      Keep writing to build up enough data for personalized streak coaching. We need at least 5 reflections to detect your best writing time.
-                    </p>
-                  </div>
-                )}
-
-                {!reflectionsLoading && coachInsights.length > 0 && (
-                  <div className="space-y-4">
-                    {sortByRecipeScore(coachInsights, recipeScores, insightScores).map((coach) => {
-                      const highlighted = isHighlighted(coach);
-                      return (
-                        <div
-                          key={coach.id}
-                          className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5 space-y-3"
-                        >
-                          {/* Card header */}
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-medium text-sky-200">{coach.title}</h3>
-                              {hasSourceEvidence(coach, timelineReflectionEntries) && (
-                                <div className="mt-1.5">
-                                  <span className="inline-flex items-center gap-1 text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                                    </svg>
-                                    {(() => {
-                                      const sourceName = getSourceNameForInsight(coach, timelineReflectionEntries);
-                                      const sourceKind = getSourceKindForInsight(coach, timelineReflectionEntries);
-                                      if (sourceName && sourceKind) {
-                                        return `From ${sourceKind}: ${sourceName}`;
-                                      } else if (sourceName) {
-                                        return `From Source: ${sourceName}`;
-                                      } else if (sourceKind) {
-                                        return `From ${sourceKind}`;
-                                      }
-                                      return 'From source';
-                                    })()}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <FeedbackButtons
-                                insightId={coach.id}
-                                recipeId={coach.kind}
-                                getFeedback={getFeedback}
-                                toggleFeedback={toggleFeedback}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => toggleHighlight(coach)}
-                                className="p-1 rounded-full transition-colors hover:bg-white/10"
-                                title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-                              >
-                                {highlighted ? (
-                                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Explanation */}
-                          <p className="text-sm text-white/70">{coach.explanation}</p>
-
-                          {/* Stats row */}
-                          <div className="flex flex-wrap gap-3">
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded">
-                              {coach.data.currentStreak > 0 ? `${coach.data.currentStreak}-day streak` : 'No active streak'}
-                            </span>
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded">
-                              Best: {coach.data.longestStreak} days
-                            </span>
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded">
-                              {coach.data.percentageAtBestHour}% at {coach.data.bestHourLabel}
-                            </span>
-                          </div>
-
-                          {/* Evidence */}
-                          {coach.evidence.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-xs text-white/50 uppercase tracking-wide">
-                                Entries at {coach.data.bestHourLabel}
-                              </p>
-                              <ul className="space-y-1.5">
-                                {coach.evidence.slice(0, 3).map((ev) => (
-                                  <li
-                                    key={ev.entryId}
-                                    className="flex items-center gap-2 text-xs"
-                                  >
-                                    <span className="text-white/40 min-w-[80px]">
-                                      {new Date(ev.timestamp).toLocaleDateString(undefined, {
-                                        month: 'short',
-                                        day: 'numeric',
-                                      })}
-                                    </span>
-                                    <span className="text-white/60 truncate">
-                                      {ev.preview || '(no preview)'}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Link Clusters Section */}
             {connected && encryptionReady && (
               <div className="space-y-4">
@@ -1607,8 +1383,7 @@ export default function InsightsPage() {
 
                 {!reflectionsLoading && clusterInsights.length > 0 && (
                   <div className="space-y-4">
-                    {sortByRecipeScore(clusterInsights, recipeScores, insightScores).map((cluster) => {
-                      const highlighted = isHighlighted(cluster);
+                    {clusterInsights.map((cluster) => {
                       return (
                         <div
                           key={cluster.id}
@@ -1641,28 +1416,6 @@ export default function InsightsPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <FeedbackButtons
-                                insightId={cluster.id}
-                                recipeId={cluster.kind}
-                                getFeedback={getFeedback}
-                                toggleFeedback={toggleFeedback}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => toggleHighlight(cluster)}
-                                className="p-1 rounded-full transition-colors hover:bg-white/10"
-                                title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-                              >
-                                {highlighted ? (
-                                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                                  </svg>
-                                )}
-                              </button>
                               <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
                                 {cluster.data.clusterSize} entries
                               </span>
@@ -1914,14 +1667,6 @@ export default function InsightsPage() {
                               </div>
                             </div>
 
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <FeedbackButtons
-                                insightId={insightId}
-                                recipeId="contrastPairs"
-                                getFeedback={getFeedback}
-                                toggleFeedback={toggleFeedback}
-                              />
-                            </div>
                           </div>
 
                           <p className="text-sm text-white/70">
@@ -2281,8 +2026,7 @@ export default function InsightsPage() {
 
                   {!summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length > 0 && (
                     <div className="space-y-4">
-                      {sortByRecipeScore(summaryInsights, recipeScores, insightScores).map((insight) => {
-                        const highlighted = isHighlighted(insight);
+                      {summaryInsights.map((insight) => {
                         return (
                           <div
                             key={insight.id}
@@ -2323,28 +2067,6 @@ export default function InsightsPage() {
                                 )}
                               </div>
                               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                <FeedbackButtons
-                                  insightId={insight.id}
-                                  recipeId={insight.kind}
-                                  getFeedback={getFeedback}
-                                  toggleFeedback={toggleFeedback}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => toggleHighlight(insight)}
-                                  className="p-1 rounded-full transition-colors hover:bg-white/10"
-                                  title={highlighted ? 'Remove from highlights' : 'Add to highlights'}
-                                >
-                                  {highlighted ? (
-                                    <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-5 h-5 text-white/40 hover:text-yellow-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                                    </svg>
-                                  )}
-                                </button>
                                 <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
                                   {insight.data.summaryType === 'writing_change'
                                     ? 'Trend'
@@ -2430,48 +2152,6 @@ export default function InsightsPage() {
                   </div>
                 )}
 
-                {/* Highlights Section */}
-                <div className="space-y-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                    </svg>
-                    Highlights
-                  </h2>
-
-                  {highlights.length === 0 && (
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-                      <p className="text-sm text-white/60">
-                        Tap the star on any insight to save it here.
-                      </p>
-                    </div>
-                  )}
-
-                  {highlights.length > 0 && (
-                    <div className="space-y-3">
-                      {highlights.map((highlight) => (
-                        <div
-                          key={highlight.id}
-                          className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 space-y-2"
-                        >
-                          <div className="flex items-start justify-between">
-                            <h3 className="font-medium text-yellow-200 text-sm">{highlight.title}</h3>
-                            <span className="text-xs text-white/40 bg-white/5 px-2 py-0.5 rounded-full">
-                              {highlight.kind === 'timeline_spike' ? 'Spike' : 'Summary'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-white/60">{highlight.explanation}</p>
-                          <p className="text-xs text-white/30">
-                            Saved {new Date(highlight.createdAt).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                   <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">Coming soon</p>
@@ -2673,8 +2353,6 @@ export default function InsightsPage() {
           setSelectedOriginalCard(null);
         }}
         originalCard={selectedOriginalCard ?? undefined}
-        isHighlighted={selectedOriginalCard ? isHighlighted : undefined}
-        toggleHighlight={selectedOriginalCard ? toggleHighlight : undefined}
         reflectionEntries={
           mode === 'timeline'
             ? timelineReflectionEntries
@@ -2692,7 +2370,7 @@ export default function InsightsPage() {
         }
         isEmpty={
           mode === 'timeline'
-            ? !reflectionsLoading && !reflectionsError && spikeInsights.length === 0 && clusterInsights.length === 0 && coachInsights.length === 0 && topicDrift.length === 0 && contrastPairs.length === 0
+            ? !reflectionsLoading && !reflectionsError && spikeInsights.length === 0 && clusterInsights.length === 0 && topicDrift.length === 0 && contrastPairs.length === 0
             : mode === 'summary'
             ? !summaryReflectionsLoading && !summaryReflectionsError && summaryInsights.length === 0
             : false
