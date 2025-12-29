@@ -49,6 +49,7 @@ import { sealEpistemicBoundary } from '../../lib/boundary/sealEpistemicBoundary'
 import { mapToViewModel, type FinalizedInferenceOutputs } from '../../representation';
 import { witnessTemporalPatterns } from '../../lib/temporal';
 import { TemporalWitnessView } from '../../components/temporal/TemporalWitnessView';
+import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } from '../../lib/decay';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -68,12 +69,25 @@ export default function YearlyWrapPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
+  const [sessionStart, setSessionStart] = useState<string | null>(null);
 
   const connected = isConnected && !!address;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Track session start (for entropic decay)
+  // Session-scoped: resets on new wallet session
+  useEffect(() => {
+    if (connected && address) {
+      // New session - reset session start
+      setSessionStart(new Date().toISOString());
+    } else {
+      // Disconnected - clear session start
+      setSessionStart(null);
+    }
+  }, [connected, address]);
 
   // Log navigation event
   useEffect(() => {
@@ -953,7 +967,29 @@ export default function YearlyWrapPage() {
     reflections,
   ]);
 
-  // Apply feedback mode, emergence signal, persistence, load, irreversibility, and epistemic boundary gating
+  // Entropic decay - meaning decays over time unless reinforced by new reflections
+  // Deterministic: same reflections + same time → same decay factor
+  // Session-scoped: decay resets on new wallet session
+  const entropicDecayState = useMemo(() => {
+    if (!sessionStart || reflections.length === 0) {
+      // No session or no reflections = complete decay
+      return {
+        decayFactor: 0,
+        isDecayed: true,
+        timeSinceLastReinforcement: 0,
+        sessionStart: sessionStart || new Date().toISOString(),
+      };
+    }
+
+    return computeEntropicDecay({
+      reflections,
+      sessionStart,
+      currentTime: new Date().toISOString(),
+      previousDecayState: null, // Recompute each time (deterministic)
+    });
+  }, [reflections, sessionStart]);
+
+  // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, and entropic decay gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
   // When epistemicallyClosed is true: all narrative generation paths disabled
   const effectiveRegimeNarrative = useMemo(() => {
@@ -1045,9 +1081,14 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, regimeNarrative]);
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
+    // Entropic decay gate: suppress meaning when decay threshold crossed
+    if (shouldSuppressMeaning(entropicDecayState)) {
+      return [];
+    }
+
     // Epistemic boundary gate: when closed, multiplicity is capped at 0 or 1
     // Only minimal factual summaries allowed
     if (epistemicBoundarySeal.epistemicallyClosed) {
@@ -1143,7 +1184,7 @@ export default function YearlyWrapPage() {
     
     // COUPLED: normal behavior (existing limits apply, but respect load)
     return continuations.slice(0, 2); // Default to max 2
-  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, continuations]);
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, entropicDecayState, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -1359,8 +1400,10 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by silence state from representation layer */}
-          {vmClusters.length >= 2 && !silenceState.spatialLayoutSuppressed && (
+          {/* Gated by silence state and entropic decay from representation layer */}
+          {vmClusters.length >= 2 && 
+           !silenceState.spatialLayoutSuppressed && 
+           !shouldSuppressMeaning(entropicDecayState) && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
