@@ -29,7 +29,7 @@ import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
-import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
+import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters, type ConceptualCluster, type ClusterAssociation } from '../../lib/clusters/conceptualClusters';
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 import { detectRegime } from '../../lib/regime/detectRegime';
 import { stabilizeRegime, getStabilizedRegime, type StabilizedRegimeHistory } from '../../lib/regime/stabilizeRegime';
@@ -40,8 +40,10 @@ import { inferPositionalDrift } from '../../lib/position/inferPositionalDrift';
 import { inferObservationClosure } from '../../lib/closure/inferObservationClosure';
 import { inferObserverEnvironmentFeedback } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import { getInitialConditions } from '../../lib/constraints/inferInitialConditions';
+import { inferConstraintRelativeEmergence } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
+import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -556,13 +558,75 @@ export default function YearlyWrapPage() {
     });
   }, [regime, conceptualClusters, clusterAssociations, continuityNote, observationClosure, positionalDrift, initialConditions]);
 
-  // Apply feedback mode gating (subtle adjustments to interpretation density)
+  // Infer constraint-relative emergence signal (internal only)
+  // Gates downstream behavior: multiplicity, narrative compression, asymmetry emphasis
+  const emergenceSignal = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    
+    // Build previous periods data for persistence check
+    const previousPeriodsData: Array<{
+      clusters: ConceptualCluster[];
+      associations: ClusterAssociation[];
+    }> = [];
+    
+    const currentYearNum = new Date().getFullYear();
+    for (let yearOffset = 1; yearOffset <= 2; yearOffset++) {
+      const year = currentYearNum - yearOffset;
+      const yearWrap = buildPriorYearWrap(reflections, year);
+      if (yearWrap) {
+        const prevClusters = generateConceptualClusters(reflections, yearWrap);
+        const prevAssociations = prevClusters.length >= 2
+          ? generateClusterAssociations(prevClusters, year.toString())
+          : [];
+        previousPeriodsData.push({
+          clusters: prevClusters,
+          associations: prevAssociations,
+        });
+      }
+    }
+
+    return inferConstraintRelativeEmergence({
+      initialConditions,
+      regime,
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      currentPeriod: currentYear,
+      continuityNote,
+      closure: observationClosure,
+      positionalDrift,
+      feedbackMode,
+      previousPeriods: previousPeriodsData.length > 0 ? previousPeriodsData : undefined,
+    });
+  }, [
+    initialConditions,
+    regime,
+    conceptualClusters,
+    clusterAssociations,
+    continuityNote,
+    observationClosure,
+    positionalDrift,
+    feedbackMode,
+    reflections,
+  ]);
+
+  // Apply feedback mode and emergence signal gating (subtle adjustments to interpretation density)
   // ENVIRONMENT_DOMINANT: fewer continuations, more compressed narrative, omit position
   // OBSERVER_DOMINANT: allow more continuations, allow more detail, include position
   // COUPLED: normal behavior
+  // Emergence signal gates: multiplicity, narrative compression, asymmetry emphasis
   const effectiveRegimeNarrative = useMemo(() => {
     if (observationClosure === 'closed') {
       return null;
+    }
+    
+    // Emergence signal gate: suppress narrative if no emergence detected
+    // Narrative compression only activates when emergence is present
+    if (emergenceSignal === 'none' && regimeNarrative) {
+      // Suppress narrative if it describes variation or change without emergence
+      if (regimeNarrative.text.includes('varied') || regimeNarrative.text.includes('change') || 
+          regimeNarrative.text.includes('shift') || regimeNarrative.text.includes('instability')) {
+        return null;
+      }
     }
     
     // ENVIRONMENT_DOMINANT: suppress narrative if it's too detailed (compression)
@@ -575,11 +639,23 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [observationClosure, feedbackMode, regimeNarrative]);
+  }, [observationClosure, feedbackMode, emergenceSignal, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
     if (observationClosure === 'closed') {
       return [];
+    }
+    
+    // Emergence signal gate: allow multiplicity only when emergence is detected
+    // Weak emergence: allow up to 2 continuations
+    // Strong emergence: allow up to 3 continuations
+    // No emergence: suppress multiplicity (limit to 1)
+    if (emergenceSignal === 'none') {
+      return continuations.slice(0, 1); // Suppress multiplicity
+    } else if (emergenceSignal === 'weak') {
+      return continuations.slice(0, 2); // Allow moderate multiplicity
+    } else if (emergenceSignal === 'strong') {
+      return continuations.slice(0, 3); // Allow full multiplicity
     }
     
     // ENVIRONMENT_DOMINANT: allow fewer continuations (limit to 1)
@@ -594,7 +670,7 @@ export default function YearlyWrapPage() {
     
     // COUPLED: normal behavior (existing limits apply)
     return continuations;
-  }, [observationClosure, feedbackMode, continuations]);
+  }, [observationClosure, feedbackMode, emergenceSignal, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -798,7 +874,8 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {conceptualClusters.length >= 2 && (
+          {/* Gated by emergence signal: suppress when no emergence (tighten silence rules) */}
+          {conceptualClusters.length >= 2 && emergenceSignal !== 'none' && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
