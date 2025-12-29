@@ -7,7 +7,7 @@
  * into a single coherent Yearly Wrap object.
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useLogEvent } from '../../lib/useLogEvent';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
@@ -81,11 +81,13 @@ export default function YearlyWrapPage() {
   // Session-scoped: resets on new wallet session
   useEffect(() => {
     if (connected && address) {
-      // New session - reset session start
+      // New session - reset session start and decay state
       setSessionStart(new Date().toISOString());
+      previousDecayStateRef.current = null;
     } else {
-      // Disconnected - clear session start
+      // Disconnected - clear session start and decay state
       setSessionStart(null);
+      previousDecayStateRef.current = null;
     }
   }, [connected, address]);
 
@@ -967,26 +969,35 @@ export default function YearlyWrapPage() {
     reflections,
   ]);
 
-  // Entropic decay - meaning decays over time unless reinforced by new reflections
+  // Entropic decay - meaning decays over time unless reinforced by novel reflections
+  // Only genuine new reflections (exceeding novelty threshold) can reinforce meaning
   // Deterministic: same reflections + same time → same decay factor
   // Session-scoped: decay resets on new wallet session
+  const previousDecayStateRef = useRef<EntropicDecayState | null>(null);
+  
   const entropicDecayState = useMemo(() => {
     if (!sessionStart || reflections.length === 0) {
       // No session or no reflections = complete decay
-      return {
+      const state = {
         decayFactor: 0,
         isDecayed: true,
         timeSinceLastReinforcement: 0,
         sessionStart: sessionStart || new Date().toISOString(),
+        lastNovelReflectionTime: 0,
       };
+      previousDecayStateRef.current = state;
+      return state;
     }
 
-    return computeEntropicDecay({
+    const state = computeEntropicDecay({
       reflections,
       sessionStart,
       currentTime: new Date().toISOString(),
-      previousDecayState: null, // Recompute each time (deterministic)
+      previousDecayState: previousDecayStateRef.current,
     });
+    
+    previousDecayStateRef.current = state;
+    return state;
   }, [reflections, sessionStart]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, and entropic decay gating

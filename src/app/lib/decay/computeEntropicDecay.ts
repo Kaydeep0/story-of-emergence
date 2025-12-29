@@ -21,12 +21,14 @@
  */
 
 import type { ReflectionEntry } from '../insights/types';
+import { hasReinforcingNovelty } from '../novelty';
 
 export type EntropicDecayState = {
   decayFactor: number; // 0-1, where 1 = full meaning, 0 = complete decay
   isDecayed: boolean; // true when decay threshold crossed
   timeSinceLastReinforcement: number; // milliseconds
   sessionStart: string; // ISO timestamp
+  lastNovelReflectionTime: number; // milliseconds since epoch
 };
 
 export type DecaySignals = {
@@ -64,6 +66,7 @@ export function computeEntropicDecay(signals: DecaySignals): EntropicDecayState 
       isDecayed: true,
       timeSinceLastReinforcement: 0,
       sessionStart,
+      lastNovelReflectionTime: 0,
     };
   }
 
@@ -76,10 +79,47 @@ export function computeEntropicDecay(signals: DecaySignals): EntropicDecayState 
   const currentTimeMs = new Date(currentTime).getTime();
   const sessionDuration = currentTimeMs - sessionStartTime;
 
-  // Find most recent reflection (last reinforcement)
-  const mostRecentReflection = sortedReflections[sortedReflections.length - 1];
-  const mostRecentTime = new Date(mostRecentReflection.createdAt).getTime();
-  const timeSinceLastReinforcement = currentTimeMs - mostRecentTime;
+  // Find most recent NOVEL reflection (last genuine reinforcement)
+  // Only novel reflections can reinforce meaning
+  let lastNovelReflectionTime = previousDecayState?.lastNovelReflectionTime || sessionStartTime;
+  let timeSinceLastReinforcement = currentTimeMs - lastNovelReflectionTime;
+
+  // Check if there are new novel reflections since last computation
+  if (previousDecayState) {
+    const previousTime = previousDecayState.lastNovelReflectionTime || sessionStartTime;
+    const newReflections = sortedReflections.filter(r => 
+      new Date(r.createdAt).getTime() > previousTime
+    );
+    
+    if (newReflections.length > 0) {
+      const priorReflections = sortedReflections.filter(r =>
+        new Date(r.createdAt).getTime() <= previousTime
+      );
+      
+      // Check if new reflections contain sufficient novelty
+      if (hasReinforcingNovelty(newReflections, priorReflections)) {
+        // Novel reflection found - update reinforcement time
+        const mostRecentNovel = newReflections[newReflections.length - 1];
+        lastNovelReflectionTime = new Date(mostRecentNovel.createdAt).getTime();
+        timeSinceLastReinforcement = currentTimeMs - lastNovelReflectionTime;
+      }
+    }
+  } else {
+    // First computation - check if most recent reflection is novel
+    if (sortedReflections.length > 0) {
+      const mostRecent = sortedReflections[sortedReflections.length - 1];
+      const priorReflections = sortedReflections.slice(0, -1);
+      
+      if (hasReinforcingNovelty([mostRecent], priorReflections)) {
+        lastNovelReflectionTime = new Date(mostRecent.createdAt).getTime();
+        timeSinceLastReinforcement = currentTimeMs - lastNovelReflectionTime;
+      } else {
+        // Most recent reflection is not novel - use session start as baseline
+        lastNovelReflectionTime = sessionStartTime;
+        timeSinceLastReinforcement = currentTimeMs - sessionStartTime;
+      }
+    }
+  }
 
   // Compute reflection density (reflections per day over session)
   const daysSinceSessionStart = Math.max(sessionDuration / (1000 * 60 * 60 * 24), 0.1);
@@ -123,6 +163,7 @@ export function computeEntropicDecay(signals: DecaySignals): EntropicDecayState 
     isDecayed,
     timeSinceLastReinforcement,
     sessionStart,
+    lastNovelReflectionTime,
   };
 }
 
