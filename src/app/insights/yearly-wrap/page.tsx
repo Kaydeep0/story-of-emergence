@@ -43,10 +43,12 @@ import { inferObserverEnvironmentFeedback } from '../../lib/feedback/inferObserv
 import { getInitialConditions } from '../../lib/constraints/inferInitialConditions';
 import { inferConstraintRelativeEmergence } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import { inferEmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
+import { inferInterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import type { EmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
+import type { InterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -708,12 +710,107 @@ export default function YearlyWrapPage() {
     reflections,
   ]);
 
-  // Apply feedback mode, emergence signal, and persistence gating
-  // Emergence persistence gates: sustained multiplicity, narrative compression, spatial density
-  // Collapse forces silence tightening
+  // Calculate structural deviation magnitude for load regulation
+  const structuralDeviationMagnitude = useMemo(() => {
+    if (!initialConditions || conceptualClusters.length === 0) {
+      return 0;
+    }
+
+    const { constraintDensity, authorityConcentration } = initialConditions;
+
+    let expectedClusterCount = 3;
+    if (constraintDensity === 'high') {
+      expectedClusterCount = 2;
+    } else if (constraintDensity === 'low') {
+      expectedClusterCount = 4;
+    }
+
+    let expectedAssociationDensity = 0.3;
+    if (authorityConcentration === 'high') {
+      expectedAssociationDensity = 0.6;
+    } else if (authorityConcentration === 'low') {
+      expectedAssociationDensity = 0.2;
+    }
+
+    const clusterCount = conceptualClusters.length;
+    const clustersWithAssociations = new Set<string>();
+    clusterAssociations.forEach(a => {
+      clustersWithAssociations.add(a.fromClusterId);
+      clustersWithAssociations.add(a.toClusterId);
+    });
+    const associationDensity = clusterCount > 0
+      ? clustersWithAssociations.size / clusterCount
+      : 0;
+
+    const clusterDeviationRatio = Math.abs(clusterCount - expectedClusterCount) / Math.max(expectedClusterCount, 1);
+    const associationDeviationRatio = Math.abs(associationDensity - expectedAssociationDensity) / Math.max(expectedAssociationDensity, 0.1);
+
+    return Math.max(clusterDeviationRatio, associationDeviationRatio);
+  }, [conceptualClusters, clusterAssociations, initialConditions]);
+
+  // Infer interpretive load regulation (internal only)
+  // Regulates how much meaning is allowed to surface, even when emergence is persistent
+  const interpretiveLoad = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    const currentYearNum = new Date().getFullYear();
+
+    // Compute previous load for persistence check
+    // Try to compute previous period's load (simplified - would need full computation)
+    // For now, we'll use null to indicate no previous load
+    // In a full implementation, we'd compute this from previous periods
+    const previousLoad: InterpretiveLoad | null = null;
+
+    return inferInterpretiveLoad({
+      emergencePersistence,
+      structuralDeviationMagnitude,
+      continuityNote,
+      initialConditions,
+      feedbackMode,
+      regime,
+      closure: observationClosure,
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      previousLoad,
+    });
+  }, [
+    emergencePersistence,
+    structuralDeviationMagnitude,
+    continuityNote,
+    initialConditions,
+    feedbackMode,
+    regime,
+    observationClosure,
+    conceptualClusters,
+    clusterAssociations,
+  ]);
+
+  // Apply feedback mode, emergence signal, persistence, and load gating
+  // Interpretive load gates: narrative generation, multiplicity count, spatial density
+  // Load rules: minimal (silence or single weak), constrained (max 2, suppress expansion), saturated (compression only)
   const effectiveRegimeNarrative = useMemo(() => {
     if (observationClosure === 'closed') {
       return null;
+    }
+    
+    // Load gate: minimal load suppresses narrative expansion
+    if (interpretiveLoad === 'minimal') {
+      return null;
+    }
+    
+    // Load gate: constrained load suppresses narrative expansion
+    if (interpretiveLoad === 'constrained' && regimeNarrative) {
+      // Suppress narrative if it describes variation or change (suppress expansion)
+      if (regimeNarrative.text.includes('varied') || regimeNarrative.text.includes('change') || 
+          regimeNarrative.text.includes('shift') || regimeNarrative.text.includes('instability')) {
+        return null;
+      }
+    }
+    
+    // Load gate: saturated load allows compression only (no new interpretations)
+    // If narrative exists, allow it (it's already compressed)
+    if (interpretiveLoad === 'saturated') {
+      // Allow existing narrative but don't introduce new ones
+      return regimeNarrative;
     }
     
     // Collapse rule: suppress narrative when emergence has collapsed
@@ -749,11 +846,27 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, regimeNarrative]);
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
     if (observationClosure === 'closed') {
       return [];
+    }
+    
+    // Load gate: minimal load allows silence or single weak interpretation
+    if (interpretiveLoad === 'minimal') {
+      return continuations.slice(0, 1);
+    }
+    
+    // Load gate: constrained load allows limited multiplicity (max 2)
+    if (interpretiveLoad === 'constrained') {
+      return continuations.slice(0, 2);
+    }
+    
+    // Load gate: saturated load allows compression only (no new interpretations)
+    // Limit to 1 continuation for saturated
+    if (interpretiveLoad === 'saturated') {
+      return continuations.slice(0, 1);
     }
     
     // Collapse rule: suppress all continuations when emergence has collapsed
@@ -764,8 +877,9 @@ export default function YearlyWrapPage() {
     // Persistence gate: sustained multiplicity only when persistent
     if (emergencePersistence === 'persistent') {
       // Persistent emergence: allow full multiplicity based on emergence signal strength
+      // But respect load limits (max 2 from constrained load)
       if (emergenceSignal === 'strong') {
-        return continuations.slice(0, 3);
+        return continuations.slice(0, 2); // Respect load limit
       } else if (emergenceSignal === 'weak') {
         return continuations.slice(0, 2);
       }
@@ -782,13 +896,13 @@ export default function YearlyWrapPage() {
       return continuations.slice(0, 1); // Suppress multiplicity
     }
     
-    // Fallback to emergence signal gating
+    // Fallback to emergence signal gating (but respect load limits)
     if (emergenceSignal === 'none') {
       return continuations.slice(0, 1);
     } else if (emergenceSignal === 'weak') {
       return continuations.slice(0, 2);
     } else if (emergenceSignal === 'strong') {
-      return continuations.slice(0, 3);
+      return continuations.slice(0, 2); // Respect load limit (max 2)
     }
     
     // ENVIRONMENT_DOMINANT: allow fewer continuations (limit to 1)
@@ -796,14 +910,14 @@ export default function YearlyWrapPage() {
       return continuations.slice(0, 1);
     }
     
-    // OBSERVER_DOMINANT: allow more continuations (up to 3)
+    // OBSERVER_DOMINANT: allow more continuations (but respect load limits)
     if (feedbackMode === 'OBSERVER_DOMINANT') {
-      return continuations.slice(0, 3);
+      return continuations.slice(0, 2); // Respect load limit (max 2)
     }
     
-    // COUPLED: normal behavior (existing limits apply)
-    return continuations;
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, continuations]);
+    // COUPLED: normal behavior (existing limits apply, but respect load)
+    return continuations.slice(0, 2); // Default to max 2
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -1007,8 +1121,9 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by emergence persistence: suppress when collapsed or none (tighten silence rules) */}
-          {conceptualClusters.length >= 2 && emergencePersistence !== 'none' && emergencePersistence !== 'collapsed' && (
+          {/* Gated by interpretive load: suppress when minimal (tighten silence rules) */}
+          {/* Load gate: minimal load suppresses spatial density */}
+          {conceptualClusters.length >= 2 && interpretiveLoad !== 'minimal' && emergencePersistence !== 'collapsed' && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
