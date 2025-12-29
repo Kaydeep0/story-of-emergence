@@ -44,11 +44,13 @@ import { getInitialConditions } from '../../lib/constraints/inferInitialConditio
 import { inferConstraintRelativeEmergence } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import { inferEmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 import { inferInterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
+import { inferInterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import type { EmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 import type { InterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
+import type { InterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -784,12 +786,156 @@ export default function YearlyWrapPage() {
     clusterAssociations,
   ]);
 
-  // Apply feedback mode, emergence signal, persistence, and load gating
-  // Interpretive load gates: narrative generation, multiplicity count, spatial density
-  // Load rules: minimal (silence or single weak), constrained (max 2, suppress expansion), saturated (compression only)
+  // Infer interpretive irreversibility and memory lock (internal only)
+  // Ensures that once meaning collapses or is suppressed, it cannot be reintroduced
+  // without genuinely stronger evidence. This prevents retroactive reinterpretation.
+  const interpretiveIrreversibility = useMemo(() => {
+    const currentYearNum = new Date().getFullYear();
+
+    // Compute previous periods' collapse history for irreversibility check
+    const previousPeriodsData: Array<{
+      persistence: EmergencePersistence;
+      load: InterpretiveLoad;
+      regime: Regime;
+      closure: ObservationClosure;
+    }> = [];
+
+    // Track if we have any previous period data (determines if this is a "new session")
+    let hasPreviousData = false;
+
+    for (let yearOffset = 1; yearOffset <= 2; yearOffset++) {
+      const year = currentYearNum - yearOffset;
+      const yearStr = year.toString();
+      const yearWrap = buildPriorYearWrap(reflections, year);
+      
+      if (!yearWrap) {
+        continue;
+      }
+
+      hasPreviousData = true;
+
+      const prevClusters = generateConceptualClusters(reflections, yearWrap);
+      const prevAssociations = prevClusters.length >= 2
+        ? generateClusterAssociations(prevClusters, yearStr)
+        : [];
+
+      // Compute previous period's signals (simplified - would need full computation)
+      const prevRawRegime = rawRegimesForPeriods.get(yearStr) || 'deterministic';
+      const prevContinuity = yearOffset === 1 
+        ? generateYearlyContinuity(yearWrap, buildPriorYearWrap(reflections, year - 1))
+        : null;
+      
+      // Compute previous emergence persistence (simplified)
+      const prevFeedbackMode: FeedbackMode = prevRawRegime === 'deterministic' 
+        ? 'ENVIRONMENT_DOMINANT'
+        : 'COUPLED';
+
+      const prevEmergence = inferConstraintRelativeEmergence({
+        initialConditions,
+        regime: prevRawRegime,
+        clusters: prevClusters,
+        associations: prevAssociations,
+        currentPeriod: yearStr,
+        continuityNote: prevContinuity,
+        closure: 'open', // Assume open for previous periods
+        positionalDrift: null,
+        feedbackMode: prevFeedbackMode,
+        previousPeriods: undefined,
+      });
+
+      const prevPersistence = inferEmergencePersistence({
+        currentEmergence: prevEmergence,
+        previousEmergence: null, // Simplified
+        regime: prevRawRegime,
+        clusters: prevClusters,
+        associations: prevAssociations,
+        currentPeriod: yearStr,
+        continuityNote: prevContinuity,
+        closure: 'open',
+        feedbackMode: prevFeedbackMode,
+        initialConditions,
+        previousPeriods: undefined,
+      });
+
+      const prevLoad = inferInterpretiveLoad({
+        emergencePersistence: prevPersistence,
+        structuralDeviationMagnitude: 0, // Simplified
+        continuityNote: prevContinuity,
+        initialConditions,
+        feedbackMode: prevFeedbackMode,
+        regime: prevRawRegime,
+        closure: 'open',
+        clusters: prevClusters,
+        associations: prevAssociations,
+        previousLoad: null,
+      });
+
+      previousPeriodsData.push({
+        persistence: prevPersistence,
+        load: prevLoad,
+        regime: prevRawRegime,
+        closure: 'open', // Simplified
+      });
+    }
+
+    // Determine if this is a new session (no previous data = new session)
+    const isNewSession = !hasPreviousData;
+
+    return inferInterpretiveIrreversibility({
+      currentLoad: interpretiveLoad,
+      currentPersistence: emergencePersistence,
+      regime,
+      closure: observationClosure,
+      feedbackMode,
+      structuralDeviationMagnitude,
+      continuityNote,
+      previousPeriods: previousPeriodsData.length > 0 ? previousPeriodsData : undefined,
+      isNewSession,
+    });
+  }, [
+    interpretiveLoad,
+    emergencePersistence,
+    regime,
+    observationClosure,
+    feedbackMode,
+    structuralDeviationMagnitude,
+    continuityNote,
+    initialConditions,
+    rawRegimesForPeriods,
+    reflections,
+  ]);
+
+  // Apply feedback mode, emergence signal, persistence, load, and irreversibility gating
+  // Interpretive irreversibility gates: prevents reintroduction of meaning after collapse
+  // Locked suppresses all interpretation, hardened requires extreme evidence, open behaves normally
   const effectiveRegimeNarrative = useMemo(() => {
     if (observationClosure === 'closed') {
       return null;
+    }
+    
+    // Irreversibility gate: locked suppresses all narrative
+    if (interpretiveIrreversibility === 'locked') {
+      return null;
+    }
+    
+    // Irreversibility gate: hardened requires extreme evidence
+    if (interpretiveIrreversibility === 'hardened') {
+      // Hardened allows interpretation only under extreme evidence:
+      // - Persistent emergence
+      // - Very high structural deviation (>0.6)
+      // - Strong continuity
+      // - Observer-dominant feedback
+      // - Non-minimal load
+      if (emergencePersistence === 'persistent' &&
+          structuralDeviationMagnitude > 0.6 &&
+          continuityNote !== null &&
+          feedbackMode === 'OBSERVER_DOMINANT' &&
+          interpretiveLoad !== 'minimal') {
+        // Allow narrative under extreme evidence
+      } else {
+        // Suppress narrative (not extreme enough)
+        return null;
+      }
     }
     
     // Load gate: minimal load suppresses narrative expansion
@@ -846,11 +992,32 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, regimeNarrative]);
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
     if (observationClosure === 'closed') {
       return [];
+    }
+    
+    // Irreversibility gate: locked suppresses all continuations
+    if (interpretiveIrreversibility === 'locked') {
+      return [];
+    }
+    
+    // Irreversibility gate: hardened requires extreme evidence
+    if (interpretiveIrreversibility === 'hardened') {
+      // Hardened allows interpretation only under extreme evidence
+      if (emergencePersistence === 'persistent' &&
+          structuralDeviationMagnitude > 0.6 &&
+          continuityNote !== null &&
+          feedbackMode === 'OBSERVER_DOMINANT' &&
+          interpretiveLoad !== 'minimal') {
+        // Allow limited continuations under extreme evidence (max 1)
+        return continuations.slice(0, 1);
+      } else {
+        // Suppress continuations (not extreme enough)
+        return [];
+      }
     }
     
     // Load gate: minimal load allows silence or single weak interpretation
@@ -917,7 +1084,7 @@ export default function YearlyWrapPage() {
     
     // COUPLED: normal behavior (existing limits apply, but respect load)
     return continuations.slice(0, 2); // Default to max 2
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, continuations]);
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -1121,9 +1288,19 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by interpretive load: suppress when minimal (tighten silence rules) */}
-          {/* Load gate: minimal load suppresses spatial density */}
-          {conceptualClusters.length >= 2 && interpretiveLoad !== 'minimal' && emergencePersistence !== 'collapsed' && (
+          {/* Gated by interpretive irreversibility and load: suppress when locked, hardened (without extreme evidence), or minimal */}
+          {/* Irreversibility gate: locked suppresses spatial layout */}
+          {/* Irreversibility gate: hardened suppresses spatial layout unless extreme evidence */}
+          {conceptualClusters.length >= 2 && 
+           interpretiveIrreversibility !== 'locked' &&
+           !(interpretiveIrreversibility === 'hardened' && 
+             !(emergencePersistence === 'persistent' &&
+               structuralDeviationMagnitude > 0.6 &&
+               continuityNote !== null &&
+               feedbackMode === 'OBSERVER_DOMINANT' &&
+               interpretiveLoad !== 'minimal')) &&
+           interpretiveLoad !== 'minimal' && 
+           emergencePersistence !== 'collapsed' && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
