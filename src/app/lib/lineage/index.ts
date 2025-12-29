@@ -39,3 +39,30 @@ export {
   clearAllLineageGraphs,
 } from './storeLineageGraph';
 
+export type {
+  StructuralDistanceMatrix,
+  DistanceSignals,
+} from './computeStructuralDistance';
+
+export {
+  computeStructuralDistance,
+  getStructuralDistance,
+  getDistancesFromReflection,
+} from './computeStructuralDistance';
+
+export type {
+  EncryptedDistanceMatrix,
+} from './encryptDistanceMatrix';
+
+export {
+  encryptDistanceMatrix,
+  decryptDistanceMatrix,
+} from './encryptDistanceMatrix';
+
+export {
+  saveDistanceMatrix,
+  loadDistanceMatrix,
+  clearDistanceMatrix,
+  clearAllDistanceMatrices,
+} from './storeDistanceMatrix';
+

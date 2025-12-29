@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1196,6 +1196,22 @@ export default function YearlyWrapPage() {
     });
   }, [reflections, sessionStart, address]);
 
+  // Structural distance matrix - read-only, encrypted
+  // Measures how far apart reflections are in structural space
+  // Does not influence inference, decay, novelty, saturation, regime, or dwell time
+  // Session-scoped: computed per wallet session
+  const structuralDistanceMatrix = useMemo(() => {
+    if (!structuralLineageGraph) {
+      return null;
+    }
+
+    // Compute structural distance matrix from lineage graph
+    return computeStructuralDistance({
+      lineageGraph: structuralLineageGraph,
+      sessionId: structuralLineageGraph.sessionId,
+    });
+  }, [structuralLineageGraph]);
+
   // Encrypt and store lineage graph (async, non-blocking)
   useEffect(() => {
     if (!structuralLineageGraph || !address || !sessionKey) {
@@ -1213,6 +1229,24 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [structuralLineageGraph, address, sessionKey]);
+
+  // Encrypt and store distance matrix (async, non-blocking)
+  useEffect(() => {
+    if (!structuralDistanceMatrix || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptDistanceMatrix(structuralDistanceMatrix, sessionKey);
+        const sessionId = structuralDistanceMatrix.sessionId;
+        saveDistanceMatrix(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store distance matrix', err);
+      }
+    })();
+  }, [structuralDistanceMatrix, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
