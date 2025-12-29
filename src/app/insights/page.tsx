@@ -79,6 +79,7 @@ import { generateNarrative } from '../lib/distributions/narratives';
 import { inspectDistribution } from '../lib/distributions/inspect';
 import { fromNarrative } from '../lib/insights/viewModels';
 import { InsightPanel } from './components/InsightPanel';
+import { InsightTimeline } from './components/InsightTimeline';
 
 
 /**
@@ -560,6 +561,9 @@ export default function InsightsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<NormalizedInsight | null>(null);
   const [selectedOriginalCard, setSelectedOriginalCard] = useState<InsightCard | null>(null);
+
+  // Distribution insights view toggle
+  const [insightView, setInsightView] = useState<'panel' | 'timeline'>('panel');
 
   // Hydrate feedback scores from localStorage on mount to ensure stable ordering
   useEffect(() => {
@@ -2378,11 +2382,41 @@ export default function InsightsPage() {
                 {/* Distribution Insights Panel */}
                 {!summaryReflectionsLoading && !summaryReflectionsError && distributionInsightCards.length > 0 && (
                   <div className="space-y-4">
-                    <h2 className="text-lg font-semibold flex items-center gap-2 text-zinc-50">
-                      Distribution Insights
-                    </h2>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold flex items-center gap-2 text-zinc-50">
+                        Distribution Insights
+                      </h2>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInsightView('panel')}
+                          className={`text-xs px-3 py-1 rounded border transition-colors ${
+                            insightView === 'panel'
+                              ? 'bg-white/10 border-white/20 text-white'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:text-white/80'
+                          }`}
+                        >
+                          Panel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInsightView('timeline')}
+                          className={`text-xs px-3 py-1 rounded border transition-colors ${
+                            insightView === 'timeline'
+                              ? 'bg-white/10 border-white/20 text-white'
+                              : 'bg-white/5 border-white/10 text-white/60 hover:text-white/80'
+                          }`}
+                        >
+                          Timeline
+                        </button>
+                      </div>
+                    </div>
                     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-                      <InsightPanel insights={distributionInsightCards} />
+                      {insightView === 'panel' ? (
+                        <InsightPanel insights={distributionInsightCards} />
+                      ) : (
+                        <InsightTimeline insights={distributionInsightCards} />
+                      )}
                     </div>
                   </div>
                 )}
