@@ -1234,35 +1234,12 @@ export default function YearlyWrapPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
+  // Silence: No empty containers, no placeholder text, no explanatory copy
+  // Silence = visual quiet (space, muted tone, nothing rendered)
+  if (loading || error || !yearlyWrap || !viewModel) {
     return (
       <YearlyWrapContainer>
-        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
-        <p className="text-gray-600">Loading reflections...</p>
-      </YearlyWrapContainer>
-    );
-  }
-
-  if (error) {
-    return (
-      <YearlyWrapContainer>
-        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
-        <div className="border border-red-200 bg-red-50 p-6 rounded">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      </YearlyWrapContainer>
-    );
-  }
-
-  if (!yearlyWrap || !viewModel) {
-    return (
-      <YearlyWrapContainer>
-        <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
-        <div className="border border-gray-200 bg-gray-50 p-6 rounded">
-          <p className="text-sm text-gray-600">
-            Not enough data to generate a yearly wrap. Keep reflecting to see your year in review.
-          </p>
-        </div>
+        <div />
       </YearlyWrapContainer>
     );
   }
@@ -1313,21 +1290,8 @@ export default function YearlyWrapPage() {
         </p>
       </div>
 
-      {/* Density and Cadence Labels */}
-      {(vmYearlyWrap.densityLabel || vmYearlyWrap.cadenceLabel) && (
-        <div className="mb-16 flex gap-2 flex-wrap">
-          {vmYearlyWrap.densityLabel && (
-            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
-              {vmYearlyWrap.densityLabel.charAt(0).toUpperCase() + vmYearlyWrap.densityLabel.slice(1)} density
-            </span>
-          )}
-          {vmYearlyWrap.cadenceLabel && (
-            <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
-              {vmYearlyWrap.cadenceLabel.charAt(0).toUpperCase() + vmYearlyWrap.cadenceLabel.slice(1)} cadence
-            </span>
-          )}
-        </div>
-      )}
+      {/* Density and Cadence Labels - Removed per visual grammar: badges are forbidden visuals */}
+      {/* Badges imply achievement and are not part of the visual grammar */}
 
       {/* Dominant Pattern */}
       {vmYearlyWrap.dominantPattern && (
@@ -1356,21 +1320,15 @@ export default function YearlyWrapPage() {
       )}
 
       {/* Shifts */}
+      {/* Visual grammar: No arrows or directional symbols (forbidden visuals) */}
       {vmYearlyWrap.shifts.length > 0 && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-6">Shifts</h3>
           <div className="space-y-4">
             {vmYearlyWrap.shifts.map((shift) => (
-              <div key={shift.id} className="flex items-start gap-3 text-sm">
-                <span className="text-gray-400 mt-0.5 shrink-0 text-base">
-                  {shift.direction === 'intensifying' ? '↑' : 
-                   shift.direction === 'stabilizing' ? '→' : 
-                   shift.direction === 'fragmenting' ? '↯' : '—'}
-                </span>
-                <div className="flex-1">
-                  <p className="font-normal text-gray-700 mb-1">{shift.headline}</p>
-                  <p className="text-gray-600 leading-relaxed">{shift.summary}</p>
-                </div>
+              <div key={shift.id} className="text-sm">
+                <p className="font-normal text-gray-700 mb-1">{shift.headline}</p>
+                <p className="text-gray-600 leading-relaxed">{shift.summary}</p>
               </div>
             ))}
           </div>
@@ -1404,12 +1362,12 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Continuations - conditional option space (only transitional/emergent) */}
-          {/* Gated by silence state from representation layer */}
+          {/* Visual grammar: Rare emergence - never emphasized, same typographic weight, appears as continuation not highlight */}
           {!silenceState.continuationsSuppressed && vmContinuations.length > 0 && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <div className="space-y-3">
                 {vmContinuations.map((continuation) => (
-                  <p key={continuation.id} className="text-sm text-gray-600 italic leading-relaxed">
+                  <p key={continuation.id} className="text-sm text-gray-500 leading-relaxed opacity-75">
                     {continuation.text}
                   </p>
                 ))}
@@ -1418,23 +1376,23 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Regime narrative - observational compression across time */}
-          {/* Gated by silence state from representation layer */}
+          {/* Visual grammar: Minimal meaning - muted color, reduced opacity, smaller font */}
           {!silenceState.narrativeSuppressed && vmNarrative && (
             <div className="mb-8 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-sm text-gray-500 leading-relaxed opacity-80">
                 {vmNarrative.text}
               </p>
               {/* Observer position - field position descriptor */}
-              {/* Gated by silence state from representation layer */}
+              {/* Visual grammar: Minimal meaning - single line, muted color, reduced opacity */}
               {!silenceState.observerPositionSuppressed && vmObserverPosition && (
                 <div className="mt-3">
-                  <p className="text-xs text-gray-500 italic">
+                  <p className="text-xs text-gray-400 italic opacity-70">
                     {vmObserverPosition.phrase}
                   </p>
                   {/* Positional drift - difference across periods */}
-                  {/* Gated by silence state from representation layer */}
+                  {/* Visual grammar: Minimal meaning - muted color, reduced opacity, smaller font */}
                   {!silenceState.positionalDriftSuppressed && vmPositionalDrift && (
-                    <p className="text-xs text-gray-400 mt-1 italic">
+                    <p className="text-xs text-gray-400 mt-1 italic opacity-60">
                       {vmPositionalDrift.phrase}
                     </p>
                   )}
@@ -1444,16 +1402,16 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Observer position standalone (if narrative is null but position exists) */}
-          {/* Gated by silence state from representation layer */}
+          {/* Visual grammar: Minimal meaning - single line, muted color, reduced opacity */}
           {silenceState.narrativeSuppressed && !silenceState.observerPositionSuppressed && vmObserverPosition && (
             <div className="mb-8 pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-500 italic">
+              <p className="text-xs text-gray-400 italic opacity-70">
                 {vmObserverPosition.phrase}
               </p>
               {/* Positional drift - difference across periods */}
-              {/* Gated by silence state from representation layer */}
+              {/* Visual grammar: Minimal meaning - muted color, reduced opacity */}
               {!silenceState.positionalDriftSuppressed && vmPositionalDrift && (
-                <p className="text-xs text-gray-400 mt-1 italic">
+                <p className="text-xs text-gray-400 mt-1 italic opacity-60">
                   {vmPositionalDrift.phrase}
                 </p>
               )}
@@ -1470,8 +1428,9 @@ export default function YearlyWrapPage() {
               return (
                 <div key={vmCluster.id} className="text-base text-gray-700">
                   <p className="font-normal mb-1">{vmCluster.label}</p>
+                  {/* Visual grammar: Minimal meaning - muted color, reduced opacity, no bullets (icons forbidden) */}
                   {originalCluster.faded && originalCluster.fadePhrase && (
-                    <p className="text-xs text-gray-500 mb-1">• {originalCluster.fadePhrase}</p>
+                    <p className="text-xs text-gray-400 mb-1 opacity-70">{originalCluster.fadePhrase}</p>
                   )}
                   {vmCluster.description && (
                     <p className="text-sm text-gray-600 leading-relaxed mb-2">{vmCluster.description}</p>

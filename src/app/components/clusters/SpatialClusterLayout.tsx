@@ -144,7 +144,7 @@ export function SpatialClusterLayout({ clusters, associations }: Props) {
   }
 
   return (
-    <div className="relative w-full h-96 bg-gray-50/30 rounded-lg overflow-hidden">
+    <div className="relative w-full h-96 bg-gray-50/20 rounded-lg overflow-hidden">
       {positions.map(({ cluster, x, y }) => (
         <div
           key={cluster.id}
@@ -156,8 +156,9 @@ export function SpatialClusterLayout({ clusters, associations }: Props) {
           }}
         >
           {/* Soft spatial region - low opacity, no hard borders */}
+          {/* Visual grammar: Muted color, reduced opacity, no emphasis */}
           <div
-            className="absolute inset-0 rounded-full bg-gray-300/20 blur-xl"
+            className="absolute inset-0 rounded-full bg-gray-400/15 blur-xl"
             style={{
               width: '120px',
               height: '120px',
@@ -166,7 +167,8 @@ export function SpatialClusterLayout({ clusters, associations }: Props) {
           />
           
           {/* Cluster label - small, neutral, secondary */}
-          <div className="relative z-10 text-xs text-gray-600 font-normal whitespace-nowrap">
+          {/* Visual grammar: Minimal meaning - muted color, reduced opacity, smaller font */}
+          <div className="relative z-10 text-xs text-gray-500 font-normal whitespace-nowrap opacity-70">
             {cluster.label}
           </div>
         </div>
