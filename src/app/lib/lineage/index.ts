@@ -204,3 +204,28 @@ export {
   clearAllEmergenceDetections,
 } from './storeEmergenceDetection';
 
+export type {
+  EmergencePresenceMarker,
+  PresenceMarkerSignals,
+} from './markEmergencePresence';
+
+export {
+  markEmergencePresence,
+} from './markEmergencePresence';
+
+export type {
+  EncryptedPresenceMarker,
+} from './encryptPresenceMarker';
+
+export {
+  encryptPresenceMarker,
+  decryptPresenceMarker,
+} from './encryptPresenceMarker';
+
+export {
+  savePresenceMarker,
+  loadPresenceMarker,
+  clearPresenceMarker,
+  clearAllPresenceMarkers,
+} from './storePresenceMarker';
+

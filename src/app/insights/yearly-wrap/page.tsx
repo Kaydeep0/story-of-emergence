@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, detectEmergenceBoundary, encryptEmergenceDetection, saveEmergenceDetection, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, detectEmergenceBoundary, encryptEmergenceDetection, saveEmergenceDetection, markEmergencePresence, encryptPresenceMarker, savePresenceMarker, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1434,6 +1434,51 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [emergenceBoundaryState, address, sessionKey]);
+
+  // Emergence presence marker - silent, non-operative
+  // Passive internal marker that records the presence of emergence without acting on it,
+  // exposing it, stabilizing it, or narrating it.
+  // Marker records that emergence is present in the current session.
+  // Marker does not trigger any behavior.
+  // Derived exclusively from emergence boundary crossing detector (11.6).
+  // No temporal semantics: instantaneous and stateless beyond the session.
+  // Non-causal: does NOT reinforce meaning, prevent decay, affect novelty, influence saturation, stabilize regimes, extend dwell time.
+  // No UI exposure: no indicators, labels, animation, copy, explanation, affordances. Internal only.
+  // Deterministic: same session structure → same marker state. No smoothing, hysteresis, or memory.
+  // Session scoped: exists only for active wallet session, cleared on disconnect, no cross-session persistence.
+  // Encrypted at rest: marker stored encrypted client-side, stored separately from emergence detector and all metrics.
+  // Isolation: marker module cannot be imported by inference, decay, novelty, saturation, regime detection, UI logic.
+  // No semantics: no labels like "active", "alive", "on", "stable". No encouragement, no success/failure framing.
+  const emergencePresenceMarker = useMemo(() => {
+    if (!emergenceBoundaryState) {
+      return null;
+    }
+
+    // Mark emergence presence
+    // Derived exclusively from emergence boundary state
+    // No transformation, no interpretation, no response
+    return markEmergencePresence({
+      emergenceBoundaryState,
+    });
+  }, [emergenceBoundaryState]);
+
+  // Encrypt and store presence marker (async, non-blocking)
+  useEffect(() => {
+    if (!emergencePresenceMarker || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptPresenceMarker(emergencePresenceMarker, sessionKey);
+        const sessionId = emergencePresenceMarker.sessionId;
+        savePresenceMarker(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store presence marker', err);
+      }
+    })();
+  }, [emergencePresenceMarker, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
