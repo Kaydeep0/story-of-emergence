@@ -1318,6 +1318,42 @@ export default function YearlyWrapPage() {
     })();
   }, [structuralDensityMap, address, sessionKey]);
 
+  // Structural density gradient - read-only, encrypted
+  // Captures how density changes across adjacent neighborhoods
+  // Does not influence meaning reinforcement, decay, novelty, saturation, regime, dwell time, distance, neighborhood membership, or density itself
+  // Session-scoped: computed per wallet session
+  const structuralDensityGradient = useMemo(() => {
+    if (!structuralNeighborhoodIndex || !structuralDensityMap) {
+      return null;
+    }
+
+    // Compute gradient from neighborhood index and density map
+    // Gradient represents magnitude of density difference only (non-directional)
+    return computeDensityGradient({
+      neighborhoodIndex: structuralNeighborhoodIndex,
+      densityMap: structuralDensityMap,
+      sessionId: structuralDensityMap.sessionId,
+    });
+  }, [structuralNeighborhoodIndex, structuralDensityMap]);
+
+  // Encrypt and store density gradient (async, non-blocking)
+  useEffect(() => {
+    if (!structuralDensityGradient || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptDensityGradient(structuralDensityGradient, sessionKey);
+        const sessionId = structuralDensityGradient.sessionId;
+        saveDensityGradient(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store density gradient', err);
+      }
+    })();
+  }, [structuralDensityGradient, address, sessionKey]);
+
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
   // When epistemicallyClosed is true: all narrative generation paths disabled
