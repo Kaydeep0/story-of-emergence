@@ -1,91 +1,103 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useVaultState } from '../../lib/vault/useVaultState';
-
-type Props = {
-  onClose?: () => void;
-};
+import { useEffect, useRef, useState } from 'react';
+import { useVaultState, type VaultState } from '../../lib/vault/useVaultState';
 
 /**
- * Vault Unlock Overlay
- * Cinematic, stateful unlock experience that maps directly to encryption state
- * Solemn, not triumphant - no celebratory effects
+ * Vault Unlock & Lock Ritual
+ * 
+ * Experiential only - no inference logic, no data changes, no interpretation changes.
+ * 
+ * Unlock semantics:
+ * - Represents permission to observe, not permission to change
+ * - No language of success, completion, or progress
+ * - No celebratory feedback
+ * 
+ * Lock semantics:
+ * - Represents withdrawal of observation
+ * - No error states
+ * - No warning language
+ * 
+ * Visual behavior:
+ * - Full-screen overlay
+ * - Dark, dense visual field
+ * - Slow, deliberate transition (300-600ms, ease-in-out)
+ * - Subtle motion inward (depth, not forward)
+ * - Metallic or stone-like texture
+ * - Single focal point (vault aperture/iris)
+ * - Optional neutral text: "Unlocking" or no text
  */
-export function VaultUnlockOverlay({ onClose }: Props) {
+export function VaultUnlockOverlay() {
   const vaultState = useVaultState();
-  const hasCalledOnClose = useRef(false);
-  const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [hasAnimated, setHasAnimated] = useState(false);
+  const previousStateRef = useRef<VaultState | null>(null);
 
-  // Reset onClose flag when component mounts
+  // Track state transitions
   useEffect(() => {
-    hasCalledOnClose.current = false;
-  }, []);
+    const previousState = previousStateRef.current;
+    previousStateRef.current = vaultState;
 
-  // Handle unlock completion
-  useEffect(() => {
-    if (vaultState === 'unlocked') {
-      // Brief delay before dismissing (allows unlock animation to complete)
-      unlockTimeoutRef.current = setTimeout(() => {
-        if (onClose && !hasCalledOnClose.current) {
-          hasCalledOnClose.current = true;
-          onClose();
-        }
-      }, 800); // Match animation duration
-
-      return () => {
-        if (unlockTimeoutRef.current) {
-          clearTimeout(unlockTimeoutRef.current);
-          unlockTimeoutRef.current = null;
-        }
-      };
-    } else {
-      // Clear timeout if state changes away from unlocked
-      if (unlockTimeoutRef.current) {
-        clearTimeout(unlockTimeoutRef.current);
-        unlockTimeoutRef.current = null;
-      }
+    // Show overlay on unlock/lock transitions
+    if (vaultState === 'unlocking' || vaultState === 'locking') {
+      setIsVisible(true);
+      setHasAnimated(false);
+    } else if (vaultState === 'unlocked' && previousState === 'unlocking') {
+      // Unlock complete - fade out after animation
+      setTimeout(() => {
+        setIsVisible(false);
+        setHasAnimated(true);
+      }, 600);
+    } else if (vaultState === 'locked' && previousState === 'locking') {
+      // Lock complete - fade out after animation
+      setTimeout(() => {
+        setIsVisible(false);
+        setHasAnimated(true);
+      }, 500);
+    } else if (vaultState === 'locked') {
+      // Already locked - hide immediately
+      setIsVisible(false);
+    } else if (vaultState === 'unlocked' && !hasAnimated) {
+      // Already unlocked - hide immediately (no replay unless session resets)
+      setIsVisible(false);
+      setHasAnimated(true);
     }
-  }, [vaultState, onClose]);
+  }, [vaultState, hasAnimated]);
 
-  // Don't render if locked
-  if (vaultState === 'locked') {
+  // Don't render if not visible
+  if (!isVisible || vaultState === 'locked') {
     return null;
   }
 
-  // Get state-specific text
-  const getText = (): string => {
-    switch (vaultState) {
-      case 'unlocking':
-        return 'Unlocking vault…';
-      case 'unlocked':
-        return 'Vault unlocked';
-      case 'locking':
-        return 'Securing vault…';
-      default:
-        return '';
-    }
-  };
+  const isUnlocking = vaultState === 'unlocking';
+  const isLocking = vaultState === 'locking';
 
   return (
     <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center vault-overlay vault-state-${vaultState}`}
-      style={{ pointerEvents: vaultState === 'unlocking' || vaultState === 'locking' ? 'auto' : 'none' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center vault-ritual-overlay ${
+        isUnlocking ? 'vault-ritual-unlocking' : 
+        isLocking ? 'vault-ritual-locking' : 
+        ''
+      }`}
+      style={{ pointerEvents: isUnlocking || isLocking ? 'auto' : 'none' }}
     >
-      {/* Dark background with subtle depth */}
-      <div className="vault-background" />
+      {/* Dark, dense visual field */}
+      <div className="vault-ritual-background" />
       
-      {/* Inward motion effect - single direction, ease-in */}
-      <div className="vault-motion" />
+      {/* Subtle motion inward/outward - depth effect */}
+      <div className="vault-ritual-motion" />
       
-      {/* Subtle vignette */}
-      <div className="vault-vignette" />
-      
-      {/* Center content */}
-      <div className="text-center relative z-10">
-        <p className="vault-text">{getText()}</p>
+      {/* Single focal point - vault aperture/iris */}
+      <div className="vault-ritual-aperture">
+        <div className="vault-ritual-iris" />
       </div>
+      
+      {/* Optional neutral text - only during transition */}
+      {(isUnlocking || isLocking) && (
+        <div className="vault-ritual-text">
+          {isUnlocking ? 'Unlocking' : 'Locking'}
+        </div>
+      )}
     </div>
   );
 }
-
