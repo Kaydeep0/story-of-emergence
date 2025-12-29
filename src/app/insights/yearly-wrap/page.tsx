@@ -45,12 +45,14 @@ import { inferConstraintRelativeEmergence } from '../../lib/emergence/inferConst
 import { inferEmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 import { inferInterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import { inferInterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
+import { sealEpistemicBoundary } from '../../lib/boundary/sealEpistemicBoundary';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
 import type { EmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 import type { InterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import type { InterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
+import type { EpistemicBoundarySeal } from '../../lib/boundary/sealEpistemicBoundary';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -905,10 +907,57 @@ export default function YearlyWrapPage() {
     reflections,
   ]);
 
-  // Apply feedback mode, emergence signal, persistence, load, and irreversibility gating
-  // Interpretive irreversibility gates: prevents reintroduction of meaning after collapse
-  // Locked suppresses all interpretation, hardened requires extreme evidence, open behaves normally
+  // Seal epistemic boundary and close inference system (final closure layer)
+  // Prevents downstream logic from adding new interpretive dimensions
+  // Freezes the inferential graph
+  const epistemicBoundarySeal = useMemo(() => {
+    // Compute previous seal for session persistence
+    // In a full implementation, this would be tracked across periods
+    // For now, we'll compute it from previous periods' data
+    const previousSeal: EpistemicBoundarySeal | null = null;
+
+    // Determine if this is a new session (no previous data = new session)
+    const currentYearNum = new Date().getFullYear();
+    let hasPreviousData = false;
+    for (let yearOffset = 1; yearOffset <= 2; yearOffset++) {
+      const year = currentYearNum - yearOffset;
+      const yearWrap = buildPriorYearWrap(reflections, year);
+      if (yearWrap) {
+        hasPreviousData = true;
+        break;
+      }
+    }
+    const isNewSession = !hasPreviousData;
+
+    return sealEpistemicBoundary({
+      regime,
+      closure: observationClosure,
+      irreversibility: interpretiveIrreversibility,
+      load: interpretiveLoad,
+      persistence: emergencePersistence,
+      initialConditions,
+      isNewSession,
+      previousSeal,
+    });
+  }, [
+    regime,
+    observationClosure,
+    interpretiveIrreversibility,
+    interpretiveLoad,
+    emergencePersistence,
+    initialConditions,
+    reflections,
+  ]);
+
+  // Apply feedback mode, emergence signal, persistence, load, irreversibility, and epistemic boundary gating
+  // Epistemic boundary seal: final closure layer that prevents new inference paths
+  // When epistemicallyClosed is true: all narrative generation paths disabled
   const effectiveRegimeNarrative = useMemo(() => {
+    // Epistemic boundary gate: when closed, all narrative generation paths are disabled
+    if (epistemicBoundarySeal.epistemicallyClosed) {
+      return null;
+    }
+    
     if (observationClosure === 'closed') {
       return null;
     }
@@ -992,9 +1041,15 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, regimeNarrative]);
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
+    // Epistemic boundary gate: when closed, multiplicity is capped at 0 or 1
+    // Only minimal factual summaries allowed
+    if (epistemicBoundarySeal.epistemicallyClosed) {
+      return []; // Cap at 0 when epistemically closed
+    }
+    
     if (observationClosure === 'closed') {
       return [];
     }
@@ -1084,7 +1139,7 @@ export default function YearlyWrapPage() {
     
     // COUPLED: normal behavior (existing limits apply, but respect load)
     return continuations.slice(0, 2); // Default to max 2
-  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, continuations]);
+  }, [epistemicBoundarySeal, observationClosure, feedbackMode, emergenceSignal, emergencePersistence, interpretiveLoad, interpretiveIrreversibility, structuralDeviationMagnitude, continuityNote, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -1288,10 +1343,10 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by interpretive irreversibility and load: suppress when locked, hardened (without extreme evidence), or minimal */}
-          {/* Irreversibility gate: locked suppresses spatial layout */}
-          {/* Irreversibility gate: hardened suppresses spatial layout unless extreme evidence */}
+          {/* Gated by epistemic boundary seal: when closed, spatial layout is suppressed */}
+          {/* Epistemic boundary gate: when epistemicallyClosed is true, spatial layout is suppressed */}
           {conceptualClusters.length >= 2 && 
+           !epistemicBoundarySeal.epistemicallyClosed &&
            interpretiveIrreversibility !== 'locked' &&
            !(interpretiveIrreversibility === 'hardened' && 
              !(emergencePersistence === 'persistent' &&
