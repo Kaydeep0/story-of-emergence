@@ -28,7 +28,8 @@ import type { InsightCard, InsightDeltaCard } from '../../lib/insights/viewModel
 import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
-import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
+import { generateYearlyContinuity, buildPriorYearWrap, type ContinuityNote } from '../../lib/continuity/continuity';
+import type { ObservationClosure } from '../../lib/closure/inferObservationClosure';
 import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters, type ConceptualCluster, type ClusterAssociation } from '../../lib/clusters/conceptualClusters';
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 import { detectRegime } from '../../lib/regime/detectRegime';
@@ -41,9 +42,11 @@ import { inferObservationClosure } from '../../lib/closure/inferObservationClosu
 import { inferObserverEnvironmentFeedback } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import { getInitialConditions } from '../../lib/constraints/inferInitialConditions';
 import { inferConstraintRelativeEmergence } from '../../lib/emergence/inferConstraintRelativeEmergence';
+import { inferEmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
+import type { EmergencePersistence } from '../../lib/emergence/inferEmergencePersistence';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -609,20 +612,127 @@ export default function YearlyWrapPage() {
     reflections,
   ]);
 
-  // Apply feedback mode and emergence signal gating (subtle adjustments to interpretation density)
-  // ENVIRONMENT_DOMINANT: fewer continuations, more compressed narrative, omit position
-  // OBSERVER_DOMINANT: allow more continuations, allow more detail, include position
-  // COUPLED: normal behavior
-  // Emergence signal gates: multiplicity, narrative compression, asymmetry emphasis
+  // Infer emergence persistence and collapse (internal only)
+  // Tracks whether emergence remains valid across periods or has collapsed
+  const emergencePersistence = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    const currentYearNum = new Date().getFullYear();
+
+    // Compute previous emergence signals for persistence check
+    const previousPeriodsEmergenceData: Array<{
+      emergence: EmergenceSignal;
+      regime: Regime;
+      continuityNote: ContinuityNote | null;
+      closure: ObservationClosure;
+      clusters: ConceptualCluster[];
+      associations: ClusterAssociation[];
+    }> = [];
+
+    let previousEmergence: EmergenceSignal | null = null;
+
+    for (let yearOffset = 1; yearOffset <= 2; yearOffset++) {
+      const year = currentYearNum - yearOffset;
+      const yearStr = year.toString();
+      const yearWrap = buildPriorYearWrap(reflections, year);
+      
+      if (!yearWrap) {
+        continue;
+      }
+
+      const prevClusters = generateConceptualClusters(reflections, yearWrap);
+      const prevAssociations = prevClusters.length >= 2
+        ? generateClusterAssociations(prevClusters, yearStr)
+        : [];
+
+      // Compute previous period's emergence signal
+      const prevRawRegime = rawRegimesForPeriods.get(yearStr) || 'deterministic';
+      const prevContinuity = yearOffset === 1 
+        ? generateYearlyContinuity(yearWrap, buildPriorYearWrap(reflections, year - 1))
+        : null;
+      
+      // Compute previous feedback mode (simplified - would need full computation)
+      const prevFeedbackMode: FeedbackMode = prevRawRegime === 'deterministic' 
+        ? 'ENVIRONMENT_DOMINANT'
+        : 'COUPLED';
+
+      const prevEmergence = inferConstraintRelativeEmergence({
+        initialConditions,
+        regime: prevRawRegime,
+        clusters: prevClusters,
+        associations: prevAssociations,
+        currentPeriod: yearStr,
+        continuityNote: prevContinuity,
+        closure: 'open', // Assume open for previous periods
+        positionalDrift: null, // Would need to compute
+        feedbackMode: prevFeedbackMode,
+        previousPeriods: undefined,
+      });
+
+      if (yearOffset === 1) {
+        previousEmergence = prevEmergence;
+      }
+
+      previousPeriodsEmergenceData.push({
+        emergence: prevEmergence,
+        regime: prevRawRegime,
+        continuityNote: prevContinuity,
+        closure: 'open',
+        clusters: prevClusters,
+        associations: prevAssociations,
+      });
+    }
+
+    return inferEmergencePersistence({
+      currentEmergence: emergenceSignal,
+      previousEmergence,
+      regime,
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      currentPeriod: currentYear,
+      continuityNote,
+      closure: observationClosure,
+      feedbackMode,
+      initialConditions,
+      previousPeriods: previousPeriodsEmergenceData.length > 0 ? previousPeriodsEmergenceData : undefined,
+    });
+  }, [
+    emergenceSignal,
+    regime,
+    conceptualClusters,
+    clusterAssociations,
+    continuityNote,
+    observationClosure,
+    feedbackMode,
+    initialConditions,
+    rawRegimesForPeriods,
+    reflections,
+  ]);
+
+  // Apply feedback mode, emergence signal, and persistence gating
+  // Emergence persistence gates: sustained multiplicity, narrative compression, spatial density
+  // Collapse forces silence tightening
   const effectiveRegimeNarrative = useMemo(() => {
     if (observationClosure === 'closed') {
       return null;
     }
     
-    // Emergence signal gate: suppress narrative if no emergence detected
-    // Narrative compression only activates when emergence is present
-    if (emergenceSignal === 'none' && regimeNarrative) {
+    // Collapse rule: suppress narrative when emergence has collapsed
+    if (emergencePersistence === 'collapsed') {
+      return null;
+    }
+    
+    // Persistence gate: narrative compression suppressed unless persistence is non-none
+    if (emergencePersistence === 'none' && regimeNarrative) {
       // Suppress narrative if it describes variation or change without emergence
+      if (regimeNarrative.text.includes('varied') || regimeNarrative.text.includes('change') || 
+          regimeNarrative.text.includes('shift') || regimeNarrative.text.includes('instability')) {
+        return null;
+      }
+    }
+    
+    // Transient emergence: allow narrative but compress if it describes change
+    if (emergencePersistence === 'transient' && regimeNarrative) {
+      // Suppress narrative if it describes variation or change (transient = not sustained)
       if (regimeNarrative.text.includes('varied') || regimeNarrative.text.includes('change') || 
           regimeNarrative.text.includes('shift') || regimeNarrative.text.includes('instability')) {
         return null;
@@ -639,23 +749,46 @@ export default function YearlyWrapPage() {
     }
     
     return regimeNarrative;
-  }, [observationClosure, feedbackMode, emergenceSignal, regimeNarrative]);
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, regimeNarrative]);
 
   const effectiveContinuations = useMemo(() => {
     if (observationClosure === 'closed') {
       return [];
     }
     
-    // Emergence signal gate: allow multiplicity only when emergence is detected
-    // Weak emergence: allow up to 2 continuations
-    // Strong emergence: allow up to 3 continuations
-    // No emergence: suppress multiplicity (limit to 1)
-    if (emergenceSignal === 'none') {
+    // Collapse rule: suppress all continuations when emergence has collapsed
+    if (emergencePersistence === 'collapsed') {
+      return [];
+    }
+    
+    // Persistence gate: sustained multiplicity only when persistent
+    if (emergencePersistence === 'persistent') {
+      // Persistent emergence: allow full multiplicity based on emergence signal strength
+      if (emergenceSignal === 'strong') {
+        return continuations.slice(0, 3);
+      } else if (emergenceSignal === 'weak') {
+        return continuations.slice(0, 2);
+      }
+      return continuations.slice(0, 1);
+    }
+    
+    // Transient emergence: allow brief multiplicity then silence
+    if (emergencePersistence === 'transient') {
+      return continuations.slice(0, 1); // Limit to 1 for transient
+    }
+    
+    // No persistence: suppress multiplicity
+    if (emergencePersistence === 'none') {
       return continuations.slice(0, 1); // Suppress multiplicity
+    }
+    
+    // Fallback to emergence signal gating
+    if (emergenceSignal === 'none') {
+      return continuations.slice(0, 1);
     } else if (emergenceSignal === 'weak') {
-      return continuations.slice(0, 2); // Allow moderate multiplicity
+      return continuations.slice(0, 2);
     } else if (emergenceSignal === 'strong') {
-      return continuations.slice(0, 3); // Allow full multiplicity
+      return continuations.slice(0, 3);
     }
     
     // ENVIRONMENT_DOMINANT: allow fewer continuations (limit to 1)
@@ -670,7 +803,7 @@ export default function YearlyWrapPage() {
     
     // COUPLED: normal behavior (existing limits apply)
     return continuations;
-  }, [observationClosure, feedbackMode, emergenceSignal, continuations]);
+  }, [observationClosure, feedbackMode, emergenceSignal, emergencePersistence, continuations]);
 
   const effectivePositionalDrift = useMemo(() => {
     if (observationClosure === 'closed') {
@@ -874,8 +1007,8 @@ export default function YearlyWrapPage() {
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by emergence signal: suppress when no emergence (tighten silence rules) */}
-          {conceptualClusters.length >= 2 && emergenceSignal !== 'none' && (
+          {/* Gated by emergence persistence: suppress when collapsed or none (tighten silence rules) */}
+          {conceptualClusters.length >= 2 && emergencePersistence !== 'none' && emergencePersistence !== 'collapsed' && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
