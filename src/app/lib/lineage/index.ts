@@ -66,3 +66,32 @@ export {
   clearAllDistanceMatrices,
 } from './storeDistanceMatrix';
 
+export type {
+  StructuralNeighborhood,
+  StructuralNeighborhoodIndex,
+  NeighborhoodSignals,
+} from './buildNeighborhoodIndex';
+
+export {
+  buildNeighborhoodIndex,
+  getNeighborhood,
+  areNeighbors,
+  getNeighbors,
+} from './buildNeighborhoodIndex';
+
+export type {
+  EncryptedNeighborhoodIndex,
+} from './encryptNeighborhoodIndex';
+
+export {
+  encryptNeighborhoodIndex,
+  decryptNeighborhoodIndex,
+} from './encryptNeighborhoodIndex';
+
+export {
+  saveNeighborhoodIndex,
+  loadNeighborhoodIndex,
+  clearNeighborhoodIndex,
+  clearAllNeighborhoodIndices,
+} from './storeNeighborhoodIndex';
+

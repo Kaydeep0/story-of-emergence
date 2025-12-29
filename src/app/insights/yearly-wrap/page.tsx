@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1247,6 +1247,41 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [structuralDistanceMatrix, address, sessionKey]);
+
+  // Structural neighborhood index - read-only, encrypted
+  // Identifies which reflections exist within a local structural vicinity
+  // Does not influence inference, decay, novelty, saturation, regime, or dwell time
+  // Session-scoped: computed per wallet session
+  const structuralNeighborhoodIndex = useMemo(() => {
+    if (!structuralDistanceMatrix) {
+      return null;
+    }
+
+    // Build neighborhood index from distance matrix
+    return buildNeighborhoodIndex({
+      distanceMatrix: structuralDistanceMatrix,
+      distanceThreshold: 0.5, // Fixed internal constant D
+      sessionId: structuralDistanceMatrix.sessionId,
+    });
+  }, [structuralDistanceMatrix]);
+
+  // Encrypt and store neighborhood index (async, non-blocking)
+  useEffect(() => {
+    if (!structuralNeighborhoodIndex || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptNeighborhoodIndex(structuralNeighborhoodIndex, sessionKey);
+        const sessionId = structuralNeighborhoodIndex.sessionId;
+        saveNeighborhoodIndex(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store neighborhood index', err);
+      }
+    })();
+  }, [structuralNeighborhoodIndex, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
