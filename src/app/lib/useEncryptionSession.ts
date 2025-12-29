@@ -202,6 +202,7 @@ export function useEncryptionSession() {
       setAesKey(null);
       setWalletAddress(null);
       setError(null);
+      // Note: Consent memory is cleared by useVaultState hook
     }
   }, [connected]);
 

@@ -4,16 +4,21 @@ import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
+import { useConsentMemory } from '../lib/vault/useConsentMemory';
 import { toast } from 'sonner';
 
 export function UnlockBanner() {
   const { isConnected } = useAccount();
   const { ready, error, ensureEncryptionSession } = useEncryptionSession();
   const { openConnectModal } = useConnectModal();
+  const { wasHereRecently } = useConsentMemory();
   const [unlocking, setUnlocking] = useState(false);
 
   // Don't show if already unlocked
   if (ready) return null;
+
+  // Check if user was here recently
+  const showReturnOrientation = isConnected && !ready && !error && wasHereRecently();
 
   const handleUnlock = async () => {
     if (!isConnected) {
@@ -54,6 +59,11 @@ export function UnlockBanner() {
               {!isConnected && (
                 <p className="text-xs text-amber-300/70 mt-0.5">
                   Your data is encrypted and requires wallet connection
+                </p>
+              )}
+              {showReturnOrientation && (
+                <p className="text-xs text-amber-300/50 mt-0.5">
+                  You were here recently
                 </p>
               )}
             </div>
