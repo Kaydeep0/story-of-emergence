@@ -23,3 +23,15 @@ export {
   getRegimeDescription,
 } from './detectEmergenceRegime';
 
+export type {
+  RegimeDwellState,
+  DwellTimeSignals,
+} from './trackRegimeDwellTime';
+
+export {
+  trackRegimeDwellTime,
+  getDwellDurationMs,
+  getDwellDurationSeconds,
+  getDwellDurationMinutes,
+} from './trackRegimeDwellTime';
+

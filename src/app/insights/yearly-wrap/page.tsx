@@ -52,7 +52,7 @@ import { TemporalWitnessView } from '../../components/temporal/TemporalWitnessVi
 import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } from '../../lib/decay';
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
-import { detectEmergenceRegime, type EmergenceRegime } from '../../lib/emergence';
+import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -80,17 +80,19 @@ export default function YearlyWrapPage() {
     setMounted(true);
   }, []);
 
-  // Track session start (for entropic decay)
+  // Track session start (for entropic decay and regime dwell time)
   // Session-scoped: resets on new wallet session
   useEffect(() => {
     if (connected && address) {
-      // New session - reset session start and decay state
+      // New session - reset session start, decay state, and dwell state
       setSessionStart(new Date().toISOString());
       previousDecayStateRef.current = null;
+      previousDwellStateRef.current = null;
     } else {
-      // Disconnected - clear session start and decay state
+      // Disconnected - clear session start, decay state, and dwell state
       setSessionStart(null);
       previousDecayStateRef.current = null;
+      previousDwellStateRef.current = null;
     }
   }, [connected, address]);
 
@@ -978,6 +980,11 @@ export default function YearlyWrapPage() {
   // Session-scoped: decay resets on new wallet session
   const previousDecayStateRef = useRef<EntropicDecayState | null>(null);
   
+  // Regime dwell time tracking - read-only metric
+  // Tracks how long system remains within current regime
+  // Session-scoped: resets on new wallet session
+  const previousDwellStateRef = useRef<RegimeDwellState | null>(null);
+  
   const entropicDecayState = useMemo(() => {
     if (!sessionStart || reflections.length === 0) {
       // No session or no reflections = complete decay
@@ -1139,6 +1146,34 @@ export default function YearlyWrapPage() {
       activeMeaningNodeCount: activeNodeCount,
     });
   }, [saturationState]);
+
+  // Regime dwell time tracking - read-only metric
+  // Tracks how long system remains within current regime
+  // Does not influence inference, decay, novelty, saturation, collapse, or regime classification
+  // Session-scoped: resets on new wallet session
+  const regimeDwellState = useMemo(() => {
+    if (!sessionStart) {
+      // No session - return empty state
+      return {
+        currentRegime: emergenceRegime,
+        entryTimestamp: new Date().toISOString(),
+        sessionStart: new Date().toISOString(),
+        dwellDurationMs: 0,
+      };
+    }
+
+    return trackRegimeDwellTime({
+      currentRegime: emergenceRegime,
+      sessionStart,
+      currentTime: new Date().toISOString(),
+      previousDwellState: previousDwellStateRef.current,
+    });
+  }, [emergenceRegime, sessionStart]);
+
+  // Update ref for next computation
+  useEffect(() => {
+    previousDwellStateRef.current = regimeDwellState;
+  }, [regimeDwellState]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
