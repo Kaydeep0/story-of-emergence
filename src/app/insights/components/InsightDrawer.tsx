@@ -354,10 +354,10 @@ function EmptyState({ onNewReflection }: { onNewReflection: () => void }) {
       </svg>
       <div className="space-y-2">
         <p className="text-sm font-medium text-white/90">
-          No insights yet
+          No patterns detected
         </p>
         <p className="text-sm text-white/60 max-w-sm">
-          Add a few reflections and I will start connecting the dots.
+          Insights describe patterns observed in past reflections. Meaning is constructed by you.
         </p>
       </div>
       <button
