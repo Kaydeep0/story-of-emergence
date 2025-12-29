@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1353,6 +1353,43 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [structuralDensityGradient, address, sessionKey]);
+
+  // Structural curvature index - read-only, encrypted
+  // Captures whether local neighborhoods bend or flatten relative to surrounding neighborhoods
+  // Does not influence meaning inference, decay, novelty, reinforcement, saturation, regime, dwell time, density, density gradient, distance, or neighborhood membership
+  // Session-scoped: computed per wallet session
+  const structuralCurvatureIndex = useMemo(() => {
+    if (!structuralDistanceMatrix || !structuralNeighborhoodIndex || !structuralDensityGradient) {
+      return null;
+    }
+
+    // Compute curvature from distance matrix, neighborhood index, and density gradient
+    // Curvature measures deviation from locally uniform structure (unsigned magnitude only)
+    return computeStructuralCurvature({
+      distanceMatrix: structuralDistanceMatrix,
+      neighborhoodIndex: structuralNeighborhoodIndex,
+      densityGradient: structuralDensityGradient,
+      sessionId: structuralDensityGradient.sessionId,
+    });
+  }, [structuralDistanceMatrix, structuralNeighborhoodIndex, structuralDensityGradient]);
+
+  // Encrypt and store curvature index (async, non-blocking)
+  useEffect(() => {
+    if (!structuralCurvatureIndex || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptCurvatureIndex(structuralCurvatureIndex, sessionKey);
+        const sessionId = structuralCurvatureIndex.sessionId;
+        saveCurvatureIndex(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store curvature index', err);
+      }
+    })();
+  }, [structuralCurvatureIndex, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths

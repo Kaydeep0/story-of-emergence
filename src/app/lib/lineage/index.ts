@@ -151,3 +151,31 @@ export {
   clearAllDensityGradients,
 } from './storeDensityGradient';
 
+export type {
+  StructuralCurvature,
+  StructuralCurvatureIndex,
+  CurvatureSignals,
+} from './computeStructuralCurvature';
+
+export {
+  computeStructuralCurvature,
+  getCurvature,
+  getAllCurvatures,
+} from './computeStructuralCurvature';
+
+export type {
+  EncryptedCurvatureIndex,
+} from './encryptCurvatureIndex';
+
+export {
+  encryptCurvatureIndex,
+  decryptCurvatureIndex,
+} from './encryptCurvatureIndex';
+
+export {
+  saveCurvatureIndex,
+  loadCurvatureIndex,
+  clearCurvatureIndex,
+  clearAllCurvatureIndices,
+} from './storeCurvatureIndex';
+
