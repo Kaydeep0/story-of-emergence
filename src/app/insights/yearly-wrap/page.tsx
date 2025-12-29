@@ -39,6 +39,7 @@ import { inferObserverPosition } from '../../lib/position/inferObserverPosition'
 import { inferPositionalDrift } from '../../lib/position/inferPositionalDrift';
 import { inferObservationClosure } from '../../lib/closure/inferObservationClosure';
 import { inferObserverEnvironmentFeedback } from '../../lib/feedback/inferObserverEnvironmentFeedback';
+import { getInitialConditions } from '../../lib/constraints/inferInitialConditions';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 
@@ -177,6 +178,27 @@ export default function YearlyWrapPage() {
     return generateYearlyContinuity(yearlyWrap, priorYearWrap);
   }, [yearlyWrap, reflections]);
 
+  // Infer initial conditions (computed once per wallet session, cached)
+  // Initial conditions anchor all observation relative to constraint, not freedom
+  const initialConditions = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0 || !address) {
+      return null;
+    }
+
+    // Generate clusters for initial conditions inference
+    const allClusters = generateConceptualClusters(reflections, yearlyWrap);
+    const currentYear = new Date().getFullYear().toString();
+    const allAssociations = allClusters.length >= 2
+      ? generateClusterAssociations(allClusters, currentYear)
+      : [];
+
+    return getInitialConditions(address, {
+      reflections,
+      clusters: allClusters,
+      associations: allAssociations,
+    });
+  }, [yearlyWrap, reflections, address]);
+
   // Build period data for regime stabilization
   const periodDataForStabilization = useMemo(() => {
     if (!yearlyWrap || reflections.length === 0) {
@@ -218,6 +240,7 @@ export default function YearlyWrapPage() {
   }, [yearlyWrap, reflections]);
 
   // Compute raw regimes for all periods (needed for closure and stabilization)
+  // Reference initial conditions to modulate thresholds
   const rawRegimesForPeriods = useMemo(() => {
     const regimes = new Map<string, Regime>();
     
@@ -226,12 +249,13 @@ export default function YearlyWrapPage() {
         clusters: pd.clusters,
         associations: pd.associations,
         currentPeriod: pd.period,
+        initialConditions,
       });
       regimes.set(pd.period, rawRegime);
     }
     
     return regimes;
-  }, [periodDataForStabilization]);
+  }, [periodDataForStabilization, initialConditions]);
 
   // Compute previous period data using raw regime (for closure detection)
   const previousPeriodDataForClosure = useMemo(() => {
@@ -517,6 +541,7 @@ export default function YearlyWrapPage() {
   }, [regime, conceptualClusters, clusterAssociations, positionalDrift, continuations, observerPosition]);
 
   // Infer observer-environment feedback mode (internal only, gates interpretation density)
+  // Stabilized against initial conditions
   const feedbackMode = useMemo(() => {
     const currentYear = new Date().getFullYear().toString();
     return inferObserverEnvironmentFeedback({
@@ -527,8 +552,9 @@ export default function YearlyWrapPage() {
       continuityNote,
       closure: observationClosure,
       positionalDrift,
+      initialConditions,
     });
-  }, [regime, conceptualClusters, clusterAssociations, continuityNote, observationClosure, positionalDrift]);
+  }, [regime, conceptualClusters, clusterAssociations, continuityNote, observationClosure, positionalDrift, initialConditions]);
 
   // Apply feedback mode gating (subtle adjustments to interpretation density)
   // ENVIRONMENT_DOMINANT: fewer continuations, more compressed narrative, omit position

@@ -3,6 +3,7 @@ import type { ConceptualCluster, ClusterAssociation } from '../clusters/conceptu
 import type { ContinuityNote } from '../continuity/continuity';
 import type { ObservationClosure } from '../closure/inferObservationClosure';
 import type { DriftDescriptor } from '../position/inferPositionalDrift';
+import type { InitialConditions } from '../constraints/inferInitialConditions';
 
 export type FeedbackMode = 'ENVIRONMENT_DOMINANT' | 'COUPLED' | 'OBSERVER_DOMINANT';
 
@@ -14,6 +15,7 @@ export type FeedbackSignals = {
   continuityNote: ContinuityNote | null;
   closure: ObservationClosure;
   positionalDrift: DriftDescriptor | null;
+  initialConditions?: InitialConditions | null;
 };
 
 /**
@@ -178,8 +180,30 @@ export function inferObserverEnvironmentFeedback(signals: FeedbackSignals): Feed
   );
 
   // Decision logic: compare influence scores
-  const influenceDifference = environmentInfluence - observerInfluence;
-  const threshold = 0.15; // Threshold for dominance
+  // Stabilize against initial conditions
+  let influenceDifference = environmentInfluence - observerInfluence;
+  let threshold = 0.15; // Default threshold for dominance
+
+  // Adjust threshold based on initial conditions
+  if (signals.initialConditions) {
+    const { constraintDensity, authorityConcentration } = signals.initialConditions;
+    
+    // High constraint density: require stronger evidence for observer dominance
+    if (constraintDensity === 'high') {
+      threshold = 0.2; // Higher threshold (harder to be observer-dominant)
+      // Bias toward environment dominant if close to threshold
+      if (influenceDifference > -0.1 && influenceDifference < threshold) {
+        influenceDifference += 0.05; // Slight bias toward environment
+      }
+    } else if (constraintDensity === 'low') {
+      threshold = 0.1; // Lower threshold (easier to be observer-dominant)
+    }
+    
+    // High authority concentration: stabilize toward environment dominant
+    if (authorityConcentration === 'high' && influenceDifference > -0.1) {
+      influenceDifference += 0.05; // Bias toward environment
+    }
+  }
 
   if (influenceDifference > threshold) {
     return 'ENVIRONMENT_DOMINANT';

@@ -1,4 +1,5 @@
 import type { ConceptualCluster, ClusterAssociation } from '../clusters/conceptualClusters';
+import type { InitialConditions } from '../constraints/inferInitialConditions';
 
 export type Regime = 'deterministic' | 'transitional' | 'emergent';
 
@@ -6,6 +7,7 @@ export type RegimeSignals = {
   clusters: ConceptualCluster[];
   associations: ClusterAssociation[];
   currentPeriod: string;
+  initialConditions?: InitialConditions | null;
 };
 
 /**
@@ -152,14 +154,47 @@ export function detectRegime(signals: RegimeSignals): Regime {
   const associationConcentration = calculateAssociationConcentration(clusters, associations);
   const structuralReuse = calculateStructuralReuse(clusters);
 
+  // Modulate thresholds based on initial conditions
+  // High constraint density requires stronger evidence for emergence
+  // Low variability baseline means variance thresholds should be higher
+  const { initialConditions } = signals;
+  
+  let dominanceThreshold = 0.6;
+  let varianceThreshold = 2.0;
+  let newClusterRateThreshold = 0.3;
+  
+  if (initialConditions) {
+    // High constraint density: require stronger evidence for emergence
+    if (initialConditions.constraintDensity === 'high') {
+      dominanceThreshold = 0.7; // Higher threshold
+    } else if (initialConditions.constraintDensity === 'low') {
+      dominanceThreshold = 0.5; // Lower threshold
+    }
+    
+    // Low variability baseline: variance must be higher to count as transitional
+    if (initialConditions.variabilityBaseline === 'low') {
+      varianceThreshold = 2.5; // Higher threshold
+    } else if (initialConditions.variabilityBaseline === 'high') {
+      varianceThreshold = 1.5; // Lower threshold
+    }
+    
+    // High authority concentration: new clusters need stronger signal
+    if (initialConditions.authorityConcentration === 'high') {
+      newClusterRateThreshold = 0.4; // Higher threshold
+    } else if (initialConditions.authorityConcentration === 'low') {
+      newClusterRateThreshold = 0.2; // Lower threshold
+    }
+  }
+
   // Emergent Regime:
   // - Observer meaningfully reshapes environment
   // - Strong asymmetry (high dominance)
   // - One or two dominant conceptual clusters
   // - Silence elsewhere
   // - Averages collapse (low structural reuse)
+  // Thresholds modulated by initial conditions
   if (
-    dominance > 0.6 && // Strong dominance
+    dominance > dominanceThreshold && // Strong dominance (adjusted)
     clusters.length <= 3 && // One or two dominant clusters (with some noise)
     structuralReuse < 0.4 && // Low cross-period reuse
     associationConcentration < 0.5 // Low association concentration
@@ -172,9 +207,10 @@ export function detectRegime(signals: RegimeSignals): Regime {
   // - Increasing variance
   // - Accelerating themes (new cluster formation)
   // - Partial pattern breakage and recomposition
+  // Thresholds modulated by initial conditions
   if (
-    variance > 2.0 && // High variance
-    newClusterRate > 0.3 && // Accelerating themes
+    variance > varianceThreshold && // High variance (adjusted)
+    newClusterRate > newClusterRateThreshold && // Accelerating themes (adjusted)
     structuralReuse > 0.3 && structuralReuse < 0.7 && // Partial reuse
     associationConcentration > 0.4 // Moderate association concentration
   ) {
