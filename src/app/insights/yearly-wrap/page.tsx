@@ -29,7 +29,7 @@ import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
-import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase } from '../../lib/clusters/conceptualClusters';
+import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -172,7 +172,11 @@ export default function YearlyWrapPage() {
       return [];
     }
 
-    return generateConceptualClusters(reflections, yearlyWrap);
+    const clusters = generateConceptualClusters(reflections, yearlyWrap);
+    
+    // Detect faded clusters (appeared in prior periods but not current period)
+    const currentYear = new Date().getFullYear().toString();
+    return detectFadedClusters(clusters, currentYear);
   }, [yearlyWrap, reflections]);
 
   // Generate cluster associations
@@ -363,6 +367,9 @@ export default function YearlyWrapPage() {
               return (
                 <div key={cluster.id} className="text-base text-gray-700">
                   <p className="font-normal mb-1">{cluster.label}</p>
+                  {cluster.faded && cluster.fadePhrase && (
+                    <p className="text-xs text-gray-500 mb-1">• {cluster.fadePhrase}</p>
+                  )}
                   {cluster.description && (
                     <p className="text-sm text-gray-600 leading-relaxed mb-2">{cluster.description}</p>
                   )}

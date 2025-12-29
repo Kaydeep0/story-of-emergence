@@ -17,6 +17,8 @@ export type ConceptualCluster = {
   label: string; // 1-3 words, neutral nouns
   description?: string; // Max 1 sentence, optional
   sourcePeriods: string[]; // List of year or month identifiers (e.g., "2023", "2024-01")
+  faded?: boolean; // True if cluster appeared in prior periods but not current period
+  fadePhrase?: string; // Phrase describing fade status
 };
 
 export type ClusterAssociation = {
@@ -403,5 +405,46 @@ export function getDistancePhrase(distance: number): string {
     case 'rarely':
       return 'rarely nearby';
   }
+}
+
+/**
+ * Detect faded clusters
+ * A cluster is considered "faded" if:
+ * - It appeared in at least 2 prior periods
+ * - It does NOT appear in the current period
+ * Binary presence/absence only - no time decay curves, no scoring
+ * Fade detection applies ONLY to conceptual clusters, never to emotions, people, or identities
+ */
+export function detectFadedClusters(
+  clusters: ConceptualCluster[],
+  currentPeriod: string
+): ConceptualCluster[] {
+  if (clusters.length === 0) {
+    return [];
+  }
+
+  const updatedClusters = clusters.map(cluster => {
+    // Check if cluster appeared in at least 2 prior periods
+    const priorPeriods = cluster.sourcePeriods.filter(p => p !== currentPeriod);
+    
+    if (priorPeriods.length >= 2) {
+      // Check if cluster does NOT appear in current period
+      const appearsInCurrent = cluster.sourcePeriods.includes(currentPeriod);
+      
+      if (!appearsInCurrent) {
+        // Cluster is faded - appeared in prior periods but not current
+        // Use "Not observed this period" phrasing (never use: gone, missing, lost, declined, stopped, reduced, weakened)
+        return {
+          ...cluster,
+          faded: true,
+          fadePhrase: 'Not observed this period',
+        };
+      }
+    }
+    
+    return cluster;
+  });
+
+  return updatedClusters;
 }
 
