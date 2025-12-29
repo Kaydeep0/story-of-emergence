@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
+import { useAccount } from 'wagmi';
+import { traceObserverView } from '@/app/lib/observer';
 import type { InsightCard, InsightDeltaCard } from '@/app/lib/insights/viewModels';
 
 type Props = {
@@ -11,8 +13,13 @@ type Props = {
 /**
  * Pure presentational component for displaying distribution insights
  * Read-only UI - no data fetching, no business logic
+ * 
+ * Observer trace: Tracks viewing without influencing inference.
+ * Epistemic firewall: Observer trace is descriptive only.
  */
 export function InsightPanel({ insights, deltas = [] }: Props) {
+  const { address } = useAccount();
+
   // Sort insights by scope priority: year → month → week
   // Within same scope, keep original order
   const sortedInsights = useMemo(() => {
@@ -38,6 +45,19 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
     }
     return grouped;
   }, [deltas]);
+
+  // Observer trace: Track viewing without influencing inference
+  // Passive only - no UI indicators, no feedback loops
+  useEffect(() => {
+    if (!address || sortedInsights.length === 0) {
+      return;
+    }
+
+    // Trace each insight view (passive observation only)
+    sortedInsights.forEach(insight => {
+      traceObserverView(insight.id, address);
+    });
+  }, [address, sortedInsights]);
 
   if (sortedInsights.length === 0) {
     return null;

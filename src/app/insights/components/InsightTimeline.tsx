@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
+import { useAccount } from 'wagmi';
+import { traceObserverView } from '@/app/lib/observer';
 import type { InsightCard, InsightDeltaCard } from '@/app/lib/insights/viewModels';
 
 type Props = {
@@ -11,8 +13,13 @@ type Props = {
 /**
  * Pure presentational component for displaying distribution insights in a timeline layout
  * Read-only UI - no data fetching, no mutations, pure layout logic
+ * 
+ * Observer trace: Tracks viewing without influencing inference.
+ * Epistemic firewall: Observer trace is descriptive only.
  */
 export function InsightTimeline({ insights, deltas = [] }: Props) {
+  const { address } = useAccount();
+
   // Group insights by scope
   const groupedInsights = useMemo(() => {
     const groups = new Map<InsightCard['scope'], InsightCard[]>();
@@ -41,6 +48,19 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
     }
     return grouped;
   }, [deltas]);
+
+  // Observer trace: Track viewing without influencing inference
+  // Passive only - no UI indicators, no feedback loops
+  useEffect(() => {
+    if (!address || insights.length === 0) {
+      return;
+    }
+
+    // Trace each insight view (passive observation only)
+    insights.forEach(insight => {
+      traceObserverView(insight.id, address);
+    });
+  }, [address, insights]);
 
   if (groupedInsights.length === 0) {
     return null;

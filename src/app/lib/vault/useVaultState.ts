@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../useEncryptionSession';
 import { useConsentMemory } from './useConsentMemory';
+import { clearObserverTraceSession } from '../observer';
 
 export type VaultState = 'locked' | 'unlocking' | 'unlocked' | 'locking';
 
@@ -21,18 +22,20 @@ export function useVaultState(): VaultState {
   const [isLocking, setIsLocking] = useState(false);
   const [lastWalletAddress, setLastWalletAddress] = useState<string | null>(null);
 
-  // Clear consent memory when wallet changes or disconnects
+  // Clear consent memory and observer trace when wallet changes or disconnects
   useEffect(() => {
     const currentWallet = address?.toLowerCase() || null;
     
     // Clear if wallet changed
     if (lastWalletAddress !== null && lastWalletAddress !== currentWallet) {
       clear();
+      clearObserverTraceSession(); // Clear observer trace on wallet change
     }
     
     // Clear if wallet disconnected
     if (!isConnected) {
       clear();
+      clearObserverTraceSession(); // Clear observer trace on disconnect
     }
     
     setLastWalletAddress(currentWallet);
