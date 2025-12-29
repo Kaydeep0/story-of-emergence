@@ -33,6 +33,7 @@ import { generateConceptualClusters, generateClusterAssociations, getAssociation
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 import { detectRegime } from '../../lib/regime/detectRegime';
 import { generateContinuations } from '../../lib/continuations/generateContinuations';
+import { generateRegimeNarrative } from '../../lib/narrative/generateRegimeNarrative';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -220,6 +221,21 @@ export default function YearlyWrapPage() {
 
     const currentYear = new Date().getFullYear().toString();
     return generateContinuations({
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      regime,
+      currentPeriod: currentYear,
+    });
+  }, [conceptualClusters, clusterAssociations, regime]);
+
+  // Generate regime narrative (observational compression across time)
+  const regimeNarrative = useMemo(() => {
+    if (conceptualClusters.length < 2 && regime !== 'emergent') {
+      return null;
+    }
+
+    const currentYear = new Date().getFullYear().toString();
+    return generateRegimeNarrative({
       clusters: conceptualClusters,
       associations: clusterAssociations,
       regime,
@@ -421,6 +437,15 @@ export default function YearlyWrapPage() {
                   </p>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Regime narrative - observational compression across time */}
+          {regimeNarrative && (
+            <div className="mb-8 pt-6 border-t border-gray-200">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {regimeNarrative.text}
+              </p>
             </div>
           )}
           
