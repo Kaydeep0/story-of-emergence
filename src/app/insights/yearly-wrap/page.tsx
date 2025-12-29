@@ -47,6 +47,8 @@ import { inferInterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import { inferInterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
 import { sealEpistemicBoundary } from '../../lib/boundary/sealEpistemicBoundary';
 import { mapToViewModel, type FinalizedInferenceOutputs } from '../../representation';
+import { witnessTemporalPatterns } from '../../lib/temporal';
+import { TemporalWitnessView } from '../../components/temporal/TemporalWitnessView';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1204,6 +1206,12 @@ export default function YearlyWrapPage() {
     observationClosure,
   ]);
 
+  // Temporal witness - strictly downstream, consumes reflection entries only
+  // No inference logic, no narrative, no causality
+  const temporalWitness = useMemo(() => {
+    return witnessTemporalPatterns(reflections, 'month');
+  }, [reflections]);
+
   const handleExport = () => {
     window.print();
   };
@@ -1474,6 +1482,10 @@ export default function YearlyWrapPage() {
           </div>
         </div>
       )}
+
+      {/* Temporal witness - non-narrative temporal patterns */}
+      {/* Strictly downstream - consumes reflection entries, does not influence inference */}
+      <TemporalWitnessView witness={temporalWitness} />
     </YearlyWrapContainer>
   );
 }
