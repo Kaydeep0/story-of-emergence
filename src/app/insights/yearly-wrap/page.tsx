@@ -46,6 +46,7 @@ import { inferEmergencePersistence } from '../../lib/emergence/inferEmergencePer
 import { inferInterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import { inferInterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
 import { sealEpistemicBoundary } from '../../lib/boundary/sealEpistemicBoundary';
+import { mapToViewModel, type FinalizedInferenceOutputs } from '../../representation';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -53,6 +54,7 @@ import type { EmergencePersistence } from '../../lib/emergence/inferEmergencePer
 import type { InterpretiveLoad } from '../../lib/load/inferInterpretiveLoad';
 import type { InterpretiveIrreversibility } from '../../lib/irreversibility/inferInterpretiveIrreversibility';
 import type { EpistemicBoundarySeal } from '../../lib/boundary/sealEpistemicBoundary';
+import type { YearlyWrapViewModel } from '../../representation';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -1168,6 +1170,40 @@ export default function YearlyWrapPage() {
     return observerPosition;
   }, [observationClosure, feedbackMode, effectiveRegimeNarrative, observerPosition]);
 
+  // Map finalized inference outputs to view model (representation layer)
+  // This separates inference from presentation - UI only consumes view models
+  const viewModel = useMemo(() => {
+    if (!yearlyWrap) {
+      return null;
+    }
+
+    const finalizedOutputs: FinalizedInferenceOutputs = {
+      yearlyWrap,
+      narrative: effectiveRegimeNarrative,
+      continuations: effectiveContinuations,
+      observerPosition: effectiveObserverPosition,
+      positionalDrift: effectivePositionalDrift,
+      conceptualClusters,
+      clusterAssociations,
+      continuityNote,
+      epistemicBoundarySeal,
+      observationClosure,
+    };
+
+    return mapToViewModel(finalizedOutputs);
+  }, [
+    yearlyWrap,
+    effectiveRegimeNarrative,
+    effectiveContinuations,
+    effectiveObserverPosition,
+    effectivePositionalDrift,
+    conceptualClusters,
+    clusterAssociations,
+    continuityNote,
+    epistemicBoundarySeal,
+    observationClosure,
+  ]);
+
   const handleExport = () => {
     window.print();
   };
@@ -1218,7 +1254,7 @@ export default function YearlyWrapPage() {
     );
   }
 
-  if (!yearlyWrap) {
+  if (!yearlyWrap || !viewModel) {
     return (
       <YearlyWrapContainer>
         <h1 className="text-3xl font-normal text-gray-900 mb-12">Yearly Wrap</h1>
@@ -1230,6 +1266,20 @@ export default function YearlyWrapPage() {
       </YearlyWrapContainer>
     );
   }
+
+  // UI now consumes only view model (representation layer)
+  // All inference logic is upstream and finalized
+  const {
+    yearlyWrap: vmYearlyWrap,
+    narrative: vmNarrative,
+    continuations: vmContinuations,
+    observerPosition: vmObserverPosition,
+    positionalDrift: vmPositionalDrift,
+    conceptualClusters: vmClusters,
+    clusterAssociations: vmAssociations,
+    continuityNote: vmContinuityNote,
+    silenceState,
+  } = viewModel;
 
   return (
     <YearlyWrapContainer>
@@ -1256,43 +1306,43 @@ export default function YearlyWrapPage() {
       {/* Headline */}
       <div className="mb-16">
         <h1 className="text-4xl font-normal text-gray-900 mb-6 leading-tight">
-          {yearlyWrap.headline}
+          {vmYearlyWrap.headline}
         </h1>
         <p className="text-lg text-gray-700 leading-relaxed max-w-[65ch]">
-          {yearlyWrap.summary}
+          {vmYearlyWrap.summary}
         </p>
       </div>
 
       {/* Density and Cadence Labels */}
-      {(yearlyWrap.densityLabel || yearlyWrap.cadenceLabel) && (
+      {(vmYearlyWrap.densityLabel || vmYearlyWrap.cadenceLabel) && (
         <div className="mb-16 flex gap-2 flex-wrap">
-          {yearlyWrap.densityLabel && (
+          {vmYearlyWrap.densityLabel && (
             <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
-              {yearlyWrap.densityLabel.charAt(0).toUpperCase() + yearlyWrap.densityLabel.slice(1)} density
+              {vmYearlyWrap.densityLabel.charAt(0).toUpperCase() + vmYearlyWrap.densityLabel.slice(1)} density
             </span>
           )}
-          {yearlyWrap.cadenceLabel && (
+          {vmYearlyWrap.cadenceLabel && (
             <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
-              {yearlyWrap.cadenceLabel.charAt(0).toUpperCase() + yearlyWrap.cadenceLabel.slice(1)} cadence
+              {vmYearlyWrap.cadenceLabel.charAt(0).toUpperCase() + vmYearlyWrap.cadenceLabel.slice(1)} cadence
             </span>
           )}
         </div>
       )}
 
       {/* Dominant Pattern */}
-      {yearlyWrap.dominantPattern && (
+      {vmYearlyWrap.dominantPattern && (
         <div className="mb-16 pb-12 border-b border-gray-200">
           <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Dominant Pattern</h3>
-          <p className="text-base text-gray-800">{yearlyWrap.dominantPattern}</p>
+          <p className="text-base text-gray-800">{vmYearlyWrap.dominantPattern}</p>
         </div>
       )}
 
       {/* Key Moments */}
-      {yearlyWrap.keyMoments.length > 0 && (
+      {vmYearlyWrap.keyMoments.length > 0 && (
         <div className="mb-16">
           <h3 className="text-lg font-normal text-gray-900 mb-8">Key Moments</h3>
           <div className="space-y-8">
-            {yearlyWrap.keyMoments.map((moment) => (
+            {vmYearlyWrap.keyMoments.map((moment) => (
               <div key={moment.id} className="space-y-3">
                 <h4 className="text-base font-medium text-gray-900">{moment.headline}</h4>
                 {moment.label && (
@@ -1306,11 +1356,11 @@ export default function YearlyWrapPage() {
       )}
 
       {/* Shifts */}
-      {yearlyWrap.shifts.length > 0 && (
+      {vmYearlyWrap.shifts.length > 0 && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-6">Shifts</h3>
           <div className="space-y-4">
-            {yearlyWrap.shifts.map((shift) => (
+            {vmYearlyWrap.shifts.map((shift) => (
               <div key={shift.id} className="flex items-start gap-3 text-sm">
                 <span className="text-gray-400 mt-0.5 shrink-0 text-base">
                   {shift.direction === 'intensifying' ? '↑' : 
@@ -1328,34 +1378,23 @@ export default function YearlyWrapPage() {
       )}
 
       {/* Earlier echoes - Continuity note */}
-      {continuityNote && (
+      {vmContinuityNote && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-4">Earlier echoes</h3>
           <p className="text-base text-gray-700 leading-relaxed">
-            {continuityNote.text}
+            {vmContinuityNote.text}
           </p>
         </div>
       )}
 
       {/* Recurring regions - Conceptual clusters */}
-      {conceptualClusters.length > 0 && (
+      {vmClusters.length > 0 && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
           
           {/* Spatial layout - read-only projection */}
-          {/* Gated by epistemic boundary seal: when closed, spatial layout is suppressed */}
-          {/* Epistemic boundary gate: when epistemicallyClosed is true, spatial layout is suppressed */}
-          {conceptualClusters.length >= 2 && 
-           !epistemicBoundarySeal.epistemicallyClosed &&
-           interpretiveIrreversibility !== 'locked' &&
-           !(interpretiveIrreversibility === 'hardened' && 
-             !(emergencePersistence === 'persistent' &&
-               structuralDeviationMagnitude > 0.6 &&
-               continuityNote !== null &&
-               feedbackMode === 'OBSERVER_DOMINANT' &&
-               interpretiveLoad !== 'minimal')) &&
-           interpretiveLoad !== 'minimal' && 
-           emergencePersistence !== 'collapsed' && (
+          {/* Gated by silence state from representation layer */}
+          {vmClusters.length >= 2 && !silenceState.spatialLayoutSuppressed && (
             <div className="mb-8">
               <SpatialClusterLayout
                 clusters={conceptualClusters}
@@ -1365,11 +1404,11 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Continuations - conditional option space (only transitional/emergent) */}
-          {/* Suppressed when period is closed */}
-          {effectiveContinuations.length > 0 && (
+          {/* Gated by silence state from representation layer */}
+          {!silenceState.continuationsSuppressed && vmContinuations.length > 0 && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <div className="space-y-3">
-                {effectiveContinuations.map((continuation) => (
+                {vmContinuations.map((continuation) => (
                   <p key={continuation.id} className="text-sm text-gray-600 italic leading-relaxed">
                     {continuation.text}
                   </p>
@@ -1379,24 +1418,24 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Regime narrative - observational compression across time */}
-          {/* Returns null when period is closed */}
-          {effectiveRegimeNarrative && (
+          {/* Gated by silence state from representation layer */}
+          {!silenceState.narrativeSuppressed && vmNarrative && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 leading-relaxed">
-                {effectiveRegimeNarrative.text}
+                {vmNarrative.text}
               </p>
               {/* Observer position - field position descriptor */}
-              {/* Gated by feedback mode: omitted for ENVIRONMENT_DOMINANT when narrative suppressed */}
-              {effectiveObserverPosition && (
+              {/* Gated by silence state from representation layer */}
+              {!silenceState.observerPositionSuppressed && vmObserverPosition && (
                 <div className="mt-3">
                   <p className="text-xs text-gray-500 italic">
-                    {effectiveObserverPosition.phrase}
+                    {vmObserverPosition.phrase}
                   </p>
                   {/* Positional drift - difference across periods */}
-                  {/* Suppressed when period is closed or ENVIRONMENT_DOMINANT */}
-                  {effectivePositionalDrift && (
+                  {/* Gated by silence state from representation layer */}
+                  {!silenceState.positionalDriftSuppressed && vmPositionalDrift && (
                     <p className="text-xs text-gray-400 mt-1 italic">
-                      {effectivePositionalDrift.phrase}
+                      {vmPositionalDrift.phrase}
                     </p>
                   )}
                 </div>
@@ -1405,47 +1444,53 @@ export default function YearlyWrapPage() {
           )}
 
           {/* Observer position standalone (if narrative is null but position exists) */}
-          {/* Gated by feedback mode: omitted for ENVIRONMENT_DOMINANT */}
-          {!effectiveRegimeNarrative && effectiveObserverPosition && observationClosure === 'open' && (
+          {/* Gated by silence state from representation layer */}
+          {silenceState.narrativeSuppressed && !silenceState.observerPositionSuppressed && vmObserverPosition && (
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-gray-500 italic">
-                {effectiveObserverPosition.phrase}
+                {vmObserverPosition.phrase}
               </p>
               {/* Positional drift - difference across periods */}
-              {/* Suppressed when period is closed or ENVIRONMENT_DOMINANT */}
-              {effectivePositionalDrift && (
+              {/* Gated by silence state from representation layer */}
+              {!silenceState.positionalDriftSuppressed && vmPositionalDrift && (
                 <p className="text-xs text-gray-400 mt-1 italic">
-                  {effectivePositionalDrift.phrase}
+                  {vmPositionalDrift.phrase}
                 </p>
               )}
             </div>
           )}
           
           <div className="space-y-6">
-            {conceptualClusters.map((cluster) => {
-              const associations = getAssociationsForCluster(cluster.id, clusterAssociations, 2);
+            {vmClusters.map((vmCluster) => {
+              // Find original cluster for utility functions (they need original types)
+              const originalCluster = conceptualClusters.find(c => c.id === vmCluster.id);
+              if (!originalCluster) return null;
+              
+              const associations = getAssociationsForCluster(vmCluster.id, clusterAssociations, 2);
               return (
-                <div key={cluster.id} className="text-base text-gray-700">
-                  <p className="font-normal mb-1">{cluster.label}</p>
-                  {cluster.faded && cluster.fadePhrase && (
-                    <p className="text-xs text-gray-500 mb-1">• {cluster.fadePhrase}</p>
+                <div key={vmCluster.id} className="text-base text-gray-700">
+                  <p className="font-normal mb-1">{vmCluster.label}</p>
+                  {originalCluster.faded && originalCluster.fadePhrase && (
+                    <p className="text-xs text-gray-500 mb-1">• {originalCluster.fadePhrase}</p>
                   )}
-                  {cluster.description && (
-                    <p className="text-sm text-gray-600 leading-relaxed mb-2">{cluster.description}</p>
+                  {vmCluster.description && (
+                    <p className="text-sm text-gray-600 leading-relaxed mb-2">{vmCluster.description}</p>
                   )}
                   {associations.length > 0 && (
                     <div className="mt-3 ml-4 text-sm text-gray-600">
                       <p className="mb-2">Often appears alongside:</p>
                       <ul className="list-none space-y-1">
                         {associations.map((assoc) => {
-                          const associatedClusterId = getAssociatedClusterId(assoc, cluster.id);
-                          const associatedCluster = conceptualClusters.find(c => c.id === associatedClusterId);
-                          if (!associatedCluster) return null;
+                          const associatedClusterId = getAssociatedClusterId(assoc, vmCluster.id);
+                          const associatedVmCluster = vmClusters.find(c => c.id === associatedClusterId);
+                          const associatedOriginalCluster = conceptualClusters.find(c => c.id === associatedClusterId);
+                          if (!associatedVmCluster || !associatedOriginalCluster) return null;
                           
                           // Calculate distance for this association (with silence rules)
+                          // Note: This uses utility functions on original clusters, not inference
                           const currentYear = new Date().getFullYear().toString();
-                          const distance = calculateClusterDistance(cluster, associatedCluster, {
-                            allClusters: conceptualClusters,
+                          const distance = calculateClusterDistance(originalCluster, associatedOriginalCluster, {
+                            allClusters: conceptualClusters, // Utility functions need original types
                             currentPeriod: currentYear,
                           });
                           
@@ -1454,7 +1499,7 @@ export default function YearlyWrapPage() {
                           
                           return (
                             <li key={assoc.fromClusterId + assoc.toClusterId} className="text-gray-600">
-                              – {associatedCluster.label}
+                              – {associatedVmCluster.label}
                               {distancePhrase && (
                                 <span className="text-gray-500"> ({distancePhrase})</span>
                               )}
