@@ -243,6 +243,24 @@ export function VaultHealthPanel({ isOpen, onClose }: { isOpen: boolean; onClose
                   <div className="text-white/40">Unable to determine</div>
                 )}
               </div>
+
+              {/* Sharing & Revocation - Only show if capsules exist */}
+              {healthData.activeCapsulesCount !== null && healthData.activeCapsulesCount > 0 && (
+                <div className="pt-2 border-t border-white/10">
+                  <div className="text-white/60 mb-2">Sharing & Revocation</div>
+                  <div className="space-y-2 text-white/70 leading-relaxed">
+                    <p className="text-xs">
+                      Revoking a capsule prevents future access. If someone already opened it, they keep what they saw—like a letter that's been read.
+                    </p>
+                    <p className="text-xs">
+                      Your content stays encrypted. The server never sees what's inside, and each share uses its own encryption key.
+                    </p>
+                    <p className="text-xs">
+                      We don't know if recipients opened capsules or what they did with them.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
