@@ -31,6 +31,7 @@ import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
 import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
+import { detectRegime } from '../../lib/regime/detectRegime';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -167,18 +168,38 @@ export default function YearlyWrapPage() {
     return generateYearlyContinuity(yearlyWrap, priorYearWrap);
   }, [yearlyWrap, reflections]);
 
-  // Generate conceptual clusters
+  // Detect regime (internal only, never rendered)
+  const regime = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return 'deterministic' as const;
+    }
+
+    // Generate initial clusters for regime detection
+    const initialClusters = generateConceptualClusters(reflections, yearlyWrap);
+    const currentYear = new Date().getFullYear().toString();
+    const initialAssociations = initialClusters.length >= 2
+      ? generateClusterAssociations(initialClusters, currentYear)
+      : [];
+
+    return detectRegime({
+      clusters: initialClusters,
+      associations: initialAssociations,
+      currentPeriod: currentYear,
+    });
+  }, [yearlyWrap, reflections]);
+
+  // Generate conceptual clusters (with regime gating)
   const conceptualClusters = useMemo(() => {
     if (!yearlyWrap || reflections.length === 0) {
       return [];
     }
 
-    const clusters = generateConceptualClusters(reflections, yearlyWrap);
+    const clusters = generateConceptualClusters(reflections, yearlyWrap, regime);
     
     // Detect faded clusters (appeared in prior periods but not current period)
     const currentYear = new Date().getFullYear().toString();
     return detectFadedClusters(clusters, currentYear);
-  }, [yearlyWrap, reflections]);
+  }, [yearlyWrap, reflections, regime]);
 
   // Generate cluster associations
   const clusterAssociations = useMemo(() => {

@@ -11,6 +11,7 @@ import { fromNarrative } from '../insights/viewModels';
 import { calculateDensity } from '../insights/density';
 import { classifyCadence } from '../insights/cadence';
 import { generateInsightLabel } from '../insights/labels';
+import type { Regime } from '../regime/detectRegime';
 
 export type ConceptualCluster = {
   id: string;
@@ -154,13 +155,67 @@ function generateNeutralLabel(keywords: string[]): string {
 }
 
 /**
+ * Apply regime gating to clusters
+ * Regime determines which observations are allowed to surface
+ * Regime is never shown to user, only gates visibility
+ */
+function applyRegimeGating(
+  clusters: ConceptualCluster[],
+  associations: ClusterAssociation[],
+  regime: Regime,
+  currentPeriod: string
+): ConceptualCluster[] {
+  if (clusters.length === 0) {
+    return [];
+  }
+
+  switch (regime) {
+    case 'deterministic':
+      // Deterministic regime suppresses:
+      // - Multiplicity (keep only top clusters)
+      // - Scenario projection
+      // - Dominant cluster emphasis
+      // Keep clusters with highest period counts, limit to top 3
+      const sortedByPeriods = [...clusters].sort(
+        (a, b) => b.sourcePeriods.length - a.sourcePeriods.length
+      );
+      return sortedByPeriods.slice(0, 3);
+
+    case 'transitional':
+      // Transitional regime allows:
+      // - Lattice structure
+      // - Spatial layout
+      // - Acceleration visibility
+      // Keep all clusters that pass silence rules
+      return clusters;
+
+    case 'emergent':
+      // Emergent regime allows:
+      // - Asymmetry
+      // - Dominant cluster prominence
+      // - Silence elsewhere without fallback
+      // Keep only clusters with highest dominance
+      const dominantClusters = [...clusters].sort(
+        (a, b) => b.sourcePeriods.length - a.sourcePeriods.length
+      );
+      // Keep top 2 dominant clusters
+      return dominantClusters.slice(0, 2);
+
+    default:
+      return clusters;
+  }
+}
+
+/**
  * Generate conceptual clusters from reflections
  * Only forms clusters from repeated keywords across summaries
  * Minimum threshold: appears across at least 2 separate time periods
+ * Applies regime gating to control observation visibility
  */
 export function generateConceptualClusters(
   reflections: ReflectionEntry[],
-  currentYearWrap: YearlyWrap
+  currentYearWrap: YearlyWrap,
+  regime?: Regime
 ): ConceptualCluster[] {
   if (reflections.length === 0) {
     return [];
@@ -252,6 +307,13 @@ export function generateConceptualClusters(
       description,
       sourcePeriods: Array.from(clusterPeriods).sort(),
     });
+  }
+
+  // Apply regime gating if regime is provided
+  if (regime) {
+    const currentYear = new Date().getFullYear().toString();
+    const emptyAssociations: ClusterAssociation[] = []; // Associations generated separately
+    return applyRegimeGating(clusters, emptyAssociations, regime, currentYear);
   }
 
   return clusters;
