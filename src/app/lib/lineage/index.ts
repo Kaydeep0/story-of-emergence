@@ -123,3 +123,31 @@ export {
   clearAllDensityMaps,
 } from './storeDensityMap';
 
+export type {
+  DensityGradient,
+  StructuralDensityGradient,
+  GradientSignals,
+} from './computeDensityGradient';
+
+export {
+  computeDensityGradient,
+  getGradient,
+  getAllGradients,
+} from './computeDensityGradient';
+
+export type {
+  EncryptedDensityGradient,
+} from './encryptDensityGradient';
+
+export {
+  encryptDensityGradient,
+  decryptDensityGradient,
+} from './encryptDensityGradient';
+
+export {
+  saveDensityGradient,
+  loadDensityGradient,
+  clearDensityGradient,
+  clearAllDensityGradients,
+} from './storeDensityGradient';
+
