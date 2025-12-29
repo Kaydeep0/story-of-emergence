@@ -1283,6 +1283,41 @@ export default function YearlyWrapPage() {
     })();
   }, [structuralNeighborhoodIndex, address, sessionKey]);
 
+  // Structural density map - read-only, encrypted
+  // Measures how locally crowded a reflection's neighborhood is
+  // Does not influence meaning reinforcement, decay, novelty, saturation, regime, dwell time, distance, or neighborhood membership
+  // Session-scoped: computed per wallet session
+  const structuralDensityMap = useMemo(() => {
+    if (!structuralNeighborhoodIndex) {
+      return null;
+    }
+
+    // Compute density map from neighborhood index
+    // Density = size of neighborhood (absolute count)
+    return computeStructuralDensity({
+      neighborhoodIndex: structuralNeighborhoodIndex,
+      sessionId: structuralNeighborhoodIndex.sessionId,
+    });
+  }, [structuralNeighborhoodIndex]);
+
+  // Encrypt and store density map (async, non-blocking)
+  useEffect(() => {
+    if (!structuralDensityMap || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptDensityMap(structuralDensityMap, sessionKey);
+        const sessionId = structuralDensityMap.sessionId;
+        saveDensityMap(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store density map', err);
+      }
+    })();
+  }, [structuralDensityMap, address, sessionKey]);
+
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
   // When epistemicallyClosed is true: all narrative generation paths disabled
