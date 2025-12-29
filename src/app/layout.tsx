@@ -3,7 +3,7 @@ import './globals.css';
 import ClientToaster from '@/components/ClientToaster';
 import Providers from './providers';
 import { AppHeader } from './components/AppHeader';
-import { VaultUnlockOverlay } from './components/VaultUnlockOverlay';
+import { VaultUnlockOverlay } from './components/vault/VaultUnlockOverlay';
 
 export const metadata: Metadata = {
   title: 'Story of Emergence',
