@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, detectEmergenceBoundary, encryptEmergenceDetection, saveEmergenceDetection, markEmergencePresence, encryptPresenceMarker, savePresenceMarker, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, detectEmergenceBoundary, encryptEmergenceDetection, saveEmergenceDetection, markEmergencePresence, encryptPresenceMarker, savePresenceMarker, witnessEmergence, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1479,6 +1479,35 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [emergencePresenceMarker, address, sessionKey]);
+
+  // Emergence witness channel - read-only, isolated
+  // Strictly read-only internal channel that can observe emergence presence
+  // without reacting, storing, amplifying, stabilizing, or narrating it.
+  // This phase creates a witness, not an actor.
+  // Read-only dependency: depends only on Phase 11.7 (Emergence Presence Marker)
+  // No behavioral influence: does NOT reinforce meaning, prevent decay, affect novelty, affect saturation, affect regime detection, extend dwell time, affect inference results
+  // No temporal semantics: no timestamps, duration, accumulation, or "has been emergent". Instantaneous snapshot only.
+  // No persistence: channel exists only in memory, cleared immediately on wallet disconnect, nothing written to storage
+  // No UI exposure: no indicators, badges, copy, animation, visual change, debug panel. This channel is not visible anywhere.
+  // No identity linkage: channel does not reference wallet address, no cross-session carryover, no user profiling
+  // Deterministic: same session structure → same witness state. No smoothing, hysteresis, or randomness.
+  // Isolation boundary: witness module must NOT be importable by inference engine, meaning scoring, decay logic, novelty logic, saturation logic, regime logic, UI logic
+  // Semantics prohibition: no labels like "observed", "noticed", "active", "present". No success or failure framing. No encouragement to add reflections.
+  // Epistemic firewall: witness channel may read the presence marker. Nothing may read the witness channel. One-way awareness only.
+  const emergenceWitness = useMemo(() => {
+    // Witness emergence presence
+    // Instantaneous snapshot only, no temporal semantics
+    // Exists only in memory, cleared on disconnect
+    // One-way awareness: witness reads presence marker, nothing reads witness
+    return witnessEmergence({
+      presenceMarker: emergencePresenceMarker,
+    });
+  }, [emergencePresenceMarker]);
+
+  // Note: emergenceWitness is computed but never used
+  // This is intentional - it's a witness channel that observes but does not act
+  // Epistemic firewall: witness channel may read the presence marker, but nothing may read the witness channel
+  // The witness exists only as a pure observer with no side effects
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths

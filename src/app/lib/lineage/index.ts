@@ -229,3 +229,12 @@ export {
   clearAllPresenceMarkers,
 } from './storePresenceMarker';
 
+export type {
+  EmergenceWitness,
+  WitnessSignals,
+} from './witnessEmergence';
+
+export {
+  witnessEmergence,
+} from './witnessEmergence';
+
