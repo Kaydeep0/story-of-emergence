@@ -1,5 +1,6 @@
 import type { DistributionNarrative } from '@/app/lib/distributions/narratives';
 import type { NarrativeDelta } from '@/app/lib/distributions/deltas';
+import { generateInsightLabel } from './labels';
 
 export type InsightCard = {
   id: string;
@@ -7,6 +8,7 @@ export type InsightCard = {
   headline: string;
   summary: string;
   confidence: 'low' | 'medium' | 'high';
+  label?: string; // Optional density and cadence label
 };
 
 export type InsightDeltaCard = {
@@ -21,15 +23,20 @@ export type InsightDeltaCard = {
  * Convert DistributionNarrative to InsightCard view model
  * Pure function, field mapping only - no logic changes, no inference, no recomputation
  * @param narrative Distribution narrative to convert
+ * @param label Optional density and cadence label
  * @returns InsightCard view model
  */
-export function fromNarrative(narrative: DistributionNarrative): InsightCard {
+export function fromNarrative(
+  narrative: DistributionNarrative,
+  label?: string
+): InsightCard {
   return {
     id: generateStableId(narrative.scope, narrative.headline),
     scope: narrative.scope,
     headline: narrative.headline,
     summary: narrative.summary,
     confidence: narrative.confidence,
+    label,
   };
 }
 

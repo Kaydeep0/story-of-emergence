@@ -78,6 +78,7 @@ import { generateDistributionInsight } from '../lib/distributions/insights';
 import { generateNarrative } from '../lib/distributions/narratives';
 import { inspectDistribution } from '../lib/distributions/inspect';
 import { fromNarrative } from '../lib/insights/viewModels';
+import { generateInsightLabel } from '../lib/insights/labels';
 import { InsightPanel } from './components/InsightPanel';
 import { InsightTimeline } from './components/InsightTimeline';
 
@@ -1081,8 +1082,16 @@ export default function InsightsPage() {
       // Generate narrative
       const narrative = generateNarrative(scope, insight, stats.totalEvents);
 
+      // Generate density and cadence label
+      const bucketCounts = classifiedSeries.points.map(p => p.weight);
+      const label = generateInsightLabel({
+        totalEvents: stats.totalEvents,
+        scope,
+        bucketCounts,
+      });
+
       // Convert to InsightCard via adapter
-      const card = fromNarrative(narrative);
+      const card = fromNarrative(narrative, label);
       insightCards.push(card);
     }
 

@@ -74,6 +74,9 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                         <div className="flex items-start justify-between gap-4 mb-2">
                           <div className="flex-1">
                             <h3 className="font-bold text-gray-900 mb-1">{insight.headline}</h3>
+                            {insight.label && (
+                              <p className="text-xs text-gray-500 mb-2">{insight.label}</p>
+                            )}
                             <p className="text-sm text-gray-600 leading-relaxed">{insight.summary}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 shrink-0">
