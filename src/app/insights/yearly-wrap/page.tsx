@@ -185,7 +185,8 @@ export default function YearlyWrapPage() {
       return [];
     }
 
-    return generateClusterAssociations(conceptualClusters);
+    const currentYear = new Date().getFullYear().toString();
+    return generateClusterAssociations(conceptualClusters, currentYear);
   }, [conceptualClusters]);
 
   const handleExport = () => {
@@ -382,13 +383,22 @@ export default function YearlyWrapPage() {
                           const associatedCluster = conceptualClusters.find(c => c.id === associatedClusterId);
                           if (!associatedCluster) return null;
                           
-                          // Calculate distance for this association
-                          const distance = calculateClusterDistance(cluster, associatedCluster);
-                          const distancePhrase = getDistancePhrase(distance);
+                          // Calculate distance for this association (with silence rules)
+                          const currentYear = new Date().getFullYear().toString();
+                          const distance = calculateClusterDistance(cluster, associatedCluster, {
+                            allClusters: conceptualClusters,
+                            currentPeriod: currentYear,
+                          });
+                          
+                          // Only show distance if it passes silence rules
+                          const distancePhrase = distance !== null ? getDistancePhrase(distance) : null;
                           
                           return (
                             <li key={assoc.fromClusterId + assoc.toClusterId} className="text-gray-600">
-                              – {associatedCluster.label} <span className="text-gray-500">({distancePhrase})</span>
+                              – {associatedCluster.label}
+                              {distancePhrase && (
+                                <span className="text-gray-500"> ({distancePhrase})</span>
+                              )}
                             </li>
                           );
                         })}

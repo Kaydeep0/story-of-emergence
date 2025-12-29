@@ -16,10 +16,50 @@ export type ContinuityNote = {
 };
 
 /**
+ * Determine if a continuity observation should be rendered
+ * Applies silence rules to continuity notes
+ */
+function shouldRenderContinuityNote(
+  currentKeywords: string[],
+  priorKeywords: string[],
+  overlapping: string[]
+): boolean {
+  // Rule 1: Observation appears in only one period total
+  // Continuity requires at least 2 periods (current + prior)
+  if (currentKeywords.length === 0 || priorKeywords.length === 0) {
+    return false;
+  }
+
+  // Rule 2: Observation frequency is below minimum threshold
+  // Need at least 2 overlapping keywords for meaningful continuity
+  if (overlapping.length < 2) {
+    return false;
+  }
+
+  // Rule 3: Observation is ambiguous between multiple clusters
+  // If keywords are too generic or common, silence
+  const genericKeywords = new Set(['reflection', 'activity', 'pattern', 'engagement', 'rhythm']);
+  const hasOnlyGeneric = overlapping.every(kw => genericKeywords.has(kw.toLowerCase()));
+  if (hasOnlyGeneric && overlapping.length <= 2) {
+    return false;
+  }
+
+  // Rule 4: Observation would require interpretation to explain
+  // If overlap is very small relative to total keywords, it's ambiguous
+  const overlapRatio = overlapping.length / Math.max(currentKeywords.length, priorKeywords.length);
+  if (overlapRatio < 0.2) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Generate continuity note by comparing current year's summary with prior year's summary
  * Observational only - no interpretation, no causality claims, no future language
  * Max 2 sentences
  * Only references prior yearly wrap summaries, never individual reflections or dates
+ * Applies silence rules - only renders if shouldRenderContinuityNote returns true
  */
 export function generateYearlyContinuity(
   currentYear: YearlyWrap,
@@ -39,6 +79,11 @@ export function generateYearlyContinuity(
 
   if (overlapping.length === 0) {
     return null;
+  }
+
+  // Check if observation should be rendered (silence rules)
+  if (!shouldRenderContinuityNote(currentKeywords, priorKeywords, overlapping)) {
+    return null; // Silence - render nothing, no fallback language
   }
 
   // Generate observational note about overlapping themes

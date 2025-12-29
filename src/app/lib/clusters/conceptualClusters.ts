@@ -261,9 +261,11 @@ export function generateConceptualClusters(
  * Generate associations between conceptual clusters
  * Associations exist only if two clusters appear in the same period summary
  * and occur in at least 2 separate periods
+ * Applies silence rules - only renders if shouldRenderObservation returns true
  */
 export function generateClusterAssociations(
-  clusters: ConceptualCluster[]
+  clusters: ConceptualCluster[],
+  currentPeriod: string
 ): ClusterAssociation[] {
   if (clusters.length < 2) {
     return [];
@@ -292,12 +294,29 @@ export function generateClusterAssociations(
 
       // Association exists only if co-occurs in at least 2 separate periods
       if (coOccurringPeriods.length >= 2) {
-        associations.push({
-          fromClusterId: clusterA.id,
-          toClusterId: clusterB.id,
-          coOccurrenceCount: coOccurringPeriods.length,
-          periods: coOccurringPeriods.sort(),
-        });
+        // Check if observation should be rendered (silence rules)
+        const shouldRender = shouldRenderObservation(
+          {
+            type: 'association',
+            periods: coOccurringPeriods,
+            clusterA,
+            clusterB,
+            coOccurrenceCount: coOccurringPeriods.length,
+          },
+          {
+            allClusters: clusters,
+            currentPeriod,
+          }
+        );
+
+        if (shouldRender) {
+          associations.push({
+            fromClusterId: clusterA.id,
+            toClusterId: clusterB.id,
+            coOccurrenceCount: coOccurringPeriods.length,
+            periods: coOccurringPeriods.sort(),
+          });
+        }
       }
     }
   }
@@ -342,11 +361,16 @@ export function getAssociatedClusterId(
  * Distance is inverse of shared periods: more shared periods = closer distance
  * Values remain internal only, not shown to user
  * Distance is NOT a score, rank, weight, or value judgment
+ * Applies silence rules - only calculates if shouldRenderObservation returns true
  */
 export function calculateClusterDistance(
   clusterA: ConceptualCluster,
-  clusterB: ConceptualCluster
-): number {
+  clusterB: ConceptualCluster,
+  context: {
+    allClusters: ConceptualCluster[];
+    currentPeriod: string;
+  }
+): number | null {
   const periodsA = new Set(clusterA.sourcePeriods);
   const periodsB = new Set(clusterB.sourcePeriods);
   
@@ -355,6 +379,22 @@ export function calculateClusterDistance(
   
   // Total unique periods across both clusters
   const totalPeriods = new Set([...periodsA, ...periodsB]).size;
+  
+  // Check if distance observation should be rendered (silence rules)
+  const shouldRender = shouldRenderObservation(
+    {
+      type: 'distance',
+      periods: Array.from(periodsA).concat(Array.from(periodsB)),
+      clusterA,
+      clusterB,
+      coOccurrenceCount: sharedPeriods,
+    },
+    context
+  );
+
+  if (!shouldRender) {
+    return null; // Silence - return null instead of distance value
+  }
   
   // Distance is inverse of shared period ratio
   // More shared periods = closer distance (lower value)
@@ -408,12 +448,108 @@ export function getDistancePhrase(distance: number): string {
 }
 
 /**
+ * Determine if an observation should be rendered
+ * Returns false (silence) for observations that:
+ * - Appear in only one period total
+ * - Contradict themselves across periods
+ * - Have frequency below minimum threshold
+ * - Are ambiguous between multiple clusters
+ * - Would require interpretation to explain
+ * 
+ * Silence rules apply to: Absence, Associations, Distance, Continuity notes
+ * Not to: Raw reflections, Explicit summaries
+ */
+export function shouldRenderObservation(
+  observation: {
+    type: 'fade' | 'association' | 'distance' | 'continuity';
+    periods: string[];
+    clusterA?: ConceptualCluster;
+    clusterB?: ConceptualCluster;
+    coOccurrenceCount?: number;
+  },
+  context: {
+    allClusters: ConceptualCluster[];
+    currentPeriod: string;
+  }
+): boolean {
+  const { type, periods, clusterA, clusterB, coOccurrenceCount } = observation;
+  const { allClusters, currentPeriod } = context;
+
+  // Rule 1: Observation appears in only one period total
+  if (periods.length < 2) {
+    return false;
+  }
+
+  // Rule 2: Observation frequency is below minimum threshold
+  // For associations and distance, require at least 2 co-occurring periods
+  if (type === 'association' || type === 'distance') {
+    if (!coOccurrenceCount || coOccurrenceCount < 2) {
+      return false;
+    }
+  }
+
+  // Rule 3: Observation is ambiguous between multiple clusters
+  // If cluster labels are too similar or overlapping, silence
+  if (clusterA && clusterB) {
+    const labelA = clusterA.label.toLowerCase();
+    const labelB = clusterB.label.toLowerCase();
+    
+    // If labels are identical or one contains the other, it's ambiguous
+    if (labelA === labelB || labelA.includes(labelB) || labelB.includes(labelA)) {
+      return false;
+    }
+    
+    // If clusters share too many source periods (more than 80%), it's ambiguous
+    const periodsA = new Set(clusterA.sourcePeriods);
+    const periodsB = new Set(clusterB.sourcePeriods);
+    const sharedPeriods = Array.from(periodsA).filter(p => periodsB.has(p)).length;
+    const totalUniquePeriods = new Set([...periodsA, ...periodsB]).size;
+    const overlapRatio = sharedPeriods / totalUniquePeriods;
+    
+    if (overlapRatio > 0.8) {
+      return false;
+    }
+  }
+
+  // Rule 4: Observation would require interpretation to explain
+  // For fade: if cluster appeared in current period but also in many prior periods,
+  // it's not a clear fade (would require interpretation)
+  if (type === 'fade' && clusterA) {
+    const appearsInCurrent = clusterA.sourcePeriods.includes(currentPeriod);
+    if (appearsInCurrent) {
+      return false; // Not faded if it appears in current period
+    }
+    
+    // If cluster has very few periods total, fade observation is ambiguous
+    if (clusterA.sourcePeriods.length < 3) {
+      return false;
+    }
+  }
+
+  // Rule 5: Observation contradicts itself across periods
+  // For associations: if clusters never co-occur in same periods, it's contradictory
+  if (type === 'association' && clusterA && clusterB) {
+    const periodsA = new Set(clusterA.sourcePeriods);
+    const periodsB = new Set(clusterB.sourcePeriods);
+    const coOccurringPeriods = Array.from(periodsA).filter(p => periodsB.has(p));
+    
+    // If they have periods but never co-occur, it's contradictory
+    if (periodsA.size > 0 && periodsB.size > 0 && coOccurringPeriods.length === 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Detect faded clusters
  * A cluster is considered "faded" if:
  * - It appeared in at least 2 prior periods
  * - It does NOT appear in the current period
  * Binary presence/absence only - no time decay curves, no scoring
  * Fade detection applies ONLY to conceptual clusters, never to emotions, people, or identities
+ * Applies silence rules - only renders if shouldRenderObservation returns true
  */
 export function detectFadedClusters(
   clusters: ConceptualCluster[],
@@ -432,13 +568,28 @@ export function detectFadedClusters(
       const appearsInCurrent = cluster.sourcePeriods.includes(currentPeriod);
       
       if (!appearsInCurrent) {
-        // Cluster is faded - appeared in prior periods but not current
-        // Use "Not observed this period" phrasing (never use: gone, missing, lost, declined, stopped, reduced, weakened)
-        return {
-          ...cluster,
-          faded: true,
-          fadePhrase: 'Not observed this period',
-        };
+        // Check if observation should be rendered (silence rules)
+        const shouldRender = shouldRenderObservation(
+          {
+            type: 'fade',
+            periods: cluster.sourcePeriods,
+            clusterA: cluster,
+          },
+          {
+            allClusters: clusters,
+            currentPeriod,
+          }
+        );
+
+        if (shouldRender) {
+          // Cluster is faded - appeared in prior periods but not current
+          // Use "Not observed this period" phrasing (never use: gone, missing, lost, declined, stopped, reduced, weakened)
+          return {
+            ...cluster,
+            faded: true,
+            fadePhrase: 'Not observed this period',
+          };
+        }
       }
     }
     
