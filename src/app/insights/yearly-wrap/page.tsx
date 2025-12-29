@@ -34,6 +34,7 @@ import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLa
 import { detectRegime } from '../../lib/regime/detectRegime';
 import { generateContinuations } from '../../lib/continuations/generateContinuations';
 import { generateRegimeNarrative } from '../../lib/narrative/generateRegimeNarrative';
+import { inferObserverPosition } from '../../lib/position/inferObserverPosition';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -243,6 +244,17 @@ export default function YearlyWrapPage() {
     });
   }, [conceptualClusters, clusterAssociations, regime]);
 
+  // Infer observer position within the field
+  const observerPosition = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    return inferObserverPosition({
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      regime,
+      currentPeriod: currentYear,
+    });
+  }, [conceptualClusters, clusterAssociations, regime]);
+
   const handleExport = () => {
     window.print();
   };
@@ -445,6 +457,21 @@ export default function YearlyWrapPage() {
             <div className="mb-8 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 leading-relaxed">
                 {regimeNarrative.text}
+              </p>
+              {/* Observer position - field position descriptor */}
+              {observerPosition && (
+                <p className="text-xs text-gray-500 mt-3 italic">
+                  {observerPosition.phrase}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Observer position standalone (if narrative is null but position exists) */}
+          {!regimeNarrative && observerPosition && (
+            <div className="mb-8 pt-6 border-t border-gray-200">
+              <p className="text-xs text-gray-500 italic">
+                {observerPosition.phrase}
               </p>
             </div>
           )}
