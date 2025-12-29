@@ -19,6 +19,13 @@ export type ConceptualCluster = {
   sourcePeriods: string[]; // List of year or month identifiers (e.g., "2023", "2024-01")
 };
 
+export type ClusterAssociation = {
+  fromClusterId: string;
+  toClusterId: string;
+  coOccurrenceCount: number;
+  periods: string[]; // List of year or month identifiers where both clusters appeared
+};
+
 type PeriodSummary = {
   period: string; // Year or month identifier
   keywords: string[];
@@ -246,5 +253,85 @@ export function generateConceptualClusters(
   }
 
   return clusters;
+}
+
+/**
+ * Generate associations between conceptual clusters
+ * Associations exist only if two clusters appear in the same period summary
+ * and occur in at least 2 separate periods
+ */
+export function generateClusterAssociations(
+  clusters: ConceptualCluster[]
+): ClusterAssociation[] {
+  if (clusters.length < 2) {
+    return [];
+  }
+
+  const associations: ClusterAssociation[] = [];
+  const processedPairs = new Set<string>();
+
+  // Check all pairs of clusters
+  for (let i = 0; i < clusters.length; i++) {
+    for (let j = i + 1; j < clusters.length; j++) {
+      const clusterA = clusters[i];
+      const clusterB = clusters[j];
+
+      // Create a canonical pair key (undirected)
+      const pairKey = [clusterA.id, clusterB.id].sort().join('-');
+      if (processedPairs.has(pairKey)) {
+        continue;
+      }
+      processedPairs.add(pairKey);
+
+      // Find periods where both clusters appear
+      const periodsA = new Set(clusterA.sourcePeriods);
+      const periodsB = new Set(clusterB.sourcePeriods);
+      const coOccurringPeriods = Array.from(periodsA).filter(p => periodsB.has(p));
+
+      // Association exists only if co-occurs in at least 2 separate periods
+      if (coOccurringPeriods.length >= 2) {
+        associations.push({
+          fromClusterId: clusterA.id,
+          toClusterId: clusterB.id,
+          coOccurrenceCount: coOccurringPeriods.length,
+          periods: coOccurringPeriods.sort(),
+        });
+      }
+    }
+  }
+
+  return associations;
+}
+
+/**
+ * Get associations for a specific cluster
+ * Returns up to maxCount associations, sorted by co-occurrence count
+ */
+export function getAssociationsForCluster(
+  clusterId: string,
+  associations: ClusterAssociation[],
+  maxCount: number = 2
+): ClusterAssociation[] {
+  const relevantAssociations = associations.filter(
+    assoc => assoc.fromClusterId === clusterId || assoc.toClusterId === clusterId
+  );
+
+  // Sort by co-occurrence count (descending)
+  relevantAssociations.sort((a, b) => b.coOccurrenceCount - a.coOccurrenceCount);
+
+  return relevantAssociations.slice(0, maxCount);
+}
+
+/**
+ * Get the other cluster ID from an association
+ * Helper function to find which cluster is associated with the given cluster
+ */
+export function getAssociatedClusterId(
+  association: ClusterAssociation,
+  currentClusterId: string
+): string {
+  return association.fromClusterId === currentClusterId
+    ? association.toClusterId
+    : association.fromClusterId;
 }
 

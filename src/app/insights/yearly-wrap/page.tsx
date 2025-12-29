@@ -29,7 +29,7 @@ import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
-import { generateConceptualClusters } from '../../lib/clusters/conceptualClusters';
+import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId } from '../../lib/clusters/conceptualClusters';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -174,6 +174,15 @@ export default function YearlyWrapPage() {
 
     return generateConceptualClusters(reflections, yearlyWrap);
   }, [yearlyWrap, reflections]);
+
+  // Generate cluster associations
+  const clusterAssociations = useMemo(() => {
+    if (conceptualClusters.length < 2) {
+      return [];
+    }
+
+    return generateClusterAssociations(conceptualClusters);
+  }, [conceptualClusters]);
 
   const handleExport = () => {
     window.print();
@@ -348,15 +357,34 @@ export default function YearlyWrapPage() {
       {conceptualClusters.length > 0 && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
-          <div className="space-y-4">
-            {conceptualClusters.map((cluster) => (
-              <div key={cluster.id} className="text-base text-gray-700">
-                <p className="font-normal mb-1">{cluster.label}</p>
-                {cluster.description && (
-                  <p className="text-sm text-gray-600 leading-relaxed">{cluster.description}</p>
-                )}
-              </div>
-            ))}
+          <div className="space-y-6">
+            {conceptualClusters.map((cluster) => {
+              const associations = getAssociationsForCluster(cluster.id, clusterAssociations, 2);
+              return (
+                <div key={cluster.id} className="text-base text-gray-700">
+                  <p className="font-normal mb-1">{cluster.label}</p>
+                  {cluster.description && (
+                    <p className="text-sm text-gray-600 leading-relaxed mb-2">{cluster.description}</p>
+                  )}
+                  {associations.length > 0 && (
+                    <div className="mt-3 ml-4 text-sm text-gray-600">
+                      <p className="mb-2">Often appears alongside:</p>
+                      <ul className="list-none space-y-1">
+                        {associations.map((assoc) => {
+                          const associatedClusterId = getAssociatedClusterId(assoc, cluster.id);
+                          const associatedCluster = conceptualClusters.find(c => c.id === associatedClusterId);
+                          return associatedCluster ? (
+                            <li key={assoc.fromClusterId + assoc.toClusterId} className="text-gray-600">
+                              – {associatedCluster.label}
+                            </li>
+                          ) : null;
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
