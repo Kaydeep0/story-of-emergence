@@ -49,6 +49,7 @@ import { incSaveCount, messageForSave } from '@/app/lib/toast';
 import { getSupabaseForWallet } from './lib/supabase';
 import { useEncryptionSession } from './lib/useEncryptionSession';
 import { rpcInsertShare } from './lib/shares';
+import { CapsuleAcknowledgement } from './components/vault/CapsuleAcknowledgement';
 
 type Item = {
   id: string;
@@ -153,6 +154,7 @@ const [renameValue, setRenameValue] = useState('');
 const [sharingItem, setSharingItem] = useState<Item | null>(null);
 const [shareRecipient, setShareRecipient] = useState('');
 const [shareCreating, setShareCreating] = useState(false);
+const [showCapsuleAcknowledgement, setShowCapsuleAcknowledgement] = useState(false);
 
 
 
@@ -649,6 +651,7 @@ function closeShareModal() {
   setSharingItem(null);
   setShareRecipient('');
   setShareCreating(false);
+  setShowCapsuleAcknowledgement(false);
 }
 
 // Create a share for a reflection
@@ -697,9 +700,13 @@ async function createShare() {
     // Log the share event
     logEvent('share_created');
 
-    // Success: show toast and close modal
-    toast.success('Share created successfully!');
-    closeShareModal();
+    // Show capsule acknowledgement (inline, not toast)
+    setShowCapsuleAcknowledgement(true);
+    
+    // Close modal after brief delay to show acknowledgement
+    setTimeout(() => {
+      closeShareModal();
+    }, 2000);
   } catch (err: any) {
     console.error('Share creation failed:', err);
     toast.error('Share failed. Please try again.');
@@ -1247,11 +1254,16 @@ async function createShare() {
               </p>
             </div>
 
+            {/* Capsule Acknowledgement - Show after successful creation */}
+            {showCapsuleAcknowledgement && (
+              <CapsuleAcknowledgement />
+            )}
+
             {/* Actions */}
             <div className="flex gap-3 pt-2">
               <button
                 onClick={createShare}
-                disabled={shareCreating || !shareRecipient.trim()}
+                disabled={shareCreating || !shareRecipient.trim() || showCapsuleAcknowledgement}
                 className="flex-1 rounded-xl bg-sky-600 text-white py-2.5 font-medium hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {shareCreating ? 'Creating…' : 'Create Share'}
@@ -1261,7 +1273,7 @@ async function createShare() {
                 disabled={shareCreating}
                 className="flex-1 rounded-xl border border-white/20 py-2.5 font-medium hover:bg-white/5 disabled:opacity-50 transition-colors"
               >
-                Cancel
+                {showCapsuleAcknowledgement ? 'Done' : 'Cancel'}
               </button>
             </div>
           </div>
