@@ -179,3 +179,28 @@ export {
   clearAllCurvatureIndices,
 } from './storeCurvatureIndex';
 
+export type {
+  EmergenceBoundaryState,
+  EmergenceDetectionSignals,
+} from './detectEmergenceBoundary';
+
+export {
+  detectEmergenceBoundary,
+} from './detectEmergenceBoundary';
+
+export type {
+  EncryptedEmergenceDetection,
+} from './encryptEmergenceDetection';
+
+export {
+  encryptEmergenceDetection,
+  decryptEmergenceDetection,
+} from './encryptEmergenceDetection';
+
+export {
+  saveEmergenceDetection,
+  loadEmergenceDetection,
+  clearEmergenceDetection,
+  clearAllEmergenceDetections,
+} from './storeEmergenceDetection';
+

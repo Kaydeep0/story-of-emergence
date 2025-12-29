@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, computeDensityGradient, encryptDensityGradient, saveDensityGradient, computeStructuralCurvature, encryptCurvatureIndex, saveCurvatureIndex, detectEmergenceBoundary, encryptEmergenceDetection, saveEmergenceDetection, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1390,6 +1390,50 @@ export default function YearlyWrapPage() {
       }
     })();
   }, [structuralCurvatureIndex, address, sessionKey]);
+
+  // Emergence boundary crossing detector - read-only, non-intervening
+  // Identifies when the system crosses from non-emergent structure into emergent structure
+  // Does NOT influence, amplify, narrate, or stabilize emergence
+  // This detector does not create meaning. It only marks that emergence has occurred.
+  // Detection is based ONLY on structural density, density gradient, curvature, and neighborhood connectivity
+  // Binary boundary: either emergent or not. No partial states, degrees, or scores.
+  // Session-scoped: computed per wallet session. No cross-session memory.
+  // No UI exposure: no indicator, badge, animation, copy, explanation, or visual affordance.
+  const emergenceBoundaryState = useMemo(() => {
+    if (!structuralDensityMap || !structuralDensityGradient || !structuralCurvatureIndex || !structuralNeighborhoodIndex) {
+      return null;
+    }
+
+    // Detect emergence boundary crossing
+    // Based ONLY on structural metrics: density, gradient, curvature, connectivity
+    // Binary: true if emergent, false otherwise
+    // Deterministic: same structure → same detection result
+    return detectEmergenceBoundary({
+      densityMap: structuralDensityMap,
+      densityGradient: structuralDensityGradient,
+      curvatureIndex: structuralCurvatureIndex,
+      neighborhoodIndex: structuralNeighborhoodIndex,
+      sessionId: structuralDensityMap.sessionId,
+    });
+  }, [structuralDensityMap, structuralDensityGradient, structuralCurvatureIndex, structuralNeighborhoodIndex]);
+
+  // Encrypt and store emergence detection (async, non-blocking)
+  useEffect(() => {
+    if (!emergenceBoundaryState || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptEmergenceDetection(emergenceBoundaryState, sessionKey);
+        const sessionId = emergenceBoundaryState.sessionId;
+        saveEmergenceDetection(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store emergence detection', err);
+      }
+    })();
+  }, [emergenceBoundaryState, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
