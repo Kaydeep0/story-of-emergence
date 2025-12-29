@@ -27,6 +27,7 @@ import type { ReflectionEntry } from '../../lib/insights/types';
 import type { InsightCard, InsightDeltaCard } from '../../lib/insights/viewModels';
 import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
+import { generateSharePack } from '../../lib/share/generateSharePack';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -150,6 +151,32 @@ export default function YearlyWrapPage() {
     window.print();
   };
 
+  const handleGenerateSharePack = () => {
+    if (!yearlyWrap || !address) return;
+
+    // Determine year from reflections or use current year
+    const year = reflections.length > 0
+      ? new Date(reflections[0].createdAt).getFullYear()
+      : new Date().getFullYear();
+
+    // Generate SharePack
+    const sharePack = generateSharePack(yearlyWrap, year, address);
+
+    // Convert to JSON
+    const json = JSON.stringify(sharePack, null, 2);
+
+    // Create blob and download
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `story-of-emergence-yearly-wrap-${year}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <YearlyWrapContainer>
@@ -185,8 +212,8 @@ export default function YearlyWrapPage() {
 
   return (
     <YearlyWrapContainer>
-      {/* Export button - hidden in print */}
-      <div className="mb-8 print:hidden">
+      {/* Export buttons - hidden in print */}
+      <div className="mb-8 print:hidden flex gap-3">
         <button
           type="button"
           onClick={handleExport}
@@ -194,6 +221,15 @@ export default function YearlyWrapPage() {
         >
           Export Yearly Wrap
         </button>
+        {yearlyWrap && address && (
+          <button
+            type="button"
+            onClick={handleGenerateSharePack}
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded px-4 py-2 bg-white hover:bg-gray-50 transition-colors"
+          >
+            Generate Share Pack
+          </button>
+        )}
       </div>
 
       {/* Headline */}
