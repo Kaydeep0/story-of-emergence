@@ -1508,6 +1508,31 @@ export default function YearlyWrapPage() {
   // This is intentional - it's a witness channel that observes but does not act
   // Epistemic firewall: witness channel may read the presence marker, but nothing may read the witness channel
   // The witness exists only as a pure observer with no side effects
+  //
+  // EMERGENCE EXPOSURE FIREWALL (Phase 11.9)
+  // =========================================
+  // Formal Assertion: Emergence is a property of structure, not a signal for action.
+  //
+  // The following emergence-related state exists but MUST NOT influence:
+  // - emergenceBoundaryState: Binary detection of emergence crossing
+  // - emergencePresenceMarker: Silent marker of emergence presence
+  // - emergenceWitness: Read-only witness channel
+  //
+  // These states are:
+  // - Computed for observation only
+  // - Encrypted and stored separately (presence marker only)
+  // - Never read by inference, decay, novelty, saturation, regime, or UI logic
+  // - Never used to influence reflection creation, ordering, ranking, surfacing
+  // - Never used to alter summaries, insights, yearly wrap weighting
+  // - Never used to affect distribution timing, prominence, or artifact generation
+  // - Never used to adjust thresholds, stabilize structures, or create temporal narratives
+  // - Never used to influence language generation, tone, framing, or metaphor
+  // - Never used to affect UI layout, spacing, animation, or copy variations
+  //
+  // Deterministic indifference: Whether emergence occurs or not, the system behaves identically.
+  // Only internal state differs, and that state is unreadable by downstream logic.
+  //
+  // If any code attempts to use emergence state for behavioral influence, it violates the firewall.
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths

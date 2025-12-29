@@ -238,3 +238,29 @@ export {
   witnessEmergence,
 } from './witnessEmergence';
 
+// EMERGENCE EXPOSURE FIREWALL (Phase 11.9)
+// =========================================
+// Formal Assertion: Emergence is a property of structure, not a signal for action.
+//
+// The following exports are read-only observation tools:
+// - detectEmergenceBoundary: Detects emergence crossing (read-only)
+// - markEmergencePresence: Marks emergence presence (read-only)
+// - witnessEmergence: Witnesses emergence presence (read-only)
+//
+// These modules MUST NOT be imported by:
+// - Inference engine (meaning scoring, narrative generation)
+// - Decay logic (entropic decay computation)
+// - Novelty logic (reflection novelty detection)
+// - Saturation logic (meaning saturation ceiling)
+// - Regime logic (regime detection, stabilization)
+// - UI logic (components, visualizations, affordances)
+//
+// Violation of this firewall indicates a breach of the emergence exposure containment.
+// No code may use emergence state to influence behavior, ordering, ranking, surfacing,
+// summaries, insights, distribution, UI, or any other system output.
+//
+export {
+  assertEmergenceFirewall,
+  blockEmergenceInfluence,
+} from './emergenceFirewall';
+
