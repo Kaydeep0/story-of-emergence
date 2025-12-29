@@ -137,7 +137,7 @@ export function buildPriorYearWrap(
   // Generate density and cadence label
   const bucketCounts = classifiedSeries.points.map(p => p.weight);
   const density = calculateDensity({ totalEvents: stats.totalEvents, scope: 'year' });
-  const cadence = classifyCadence({ bucketCounts });
+  const cadence = classifyCadence(bucketCounts);
   const label = generateInsightLabel({ totalEvents: stats.totalEvents, scope: 'year', bucketCounts });
 
   const card = fromNarrative(narrative, label);

@@ -30,6 +30,7 @@ import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
 import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
 import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
+import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -362,6 +363,17 @@ export default function YearlyWrapPage() {
       {conceptualClusters.length > 0 && (
         <div className="mb-16 pt-12 border-t border-gray-200">
           <h3 className="text-sm font-normal text-gray-600 mb-6">Recurring regions</h3>
+          
+          {/* Spatial layout - read-only projection */}
+          {conceptualClusters.length >= 2 && (
+            <div className="mb-8">
+              <SpatialClusterLayout
+                clusters={conceptualClusters}
+                associations={clusterAssociations}
+              />
+            </div>
+          )}
+          
           <div className="space-y-6">
             {conceptualClusters.map((cluster) => {
               const associations = getAssociationsForCluster(cluster.id, clusterAssociations, 2);
