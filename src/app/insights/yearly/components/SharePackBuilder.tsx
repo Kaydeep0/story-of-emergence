@@ -304,7 +304,7 @@ export function SharePackBuilder({
     }
 
     if (daysAfter.size >= 7) {
-      return `This was followed by your longest reflection streak (${daysAfter.size} days).`;
+      return `This was followed by your longest consecutive reflection period (${daysAfter.size} days).`;
     }
 
     if (isSpike && entriesAfter.length > dayEntries.length * 2) {

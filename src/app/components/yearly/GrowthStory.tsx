@@ -72,16 +72,16 @@ export function GrowthStory({ entries }: GrowthStoryProps) {
   // Generate narrative
   let narrative = '';
   if (fading.length > 0 && rising.length > 0) {
-    narrative = `Early you circled around ${fading[0]}. Later you leaned into ${rising[0]}.`;
+    narrative = `Early themes centered on ${fading[0]}. Later themes shifted toward ${rising[0]}.`;
   } else if (rising.length > 0) {
-    narrative = `Later you leaned into ${rising[0]}${rising.length > 1 ? ` and ${rising[1]}` : ''}.`;
+    narrative = `Later themes shifted toward ${rising[0]}${rising.length > 1 ? ` and ${rising[1]}` : ''}.`;
   } else {
-    narrative = 'Your themes remained consistent throughout the year.';
+    narrative = 'Themes remained consistent throughout the year.';
   }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h3 className="text-lg font-semibold mb-4">How you changed this year</h3>
+      <h3 className="text-lg font-semibold mb-4">How themes shifted this year</h3>
       
       <div className="grid gap-6 lg:grid-cols-2 mb-4">
         <div>

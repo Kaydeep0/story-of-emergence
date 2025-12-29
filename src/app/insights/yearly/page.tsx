@@ -514,12 +514,12 @@ export default function YearlyWrapPage() {
                 <h3 className="text-xl sm:text-2xl font-semibold mb-4">If you keep this rhythm…</h3>
                 <p className="text-base sm:text-lg text-white/90 leading-relaxed">
                   {archetype.name.includes('Deep Diver')
-                    ? 'Your insight compounds in the pauses. Protect the quiet, then return.'
+                    ? 'Reflection patterns show periods of activity and pause.'
                     : archetype.name.includes('Steady Builder')
-                    ? 'Consistency is your superpower. Next year becomes a foundation.'
+                    ? 'Consistent activity observed. Patterns continue over time.'
                     : archetype.name.includes('Sprinter')
-                    ? 'Your bursts move mountains. A simple cadence will make them gentler.'
-                    : 'Your writing rhythm will continue to evolve. Trust the process.'}
+                    ? 'Activity spikes observed. Patterns vary in frequency.'
+                    : 'Activity patterns vary over time.'}
                 </p>
               </div>
             )}

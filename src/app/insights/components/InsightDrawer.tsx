@@ -47,18 +47,18 @@ function normalizeAlwaysOnSummary(insight: AlwaysOnSummaryCard): NormalizedInsig
   let whyThisMatters = '';
   if (insight.data.summaryType === 'writing_change') {
     if (insight.data.percentChange && insight.data.percentChange > 0) {
-      whyThisMatters = 'Increasing writing activity suggests you\'re building momentum. This pattern can help you maintain consistency and deepen your reflection practice.';
+      whyThisMatters = 'Increased writing activity observed. This pattern shows variation in reflection frequency.';
     } else if (insight.data.percentChange && insight.data.percentChange < 0) {
-      whyThisMatters = 'A decrease in writing activity might indicate shifting priorities or challenges. Recognizing this pattern helps you adjust and get back on track.';
+      whyThisMatters = 'Decreased writing activity observed. This pattern shows variation in reflection frequency.';
     } else {
-      whyThisMatters = 'Maintaining steady writing activity shows consistency in your reflection practice. This stability helps build long-term habits.';
+      whyThisMatters = 'Steady writing activity observed. This pattern shows consistent reflection frequency.';
     }
   } else if (insight.data.summaryType === 'consistency') {
-    whyThisMatters = 'Consistent writing days create stronger habits and deeper insights. Regular reflection helps you notice patterns and track progress over time.';
+    whyThisMatters = 'Consistent writing days observed. Regular reflection shows patterns over time.';
   } else if (insight.data.summaryType === 'weekly_pattern') {
-    whyThisMatters = 'Recognizing your preferred writing days helps you plan and maintain your reflection practice. Patterns reveal when you\'re most likely to engage deeply.';
+    whyThisMatters = 'Writing patterns vary by day of week. This shows when reflection occurs most frequently.';
   } else if (insight.data.summaryType === 'activity_spike') {
-    whyThisMatters = 'Activity spikes often indicate moments of high engagement or important events. Understanding what triggers these bursts can help you recreate productive periods.';
+    whyThisMatters = 'Activity spikes observed. These periods show increased reflection frequency.';
   }
 
   return {
@@ -82,9 +82,9 @@ function normalizeTopicDrift(bucket: TopicDriftBucket): NormalizedInsight {
   };
 
   const whyThisMattersText = {
-    rising: 'Rising topics often reflect growing interests, concerns, or priorities. Paying attention to what\'s emerging can reveal important shifts in your thinking or circumstances.',
-    stable: 'Stable topics represent core themes in your life. These consistent patterns form the foundation of your reflection practice.',
-    fading: 'Fading topics might indicate resolved issues, changing priorities, or natural evolution. Understanding what\'s receding helps you see how your focus shifts over time.',
+    rising: 'Rising topics show emerging themes in reflections. These patterns indicate shifts in focus over time.',
+    stable: 'Stable topics represent recurring themes. These patterns show consistent focus areas.',
+    fading: 'Fading topics show decreasing frequency. These patterns indicate shifts in focus over time.',
   };
 
   // Convert sample titles to evidence format

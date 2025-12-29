@@ -1872,7 +1872,7 @@ export default function InsightsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="rounded-xl bg-white/5 p-4 text-center">
                       <div className="text-3xl font-semibold">{summaryData.streak}</div>
-                      <div className="text-xs text-white/50 mt-1">Day streak</div>
+                      <div className="text-xs text-white/50 mt-1">Consecutive days</div>
                     </div>
                     <div className="rounded-xl bg-white/5 p-4 text-center">
                       <div className="text-3xl font-semibold">{summaryData.entries}</div>
@@ -1983,9 +1983,9 @@ export default function InsightsPage() {
                           <div className="text-xs text-white/60 mb-1">Active days</div>
                           <div className="text-2xl font-semibold text-white">{stats.activeDays}</div>
                         </div>
-                        {/* Longest streak */}
+                        {/* Longest consecutive period */}
                         <div className="text-center">
-                          <div className="text-xs text-white/60 mb-1">Longest streak</div>
+                          <div className="text-xs text-white/60 mb-1">Longest consecutive period</div>
                           <div className="text-2xl font-semibold text-white">{stats.longestStreak}</div>
                         </div>
                       </div>
