@@ -52,6 +52,7 @@ import { TemporalWitnessView } from '../../components/temporal/TemporalWitnessVi
 import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } from '../../lib/decay';
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
+import { detectEmergenceRegime, type EmergenceRegime } from '../../lib/emergence';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1125,6 +1126,19 @@ export default function YearlyWrapPage() {
     positionalDrift,
     reflections,
   ]);
+
+  // Emergence phase transition detection - read-only regime classification
+  // Classifies system state (silence-dominant, sparse-meaning, dense-meaning)
+  // Does not influence inference, decay, novelty, or saturation
+  // Deterministic: same active node count → same regime
+  const emergenceRegime = useMemo(() => {
+    // Count active meaning nodes after saturation filtering
+    const activeNodeCount = saturationState.activeNodes.length;
+    
+    return detectEmergenceRegime({
+      activeMeaningNodeCount: activeNodeCount,
+    });
+  }, [saturationState]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
