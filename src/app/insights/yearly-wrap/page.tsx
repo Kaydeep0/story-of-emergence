@@ -35,6 +35,8 @@ import { detectRegime } from '../../lib/regime/detectRegime';
 import { generateContinuations } from '../../lib/continuations/generateContinuations';
 import { generateRegimeNarrative } from '../../lib/narrative/generateRegimeNarrative';
 import { inferObserverPosition } from '../../lib/position/inferObserverPosition';
+import { inferPositionalDrift } from '../../lib/position/inferPositionalDrift';
+import type { Regime } from '../../lib/regime/detectRegime';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -171,6 +173,46 @@ export default function YearlyWrapPage() {
     return generateYearlyContinuity(yearlyWrap, priorYearWrap);
   }, [yearlyWrap, reflections]);
 
+  // Detect previous period's regime and position for drift comparison
+  const previousPeriodData = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return { regime: null as Regime | null, position: null };
+    }
+
+    const currentYear = new Date().getFullYear();
+    const previousYear = currentYear - 1;
+
+    // Build previous year's wrap
+    const priorYearWrap = buildPriorYearWrap(reflections, previousYear);
+    if (!priorYearWrap) {
+      return { regime: null, position: null };
+    }
+
+    // Generate previous year's clusters
+    const previousClusters = generateConceptualClusters(reflections, priorYearWrap);
+    const previousYearStr = previousYear.toString();
+    const previousAssociations = previousClusters.length >= 2
+      ? generateClusterAssociations(previousClusters, previousYearStr)
+      : [];
+
+    // Detect previous regime
+    const previousRegime = detectRegime({
+      clusters: previousClusters,
+      associations: previousAssociations,
+      currentPeriod: previousYearStr,
+    });
+
+    // Infer previous position
+    const previousPosition = inferObserverPosition({
+      clusters: previousClusters,
+      associations: previousAssociations,
+      regime: previousRegime,
+      currentPeriod: previousYearStr,
+    });
+
+    return { regime: previousRegime, position: previousPosition };
+  }, [yearlyWrap, reflections]);
+
   // Detect regime (internal only, never rendered)
   const regime = useMemo(() => {
     if (!yearlyWrap || reflections.length === 0) {
@@ -254,6 +296,20 @@ export default function YearlyWrapPage() {
       currentPeriod: currentYear,
     });
   }, [conceptualClusters, clusterAssociations, regime]);
+
+  // Infer positional drift across periods
+  const positionalDrift = useMemo(() => {
+    if (!previousPeriodData.position || !observerPosition) {
+      return null;
+    }
+
+    return inferPositionalDrift({
+      previous: previousPeriodData.position,
+      current: observerPosition,
+      previousRegime: previousPeriodData.regime!,
+      currentRegime: regime,
+    });
+  }, [previousPeriodData, observerPosition, regime]);
 
   const handleExport = () => {
     window.print();
@@ -460,9 +516,17 @@ export default function YearlyWrapPage() {
               </p>
               {/* Observer position - field position descriptor */}
               {observerPosition && (
-                <p className="text-xs text-gray-500 mt-3 italic">
-                  {observerPosition.phrase}
-                </p>
+                <div className="mt-3">
+                  <p className="text-xs text-gray-500 italic">
+                    {observerPosition.phrase}
+                  </p>
+                  {/* Positional drift - difference across periods */}
+                  {positionalDrift && (
+                    <p className="text-xs text-gray-400 mt-1 italic">
+                      {positionalDrift.phrase}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -473,6 +537,12 @@ export default function YearlyWrapPage() {
               <p className="text-xs text-gray-500 italic">
                 {observerPosition.phrase}
               </p>
+              {/* Positional drift - difference across periods */}
+              {positionalDrift && (
+                <p className="text-xs text-gray-400 mt-1 italic">
+                  {positionalDrift.phrase}
+                </p>
+              )}
             </div>
           )}
           
