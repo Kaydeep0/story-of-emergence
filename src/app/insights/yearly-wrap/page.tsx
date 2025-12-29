@@ -32,6 +32,7 @@ import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continui
 import { generateConceptualClusters, generateClusterAssociations, getAssociationsForCluster, getAssociatedClusterId, calculateClusterDistance, getDistancePhrase, detectFadedClusters } from '../../lib/clusters/conceptualClusters';
 import { SpatialClusterLayout } from '../../components/clusters/SpatialClusterLayout';
 import { detectRegime } from '../../lib/regime/detectRegime';
+import { generateContinuations } from '../../lib/continuations/generateContinuations';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -210,6 +211,21 @@ export default function YearlyWrapPage() {
     const currentYear = new Date().getFullYear().toString();
     return generateClusterAssociations(conceptualClusters, currentYear);
   }, [conceptualClusters]);
+
+  // Generate continuations (only for transitional/emergent regimes)
+  const continuations = useMemo(() => {
+    if (conceptualClusters.length < 2) {
+      return [];
+    }
+
+    const currentYear = new Date().getFullYear().toString();
+    return generateContinuations({
+      clusters: conceptualClusters,
+      associations: clusterAssociations,
+      regime,
+      currentPeriod: currentYear,
+    });
+  }, [conceptualClusters, clusterAssociations, regime]);
 
   const handleExport = () => {
     window.print();
@@ -392,6 +408,19 @@ export default function YearlyWrapPage() {
                 clusters={conceptualClusters}
                 associations={clusterAssociations}
               />
+            </div>
+          )}
+
+          {/* Continuations - conditional option space (only transitional/emergent) */}
+          {continuations.length > 0 && (
+            <div className="mb-8 pt-6 border-t border-gray-200">
+              <div className="space-y-3">
+                {continuations.map((continuation) => (
+                  <p key={continuation.id} className="text-sm text-gray-600 italic leading-relaxed">
+                    {continuation.text}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
           
