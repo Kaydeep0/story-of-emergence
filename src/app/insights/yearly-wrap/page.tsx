@@ -28,6 +28,7 @@ import type { InsightCard, InsightDeltaCard } from '../../lib/insights/viewModel
 import { InsightPanel } from '../components/InsightPanel';
 import { YearlyWrapContainer } from '../../components/wrap/YearlyWrapContainer';
 import { generateSharePack } from '../../lib/share/generateSharePack';
+import { generateYearlyContinuity, buildPriorYearWrap } from '../../lib/continuity/continuity';
 
 export default function YearlyWrapPage() {
   const { address, isConnected } = useAccount();
@@ -123,7 +124,7 @@ export default function YearlyWrapPage() {
       
       if (insight) {
         const stats = inspectDistribution(classifiedSeries);
-        const narrative = generateNarrative('year', insight, stats.totalEvents);
+        const narrative = generateNarrative('year', insight);
         
         const bucketCounts = classifiedSeries.points.map(p => p.weight);
         const label = generateInsightLabel({
@@ -146,6 +147,23 @@ export default function YearlyWrapPage() {
       yearlyDeltas,
     });
   }, [reflections]);
+
+  // Generate continuity note from prior year
+  const continuityNote = useMemo(() => {
+    if (!yearlyWrap || reflections.length === 0) {
+      return null;
+    }
+
+    const currentYear = new Date().getFullYear();
+    const priorYear = currentYear - 1;
+
+    const priorYearWrap = buildPriorYearWrap(reflections, priorYear);
+    if (!priorYearWrap) {
+      return null;
+    }
+
+    return generateYearlyContinuity(yearlyWrap, priorYearWrap);
+  }, [yearlyWrap, reflections]);
 
   const handleExport = () => {
     window.print();
@@ -303,6 +321,16 @@ export default function YearlyWrapPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Earlier echoes - Continuity note */}
+      {continuityNote && (
+        <div className="mb-16 pt-12 border-t border-gray-200">
+          <h3 className="text-sm font-normal text-gray-600 mb-4">Earlier echoes</h3>
+          <p className="text-base text-gray-700 leading-relaxed">
+            {continuityNote.text}
+          </p>
         </div>
       )}
     </YearlyWrapContainer>
