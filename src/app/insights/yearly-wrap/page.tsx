@@ -53,7 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
-import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, type StructuralLineageGraph } from '../../lib/lineage';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, computeStructuralDistance, encryptDistanceMatrix, saveDistanceMatrix, buildNeighborhoodIndex, encryptNeighborhoodIndex, saveNeighborhoodIndex, computeStructuralDensity, encryptDensityMap, saveDensityMap, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';

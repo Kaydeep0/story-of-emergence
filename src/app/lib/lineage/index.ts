@@ -95,3 +95,31 @@ export {
   clearAllNeighborhoodIndices,
 } from './storeNeighborhoodIndex';
 
+export type {
+  StructuralDensity,
+  StructuralDensityMap,
+  DensitySignals,
+} from './computeStructuralDensity';
+
+export {
+  computeStructuralDensity,
+  getDensity,
+  getAllDensities,
+} from './computeStructuralDensity';
+
+export type {
+  EncryptedDensityMap,
+} from './encryptDensityMap';
+
+export {
+  encryptDensityMap,
+  decryptDensityMap,
+} from './encryptDensityMap';
+
+export {
+  saveDensityMap,
+  loadDensityMap,
+  clearDensityMap,
+  clearAllDensityMaps,
+} from './storeDensityMap';
+
