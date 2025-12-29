@@ -53,6 +53,7 @@ import { computeEntropicDecay, shouldSuppressMeaning, type EntropicDecayState } 
 import { computeSaturationCeiling, shouldSuppressDueToSaturation, type MeaningNode, type SaturationState } from '../../lib/saturation';
 import { hasReinforcingNovelty } from '../../lib/novelty';
 import { detectEmergenceRegime, trackRegimeDwellTime, type EmergenceRegime, type RegimeDwellState } from '../../lib/emergence';
+import { buildStructuralLineage, encryptLineageGraph, saveLineageGraph, type StructuralLineageGraph } from '../../lib/lineage';
 import type { Regime } from '../../lib/regime/detectRegime';
 import type { FeedbackMode } from '../../lib/feedback/inferObserverEnvironmentFeedback';
 import type { EmergenceSignal } from '../../lib/emergence/inferConstraintRelativeEmergence';
@@ -1174,6 +1175,44 @@ export default function YearlyWrapPage() {
   useEffect(() => {
     previousDwellStateRef.current = regimeDwellState;
   }, [regimeDwellState]);
+
+  // Structural lineage graph - read-only, encrypted
+  // Records how reflections relate to one another structurally
+  // Does not influence inference, decay, novelty, saturation, regime, or dwell time
+  // Session-scoped: recomputed per wallet session
+  const structuralLineageGraph = useMemo(() => {
+    if (!sessionStart || reflections.length === 0 || !address) {
+      return null;
+    }
+
+    // Generate session ID from session start timestamp
+    const sessionId = `session_${new Date(sessionStart).getTime()}`;
+
+    // Build structural lineage graph
+    return buildStructuralLineage({
+      reflections,
+      sessionId,
+      divergenceThreshold: 0.2, // Minimum divergence to create link
+    });
+  }, [reflections, sessionStart, address]);
+
+  // Encrypt and store lineage graph (async, non-blocking)
+  useEffect(() => {
+    if (!structuralLineageGraph || !address || !sessionKey) {
+      return;
+    }
+
+    // Encrypt and store asynchronously (doesn't block rendering)
+    (async () => {
+      try {
+        const encrypted = await encryptLineageGraph(structuralLineageGraph, sessionKey);
+        const sessionId = structuralLineageGraph.sessionId;
+        saveLineageGraph(address, sessionId, encrypted);
+      } catch (err) {
+        console.error('Failed to encrypt and store lineage graph', err);
+      }
+    })();
+  }, [structuralLineageGraph, address, sessionKey]);
 
   // Apply feedback mode, emergence signal, persistence, load, irreversibility, epistemic boundary, entropic decay, and saturation gating
   // Epistemic boundary seal: final closure layer that prevents new inference paths
