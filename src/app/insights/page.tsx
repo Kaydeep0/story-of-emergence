@@ -1106,33 +1106,7 @@ export default function InsightsPage() {
           Different ways to view your encrypted activity.
         </p>
 
-        {/* Health strip - shows summary data when loaded and connected */}
-        {connected && !summaryLoading && summaryData && (
-          <div className="rounded-xl bg-white/[0.01] px-4 py-3 mb-8">
-            <div className="flex items-center justify-center gap-6 text-xs text-white/50">
-              <span>
-                <span className="font-medium text-white/80">{summaryData.entries}</span> reflections
-              </span>
-              <span className="text-white/20">•</span>
-              <span>
-                <span className="font-medium text-white/80">{summaryData.totalEvents}</span> events
-              </span>
-              <span className="text-white/20">•</span>
-              <span>
-                Last active{' '}
-                <span className="font-medium text-white/80">
-                  {summaryData.lastActiveAt
-                    ? new Date(summaryData.lastActiveAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })
-                    : 'never'}
-                </span>
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Observer mode: Health strip suppressed - counts and metrics are not emphasized in read-only narrative views */}
 
         {/* Mode switcher */}
         <div className="flex justify-center mb-10">
