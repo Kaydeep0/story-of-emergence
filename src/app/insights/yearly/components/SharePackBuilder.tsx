@@ -17,7 +17,7 @@ import type { ReflectionEntry } from '../../../lib/insights/types';
 import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
-import { ShareCardRenderer, getFrameForPlatform, getFrameDimensions } from '../share/ShareCardRenderer';
+import { renderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
 
 // SharePackSelection is now imported from sharePack.ts
 
@@ -169,6 +169,7 @@ export function SharePackBuilder({
   const [generatedSelection, setGeneratedSelection] = useState<SharePackSelection | null>(null);
   const [generatedPack, setGeneratedPack] = useState<SharePack | null>(null);
   const [platform, setPlatform] = useState<Platform>('instagram');
+  const [frame, setFrame] = useState<ShareFrame>('ig_square');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTexts, setGeneratedTexts] = useState<{ caption: string; tiktokOverlay?: string[] } | null>(null);
   const [shareComplete, setShareComplete] = useState(false);
@@ -760,6 +761,27 @@ export function SharePackBuilder({
         </div>
       )}
 
+      {/* Frame selector */}
+      <div>
+        <label className="text-xs text-white/60 mb-2 block">Frame</label>
+        <div className="flex flex-wrap gap-2">
+          {(['ig_square', 'ig_story', 'linkedin'] as ShareFrame[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFrame(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                frame === f
+                  ? 'bg-white/20 text-white border border-white/30'
+                  : 'bg-white/5 text-white/70 border border-white/10 hover:bg-white/10'
+              }`}
+            >
+              {f === 'ig_square' ? 'Instagram Square' : f === 'ig_story' ? 'Instagram Story' : 'LinkedIn'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Platform selector - always visible, regenerates when changed during share complete */}
       <div>
         <label className="text-xs text-white/60 mb-2 block">Platform</label>
@@ -892,9 +914,13 @@ export function SharePackBuilder({
                 }}>
                   {/* Stage frame - fixed dimensions matching export size, overflow hidden */}
                   {(() => {
-                    const frame = getFrameForPlatform(mapPlatform(platform));
+                    const FRAME_PRESETS: Record<ShareFrame, { width: number; height: number }> = {
+                      ig_square: { width: 1080, height: 1080 },
+                      ig_story: { width: 1080, height: 1920 },
+                      linkedin: { width: 1200, height: 628 },
+                    };
+                    const dimensions = FRAME_PRESETS[frame];
                     const scale = 0.4;
-                    const dimensions = getFrameDimensions(frame);
                     
                     const stageWidth = dimensions.width * scale;
                     const stageHeight = dimensions.height * scale;
@@ -916,11 +942,8 @@ export function SharePackBuilder({
                           transformOrigin: 'top left',
                           position: 'relative',
                         }}>
-                          {/* ShareCardRenderer at full export dimensions - always mounted */}
-                          <ShareCardRenderer
-                            pack={previewPack}
-                            frame={frame}
-                          />
+                          {/* renderSharePack at full export dimensions - always mounted */}
+                          {renderSharePack(previewPack, frame)}
                         </div>
                         {/* Loading overlay - shown during blob generation */}
                         {isGeneratingBlob && (
@@ -1098,15 +1121,13 @@ export function SharePackBuilder({
 
           {/* Hidden export card - rendered in isolation at 1x scale for crisp export */}
           {/* Uses generatedPack to ensure export matches what was generated */}
+          {/* Uses same renderSharePack function as preview */}
           {generatedPack && (
             <div
               id="yearly-share-export-card"
               style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
             >
-              <ShareCardRenderer
-                pack={generatedPack}
-                frame={getFrameForPlatform(generatedPack.platform)}
-              />
+              {renderSharePack(generatedPack, frame)}
             </div>
           )}
         </div>
