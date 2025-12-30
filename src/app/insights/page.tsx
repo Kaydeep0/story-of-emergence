@@ -1133,12 +1133,17 @@ export default function InsightsPage() {
         <div className="flex justify-center mb-8">
           <div className="inline-flex rounded-xl border border-white/10 p-1 bg-white/5">
             {MODE_OPTIONS.map((opt) => {
+              // Defensive routing: yearly -> /insights/yearly (exclusive, no fallthrough)
               if (opt.value === 'yearly') {
-                // Yearly navigates to separate route
                 return (
                   <Link
                     key={opt.value}
                     href="/insights/yearly"
+                    onClick={(e) => {
+                      // Defensive guard: force navigation to yearly route
+                      e.preventDefault();
+                      router.push('/insights/yearly');
+                    }}
                     className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                       pathname === '/insights/yearly'
                         ? 'bg-white text-black font-medium'
@@ -1149,12 +1154,16 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
+              // Defensive routing: distributions -> /insights/distributions
               if (opt.value === 'distributions') {
-                // Distributions navigates to separate route
                 return (
                   <Link
                     key={opt.value}
                     href="/insights/distributions"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      router.push('/insights/distributions');
+                    }}
                     className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                       pathname === '/insights/distributions'
                         ? 'bg-white text-black font-medium'
@@ -1165,12 +1174,17 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
+              // Defensive routing: year-over-year -> /insights/compare (exclusive, separate from yearly)
               if (opt.value === 'year-over-year') {
-                // Year over Year navigates to separate route
                 return (
                   <Link
                     key={opt.value}
                     href="/insights/compare"
+                    onClick={(e) => {
+                      // Defensive guard: force navigation to compare route
+                      e.preventDefault();
+                      router.push('/insights/compare');
+                    }}
                     className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                       pathname === '/insights/compare'
                         ? 'bg-white text-black font-medium'
@@ -1186,7 +1200,8 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
-              // After filtering out 'yearly', 'distributions', and 'year-over-year', value is InsightsMode
+              // Internal modes: weekly, timeline, summary, lifetime (use state, not routing)
+              // These remain on /insights with mode state
               return (
                 <button
                   key={opt.value}
@@ -1888,37 +1903,31 @@ export default function InsightsPage() {
               <>
                 <div className="rounded-2xl border border-white/10 p-6 space-y-4">
                   <h2 className="text-lg font-semibold text-zinc-50">
-                    Your Activity Summary
+                    Current Lens
                   </h2>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-3xl font-semibold">{summaryData.streak}</div>
-                      <div className="text-xs text-white/50 mt-1">Consecutive days</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-3xl font-semibold">{summaryData.entries}</div>
-                      <div className="text-xs text-white/50 mt-1">Total reflections</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-3xl font-semibold">{summaryData.totalEvents}</div>
-                      <div className="text-xs text-white/50 mt-1">Total events</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-sm font-medium">
-                        {summaryData.lastActiveAt
-                          ? new Date(summaryData.lastActiveAt).toLocaleDateString()
-                          : '—'}
-                      </div>
-                      <div className="text-xs text-white/50 mt-1">Last active</div>
-                    </div>
+                  <div className="space-y-3 text-sm text-white/70">
+                    {summaryReflectionEntries.length === 0 ? (
+                      <p>No reflections detected in recent time window.</p>
+                    ) : topicDrift.length === 0 ? (
+                      <p>Recent reflections span multiple themes without a dominant focus.</p>
+                    ) : topicDrift.length === 1 ? (
+                      <p>Recent reflections appear concentrated around a single theme.</p>
+                    ) : topicDrift.length <= 3 ? (
+                      <p>Recent reflections span multiple themes.</p>
+                    ) : (
+                      <p>Recent reflections span multiple themes.</p>
+                    )}
+                    {summaryReflectionEntries.length > 0 && (
+                      <p>Activity appears distributed across time.</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Top topics this month */}
+                {/* Observed themes */}
                 <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
                   <p className="text-xs font-semibold text-white">
-                    Top topics this month
+                    Observed Patterns
                   </p>
                   {summaryReflectionsLoading ? (
                     <div className="mt-3 flex gap-2">
@@ -1928,7 +1937,7 @@ export default function InsightsPage() {
                     </div>
                   ) : topicDrift.length === 0 ? (
                     <p className="mt-2 text-xs text-white/60">
-                      Keep writing. When we see clear themes, your top topics will appear here.
+                      No dominant period detected.
                     </p>
                   ) : (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1937,7 +1946,7 @@ export default function InsightsPage() {
                           key={bucket.topic}
                           className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs text-white/80"
                         >
-                          {bucket.topic} · {bucket.count} entries
+                          {bucket.topic}
                         </span>
                       ))}
                     </div>
@@ -1947,7 +1956,7 @@ export default function InsightsPage() {
                 {/* Source-driven topics */}
                 <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-white">Top topics this month</p>
+                    <p className="text-xs font-semibold text-white">Observed Patterns</p>
                     <span className="text-[11px] text-white/50">External sources</span>
                   </div>
                   {sources.length === 0 ? (
@@ -1975,45 +1984,6 @@ export default function InsightsPage() {
                   )}
                 </section>
 
-                {/* Quick Stats Strip */}
-                <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
-                  {summaryReflectionsLoading ? (
-                    <SummaryStatsGridSkeleton />
-                  ) : (() => {
-                    const stats = computeStatsForLast30Days(summaryReflectionEntries);
-                    const hasData = stats.totalEntries > 0;
-
-                    if (!hasData) {
-                      return (
-                        <div className="text-center py-2">
-                          <p className="text-sm text-white/60">
-                            Start writing to see your stats here
-                          </p>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                        {/* Total entries */}
-                        <div className="text-center">
-                          <div className="text-xs text-white/60 mb-1">Total entries</div>
-                          <div className="text-2xl font-semibold text-white">{stats.totalEntries}</div>
-                        </div>
-                        {/* Active days */}
-                        <div className="text-center">
-                          <div className="text-xs text-white/60 mb-1">Active days</div>
-                          <div className="text-2xl font-semibold text-white">{stats.activeDays}</div>
-                        </div>
-                        {/* Longest consecutive period */}
-                        <div className="text-center">
-                          <div className="text-xs text-white/60 mb-1">Longest consecutive period</div>
-                          <div className="text-2xl font-semibold text-white">{stats.longestStreak}</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
 
                 {/* Always On Summary Section */}
                 <div className="space-y-4">
@@ -2204,7 +2174,7 @@ export default function InsightsPage() {
 
             {!lifetimeLoading && !lifetimeError && lifetimeStats && (
               <>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-white">Lifetime</h2>
                     <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/80">
@@ -2212,21 +2182,22 @@ export default function InsightsPage() {
                     </span>
                   </div>
                   <p className="text-sm text-white/60 mt-1">{lifetimeStats.windowLabel}</p>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-2xl font-semibold">{lifetimeStats.totalEntries}</div>
-                      <div className="text-xs text-white/50 mt-1">Total entries</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-2xl font-semibold">{lifetimeStats.totalEvents}</div>
-                      <div className="text-xs text-white/50 mt-1">Total events</div>
-                    </div>
+                  
+                  <div className="space-y-3 text-sm text-white/70">
+                    {lifetimeStats.dominantTopics.length === 0 ? (
+                      <p>No dominant period detected.</p>
+                    ) : lifetimeStats.dominantTopics.length === 1 ? (
+                      <p>Recent reflections appear concentrated around a small set of themes.</p>
+                    ) : (
+                      <p>Recent reflections span multiple themes.</p>
+                    )}
+                    <p>Activity appears distributed across time.</p>
                   </div>
                 </div>
 
                 {lifetimeStats.dominantTopics.length > 0 && (
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                    <h2 className="text-lg font-semibold mb-3">Dominant Topics</h2>
+                    <h2 className="text-lg font-semibold mb-3">Recurring Themes</h2>
                     <div className="flex flex-wrap gap-2">
                       {lifetimeStats.dominantTopics.map((topic) => (
                         <span
@@ -2293,24 +2264,32 @@ export default function InsightsPage() {
                     Week of {formatWeekDate(latest.startDate)}
                   </h2>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-2xl font-semibold">{latest.totalEvents}</div>
-                      <div className="text-xs text-white/50 mt-1">Total events</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-2xl font-semibold">{latest.journalEvents}</div>
-                      <div className="text-xs text-white/50 mt-1">Journal entries</div>
-                    </div>
-                    <div className="rounded-xl bg-white/5 p-4 text-center">
-                      <div className="text-2xl font-semibold">{latest.avgJournalLength.toFixed(0)}</div>
-                      <div className="text-xs text-white/50 mt-1">Avg length (chars)</div>
-                    </div>
+                  <div className="space-y-3 text-sm text-white/70">
+                    {latest.journalEvents === 0 ? (
+                      <p>Sparse reflective activity observed this week.</p>
+                    ) : latest.topGuessedTopics.length === 0 ? (
+                      <p>Reflections during this period span multiple themes without a dominant focus.</p>
+                    ) : latest.topGuessedTopics.length === 1 ? (
+                      <p>Reflections appear concentrated around a single theme.</p>
+                    ) : latest.topGuessedTopics.length <= 3 ? (
+                      <p>Reflections during this period span multiple themes.</p>
+                    ) : (
+                      <p>Reflections during this period span multiple themes.</p>
+                    )}
+                    {latest.distributionLabel && (
+                      <p>
+                        {latest.distributionLabel === 'normal' || latest.distributionLabel === 'lognormal'
+                          ? 'Activity appears distributed across time.'
+                          : latest.distributionLabel === 'powerlaw'
+                          ? 'Activity clustered around a small number of reflections.'
+                          : 'Activity appears distributed across time.'}
+                      </p>
+                    )}
                   </div>
 
                   {latest.topGuessedTopics.length > 0 && (
                     <div>
-                      <div className="text-xs text-white/50 mb-2">Topics</div>
+                      <div className="text-xs text-white/50 mb-2">Observed Patterns</div>
                       <div className="flex flex-wrap gap-2">
                         {latest.topGuessedTopics.map((topic) => (
                           <span
@@ -2351,9 +2330,6 @@ export default function InsightsPage() {
                           className="flex items-center justify-between rounded-xl border border-white/10 px-4 py-3"
                         >
                           <span className="text-sm">Week of {formatWeekDate(week.startDate)}</span>
-                          <span className="text-sm text-white/50">
-                            {week.totalEvents} event{week.totalEvents === 1 ? '' : 's'}
-                          </span>
                         </div>
                       ))}
                     </div>
