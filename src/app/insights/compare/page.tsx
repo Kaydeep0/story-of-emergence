@@ -15,6 +15,7 @@ import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights
 import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeAllInsights } from '../../lib/insights/computeAllInsights';
 import type { ReflectionEntry } from '../../lib/insights/types';
+import { ContrastDistribution } from '../components/ContrastDistribution';
 
 /**
  * Group reflections by year
@@ -165,6 +166,52 @@ export default function ComparePage() {
 
     return result.yearOverYear;
   }, [reflections, selectedYear1, selectedYear2]);
+
+  // Extract signal arrays for contrast distribution
+  const contrastSignals = useMemo(() => {
+    if (!yearOverYearInsight || !selectedYear1 || !selectedYear2) {
+      return null;
+    }
+
+    // Use theme continuities as signal source
+    // Map strength to simple numeric values: strong=3, moderate=2, weak=1
+    const leftPoints: number[] = [];
+    const rightPoints: number[] = [];
+
+    for (const continuity of yearOverYearInsight.data.themeContinuities) {
+      const strengthValue = continuity.strength === 'strong' ? 3 : continuity.strength === 'moderate' ? 2 : 1;
+      if (continuity.presentInYear1) {
+        leftPoints.push(strengthValue);
+      }
+      if (continuity.presentInYear2) {
+        rightPoints.push(strengthValue);
+      }
+    }
+
+    // Add emergences to right side
+    for (const emergence of yearOverYearInsight.data.themeEmergences) {
+      if (emergence.presentInYear2) {
+        rightPoints.push(2); // Moderate strength for new themes
+      }
+    }
+
+    // Add disappearances to left side
+    for (const disappearance of yearOverYearInsight.data.themeDisappearances) {
+      if (disappearance.wasPresentInYear1) {
+        leftPoints.push(2); // Moderate strength for faded themes
+      }
+    }
+
+    // Only return if both sides have sufficient data
+    if (leftPoints.length >= 3 && rightPoints.length >= 3) {
+      return {
+        leftPoints,
+        rightPoints,
+      };
+    }
+
+    return null;
+  }, [yearOverYearInsight, selectedYear1, selectedYear2]);
 
   // Get year data for display
   const year1Data = useMemo(() => {
@@ -457,6 +504,18 @@ export default function ComparePage() {
                   </div>
                 )}
               </div>
+
+              {/* Contrast distribution visual */}
+              {contrastSignals && (
+                <div className="pt-8 border-t border-white/10">
+                  <ContrastDistribution
+                    leftLabel={String(selectedYear1)}
+                    rightLabel={String(selectedYear2)}
+                    leftPoints={contrastSignals.leftPoints}
+                    rightPoints={contrastSignals.rightPoints}
+                  />
+                </div>
+              )}
 
               {/* Evidence */}
               {yearOverYearInsight.evidence.length > 0 && (
