@@ -76,6 +76,7 @@ import { generateNarrative } from '../lib/distributions/narratives';
 import { inspectDistribution } from '../lib/distributions/inspect';
 import { fromNarrative } from '../lib/insights/viewModels';
 import { generateInsightLabel } from '../lib/insights/labels';
+import { assertInsightTone } from '../lib/insights/insightGuardrails';
 import { InsightPanel } from './components/InsightPanel';
 import { InsightTimeline } from './components/InsightTimeline';
 
@@ -2303,6 +2304,11 @@ export default function InsightsPage() {
                     </div>
                   )}
 
+                  {latest.summaryText && (() => {
+                    // Soft guardrail check for banned language
+                    assertInsightTone(latest.summaryText, 'weekly.summaryText');
+                    return null;
+                  })()}
                   {latest.summaryText && (
                     <div>
                       <div className="text-xs text-white/50 mb-2">Summary</div>

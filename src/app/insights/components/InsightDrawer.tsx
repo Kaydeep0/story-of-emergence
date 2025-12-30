@@ -9,6 +9,7 @@ import type { ContrastPair } from '../../lib/insights/contrastPairs';
 import type { SourceEntryLite } from '../../lib/insights/fromSources';
 import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../lib/reflectionSources';
 import { listExternalSources, type ExternalSourceDecrypted } from '../../lib/externalSources';
+import { assertInsightTone } from '../../lib/insights/insightGuardrails';
 import { toast } from 'sonner';
 
 /**
@@ -726,6 +727,15 @@ export function InsightDrawer({
       }
     }
   }, [isOpen, insight]);
+
+  // Soft guardrail check for banned language in insight text
+  useEffect(() => {
+    if (insight) {
+      assertInsightTone(insight.title, 'insight.title');
+      assertInsightTone(insight.summary, 'insight.summary');
+      assertInsightTone(insight.whyThisMatters, 'insight.whyThisMatters');
+    }
+  }, [insight]);
 
   // Create a map of sourceId -> source title for quick lookups
   const sourceTitleById = new Map<string, string>();
