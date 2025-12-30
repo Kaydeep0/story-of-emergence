@@ -1,0 +1,307 @@
+'use client';
+
+/**
+ * ShareActions - Unified share actions for Yearly Share Pack
+ * 
+ * Provides:
+ * - Copy caption
+ * - Download image
+ * - Web Share API (when supported)
+ * - Platform helper links
+ */
+
+import React from 'react';
+import { toast } from 'sonner';
+import type { ShareFrame } from '../../../share/renderers/renderSharePack';
+
+export interface ShareActionsProps {
+  imageBlob: Blob | null;
+  captionText: string;
+  frame: ShareFrame;
+  platform: 'instagram' | 'linkedin' | 'x' | 'tiktok' | 'threads';
+  tiktokOverlay?: string[];
+  filename?: string;
+}
+
+/**
+ * Get platform-specific share intent URL
+ */
+function getPlatformShareIntent(platform: ShareActionsProps['platform']): { label: string; url: string } {
+  const intents: Record<ShareActionsProps['platform'], { label: string; url: string }> = {
+    instagram: {
+      label: 'Open Instagram',
+      url: 'https://www.instagram.com/',
+    },
+    linkedin: {
+      label: 'Open LinkedIn',
+      url: 'https://www.linkedin.com/feed/?shareActive=true',
+    },
+    tiktok: {
+      label: 'Open TikTok',
+      url: 'https://www.tiktok.com/upload',
+    },
+    threads: {
+      label: 'Open Threads',
+      url: 'https://www.threads.net/',
+    },
+    x: {
+      label: 'Open X',
+      url: 'https://x.com/compose/tweet',
+    },
+  };
+  return intents[platform] || { label: 'Open platform', url: 'https://www.instagram.com/' };
+}
+
+/**
+ * Check if Web Share API is supported
+ */
+function isWebShareSupported(): boolean {
+  return typeof navigator !== 'undefined' && 'share' in navigator;
+}
+
+/**
+ * ShareActions component
+ */
+export function ShareActions({
+  imageBlob,
+  captionText,
+  frame,
+  platform,
+  tiktokOverlay,
+  filename = 'story-of-emergence-yearly-wrap.png',
+}: ShareActionsProps) {
+  // Copy caption to clipboard
+  const handleCopyCaption = async () => {
+    if (!captionText) {
+      toast.error('No caption available');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(captionText);
+      toast.success('Caption copied');
+    } catch (err: any) {
+      console.error('Failed to copy caption:', err);
+      toast.error('Failed to copy caption');
+    }
+  };
+
+  // Copy image to clipboard
+  const handleCopyImage = async () => {
+    if (!imageBlob) {
+      toast.error('No image available. Generate share pack first.');
+      return;
+    }
+
+    if (!navigator.clipboard || !navigator.clipboard.write) {
+      toast.error('Clipboard API not supported');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': imageBlob }),
+      ]);
+      toast.success('Image copied');
+    } catch (err: any) {
+      console.error('Failed to copy image:', err);
+      toast.error('Failed to copy image');
+    }
+  };
+
+  // Download image
+  const handleDownload = () => {
+    if (!imageBlob) {
+      toast.error('No image available. Generate share pack first.');
+      return;
+    }
+
+    try {
+      const url = URL.createObjectURL(imageBlob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      // Auto-copy caption after successful download
+      if (captionText) {
+        handleCopyCaption().catch(() => {
+          // Silent fail - caption copy is nice-to-have
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to download image:', err);
+      toast.error('Failed to download image');
+    }
+  };
+
+  // Web Share API
+  const handleWebShare = async () => {
+    if (!imageBlob) {
+      toast.error('No image available. Generate share pack first.');
+      return;
+    }
+
+    if (!isWebShareSupported()) {
+      // Fallback to download if Web Share not supported
+      handleDownload();
+      return;
+    }
+
+    try {
+      // Convert blob to File for Web Share API
+      const file = new File([imageBlob], filename, { type: 'image/png' });
+      
+      // Web Share API with file
+      await navigator.share({
+        title: `My ${new Date().getFullYear()} Yearly Wrap`,
+        text: captionText,
+        files: [file],
+      });
+      
+      toast.success('Shared successfully');
+    } catch (err: any) {
+      // User cancelled or error - don't show error for cancellation
+      if (err.name !== 'AbortError') {
+        console.error('Web Share failed:', err);
+        // Fallback to download on error
+        handleDownload();
+      }
+    }
+  };
+
+  // Platform helper - open platform with guidance
+  const handlePlatformHelper = () => {
+    const intent = getPlatformShareIntent(platform);
+    
+    // For X and LinkedIn, try to prefill caption if possible
+    if (platform === 'x') {
+      // X/Twitter intent URL with text parameter
+      const textParam = encodeURIComponent(captionText.slice(0, 200)); // X has character limits
+      const xUrl = `https://x.com/intent/tweet?text=${textParam}`;
+      window.open(xUrl, '_blank', 'noopener,noreferrer');
+      // Also copy caption to clipboard for easy pasting
+      handleCopyCaption().catch(() => {});
+      return;
+    }
+    
+    if (platform === 'linkedin') {
+      // LinkedIn doesn't support direct text prefill, but we can copy caption
+      handleCopyCaption().catch(() => {});
+      window.open(intent.url, '_blank', 'noopener,noreferrer');
+      toast.info('Caption copied. Paste it when creating your post.');
+      return;
+    }
+    
+    // For Instagram and TikTok, just open the platform
+    // User will need to upload manually
+    window.open(intent.url, '_blank', 'noopener,noreferrer');
+    handleCopyCaption().catch(() => {});
+    toast.info('Caption copied. Upload the image and paste the caption.');
+  };
+
+  // Copy TikTok overlay
+  const handleCopyTikTokOverlay = async () => {
+    if (!tiktokOverlay || tiktokOverlay.length === 0) {
+      toast.error('TikTok overlay not available');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(tiktokOverlay.join('\n'));
+      toast.success('TikTok overlay copied');
+    } catch (err: any) {
+      console.error('Failed to copy TikTok overlay:', err);
+      toast.error('Failed to copy TikTok overlay');
+    }
+  };
+
+  const hasImage = !!imageBlob;
+  const hasCaption = !!captionText;
+
+  return (
+    <div className="space-y-3">
+      {/* Primary actions */}
+      <div className="flex flex-wrap gap-2">
+        {/* Copy caption */}
+        {hasCaption && (
+          <button
+            type="button"
+            onClick={handleCopyCaption}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+          >
+            Copy caption
+          </button>
+        )}
+
+        {/* Download image */}
+        {hasImage && (
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+          >
+            Download image
+          </button>
+        )}
+
+        {/* Copy image */}
+        {hasImage && navigator.clipboard && 'write' in navigator.clipboard && (
+          <button
+            type="button"
+            onClick={handleCopyImage}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+          >
+            Copy image
+          </button>
+        )}
+
+        {/* Web Share API (only show if supported) */}
+        {hasImage && isWebShareSupported() && (
+          <button
+            type="button"
+            onClick={handleWebShare}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+          >
+            Share
+          </button>
+        )}
+      </div>
+
+      {/* Platform helpers */}
+      {hasImage && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handlePlatformHelper}
+            className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+          >
+            {getPlatformShareIntent(platform).label}
+          </button>
+        </div>
+      )}
+
+      {/* TikTok overlay (only for TikTok platform) */}
+      {platform === 'tiktok' && tiktokOverlay && tiktokOverlay.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={handleCopyTikTokOverlay}
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
+          >
+            Copy TikTok overlay
+          </button>
+        </div>
+      )}
+
+      {/* Helper text */}
+      <p className="text-xs text-white/40">
+        Computed locally. Nothing uploaded.
+      </p>
+    </div>
+  );
+}
+

@@ -18,6 +18,7 @@ import type { DistributionResult, WindowDistribution } from '../../../lib/insigh
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
 import { renderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
+import { ShareActions } from './ShareActions';
 
 // SharePackSelection is now imported from sharePack.ts
 
@@ -996,35 +997,17 @@ export function SharePackBuilder({
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleOpenPlatform}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-                    >
-                      {getPlatformShareIntent(platform).label}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyImage}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                    >
-                      Copy image
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadAgain}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                    >
-                      {isFirstGeneration ? 'Download image' : 'Download again'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyCaption}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                    >
-                      Copy caption
-                    </button>
+                  {/* Share Actions */}
+                  <ShareActions
+                    imageBlob={lastPngBlob}
+                    captionText={generatedTexts?.caption || ''}
+                    frame={frame}
+                    platform={platform}
+                    tiktokOverlay={generatedTexts?.tiktokOverlay}
+                    filename={lastExport?.filename || getDownloadFilename(platform, year)}
+                  />
+                  
+                  <div className="flex flex-wrap gap-2 pt-2">
                     <button
                       type="button"
                       onClick={handleShareAnotherPlatform}
@@ -1071,49 +1054,19 @@ export function SharePackBuilder({
                   </div>
                 )}
 
-                {/* Action buttons */}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadImage}
-                    disabled={isGenerating || selectionsChanged || !generatedSelection}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                    title={
-                      !generatedSelection 
-                        ? 'Generate a preview first' 
-                        : selectionsChanged 
-                        ? 'Regenerate to apply changes before downloading' 
-                        : undefined
-                    }
-                  >
-                    {isGenerating ? 'Generating...' : getDownloadLabel(platform)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCopyCaption}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                  >
-                    Copy caption
-                  </button>
-                  {platform === 'tiktok' && generatedTexts.tiktokOverlay && (
-                    <button
-                      type="button"
-                      onClick={handleCopyTikTokOverlay}
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm"
-                    >
-                      Copy TikTok overlay
-                    </button>
-                  )}
-                </div>
+                {/* Share Actions */}
+                <ShareActions
+                  imageBlob={lastPngBlob}
+                  captionText={generatedTexts.caption}
+                  frame={frame}
+                  platform={platform}
+                  tiktokOverlay={generatedTexts.tiktokOverlay}
+                  filename={lastExport?.filename || getDownloadFilename(platform, year)}
+                />
 
                 {/* Platform-specific micro copy */}
                 <p className="text-xs text-white/50 italic">
                   {getPlatformMicroCopy(platform)}
-                </p>
-
-                {/* Privacy reassurance */}
-                <p className="text-xs text-white/40">
-                  Computed locally. Nothing uploaded.
                 </p>
               </div>
             ) : null}
