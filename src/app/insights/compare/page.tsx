@@ -14,8 +14,7 @@ import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeAllInsights } from '../../lib/insights/computeAllInsights';
-import type { ReflectionEntry, YearOverYearCard } from '../../lib/insights/types';
-import InsightDrawer from '../components/InsightDrawer';
+import type { ReflectionEntry } from '../../lib/insights/types';
 
 /**
  * Group reflections by year

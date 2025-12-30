@@ -404,6 +404,7 @@ type SimpleEvent = {
 
 const MODE_OPTIONS: { value: InsightsMode | 'distributions'; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
+  { value: 'year-over-year', label: 'Year over Year', subtext: 'Compare two moments in time' },
   { value: 'timeline', label: 'Timeline' },
   { value: 'summary', label: 'Summary' },
   { value: 'yearly', label: 'Yearly' },
@@ -1164,7 +1165,28 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
-              // After filtering out 'yearly' and 'distributions', value is InsightsMode
+              if (opt.value === 'year-over-year') {
+                // Year over Year navigates to separate route
+                return (
+                  <Link
+                    key={opt.value}
+                    href="/insights/compare"
+                    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      pathname === '/insights/compare'
+                        ? 'bg-white text-black font-medium'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center">
+                      <span>{opt.label}</span>
+                      {opt.subtext && (
+                        <span className="text-xs opacity-60">{opt.subtext}</span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              }
+              // After filtering out 'yearly', 'distributions', and 'year-over-year', value is InsightsMode
               return (
                 <button
                   key={opt.value}
