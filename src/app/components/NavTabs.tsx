@@ -25,7 +25,7 @@ export default function NavTabs() {
             className={`rounded-lg px-3 py-1 text-sm transition-colors ${
               isActive
                 ? 'bg-white/5 text-white/70'
-                : 'text-white/50 hover:text-white/70 hover:bg-white/3'
+                : 'text-white/60 hover:text-white/70 hover:bg-white/3'
             }`}
           >
             {tab.label}
