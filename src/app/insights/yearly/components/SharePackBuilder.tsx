@@ -19,6 +19,7 @@ import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
 import { renderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
 import { ShareActions } from './ShareActions';
+import { sanitizeFilename } from '../../../lib/share/sanitizeShareMetadata';
 
 // SharePackSelection is now imported from sharePack.ts
 
@@ -69,10 +70,12 @@ function getDownloadLabel(platform: Platform): string {
   return labels[platform] || 'Download image';
 }
 
-// Generate platform-specific filename
+// Generate platform-specific filename (sanitized)
 function getDownloadFilename(platform: Platform, year: number): string {
   const platformTag = platform === 'x' ? 'x' : platform;
-  return `story-of-emergence-${year}-${platformTag}.png`;
+  const filename = `story-of-emergence-${year}-${platformTag}.png`;
+  // Sanitize to ensure no sensitive data leaks
+  return sanitizeFilename(filename);
 }
 
 // Get platform-specific micro copy (one line intent reinforcement)
@@ -179,6 +182,7 @@ export function SharePackBuilder({
   const [isGeneratingBlob, setIsGeneratingBlob] = useState(false);
   const [isFirstGeneration, setIsFirstGeneration] = useState(true);
   const [containerMinHeight, setContainerMinHeight] = useState<number | null>(null);
+  const [includeSelectedOnly, setIncludeSelectedOnly] = useState(true); // Explicit control - default ON
   const expandedPanelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastGeneratedPackKeyRef = useRef<string | null>(null);
@@ -825,6 +829,30 @@ export function SharePackBuilder({
           ))}
         </div>
       </div>
+
+      {/* Explicit section inclusion control */}
+      {!shareComplete && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 p-3 rounded-lg border border-white/10 bg-black/30 cursor-pointer hover:bg-black/50 transition-colors">
+            <input
+              type="checkbox"
+              checked={includeSelectedOnly}
+              onChange={(e) => setIncludeSelectedOnly(e.target.checked)}
+              className="rounded border-white/20"
+            />
+            <span className="text-xs text-white/80">
+              Include selected insights only (recommended)
+            </span>
+          </label>
+          {!includeSelectedOnly && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2">
+              <p className="text-xs text-orange-300">
+                Raw journal text sharing is not yet available. Only selected insights will be included.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Privacy badge - hidden when share is complete */}
       {!shareComplete && (

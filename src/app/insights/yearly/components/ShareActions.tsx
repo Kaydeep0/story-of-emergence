@@ -13,6 +13,8 @@
 import React from 'react';
 import { toast } from 'sonner';
 import type { ShareFrame } from '../../../share/renderers/renderSharePack';
+import { sanitizeCaption } from '../../../lib/share/sanitizeShareMetadata';
+import { ShareSafetyBanner } from './ShareSafetyBanner';
 
 export interface ShareActionsProps {
   imageBlob: Blob | null;
@@ -70,15 +72,18 @@ export function ShareActions({
   tiktokOverlay,
   filename = 'story-of-emergence-yearly-wrap.png',
 }: ShareActionsProps) {
+  // Sanitize caption to remove any sensitive metadata
+  const sanitizedCaption = sanitizeCaption(captionText);
+
   // Copy caption to clipboard
   const handleCopyCaption = async () => {
-    if (!captionText) {
+    if (!sanitizedCaption) {
       toast.error('No caption available');
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(captionText);
+      await navigator.clipboard.writeText(sanitizedCaption);
       toast.success('Caption copied');
     } catch (err: any) {
       console.error('Failed to copy caption:', err);
@@ -127,7 +132,7 @@ export function ShareActions({
       URL.revokeObjectURL(url);
       
       // Auto-copy caption after successful download
-      if (captionText) {
+      if (sanitizedCaption) {
         handleCopyCaption().catch(() => {
           // Silent fail - caption copy is nice-to-have
         });
@@ -155,10 +160,10 @@ export function ShareActions({
       // Convert blob to File for Web Share API
       const file = new File([imageBlob], filename, { type: 'image/png' });
       
-      // Web Share API with file
+      // Web Share API with file (use sanitized caption)
       await navigator.share({
         title: `My ${new Date().getFullYear()} Yearly Wrap`,
-        text: captionText,
+        text: sanitizedCaption,
         files: [file],
       });
       
@@ -179,8 +184,8 @@ export function ShareActions({
     
     // For X and LinkedIn, try to prefill caption if possible
     if (platform === 'x') {
-      // X/Twitter intent URL with text parameter
-      const textParam = encodeURIComponent(captionText.slice(0, 200)); // X has character limits
+      // X/Twitter intent URL with text parameter (use sanitized caption)
+      const textParam = encodeURIComponent(sanitizedCaption.slice(0, 200)); // X has character limits
       const xUrl = `https://x.com/intent/tweet?text=${textParam}`;
       window.open(xUrl, '_blank', 'noopener,noreferrer');
       // Also copy caption to clipboard for easy pasting
@@ -220,10 +225,13 @@ export function ShareActions({
   };
 
   const hasImage = !!imageBlob;
-  const hasCaption = !!captionText;
+  const hasCaption = !!sanitizedCaption;
 
   return (
     <div className="space-y-3">
+      {/* Share Safety Banner */}
+      <ShareSafetyBanner />
+
       {/* Primary actions */}
       <div className="flex flex-wrap gap-2">
         {/* Copy caption */}
@@ -301,6 +309,13 @@ export function ShareActions({
       <p className="text-xs text-white/40">
         Computed locally. Nothing uploaded.
       </p>
+
+      {/* Revocation messaging */}
+      {hasImage && (
+        <p className="text-xs text-white/30 italic pt-2 border-t border-white/5">
+          Shared files cannot be revoked once downloaded. Future shares remain private.
+        </p>
+      )}
     </div>
   );
 }
