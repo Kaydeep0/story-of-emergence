@@ -7,7 +7,6 @@ const tabs = [
   { href: '/', label: 'Reflections' },
   { href: '/insights', label: 'Insights' },
   { href: '/sources', label: 'Sources' },
-  { href: '/shared', label: 'Shared' },
 ];
 
 export default function NavTabs() {
