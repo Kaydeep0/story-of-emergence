@@ -102,8 +102,22 @@ export function ShareActions({
 
     confirmShareAction('copy-caption', async () => {
       try {
-        await navigator.clipboard.writeText(sanitizedCaption);
-        toast('Caption copied', { duration: 2000 });
+        // Try clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(sanitizedCaption);
+        } else {
+          // Fallback: create hidden textarea, select, and copy
+          const textarea = document.createElement('textarea');
+          textarea.value = sanitizedCaption;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        // No success toast - quiet persistence
       } catch (err: any) {
         console.error('Failed to copy caption:', err);
         toast.error('Failed to copy caption');
@@ -128,7 +142,7 @@ export function ShareActions({
         await navigator.clipboard.write([
           new ClipboardItem({ 'image/png': imageBlob }),
         ]);
-        toast('Image copied', { duration: 2000 });
+        // No success toast - quiet persistence
       } catch (err: any) {
         console.error('Failed to copy image:', err);
         toast.error('Failed to copy image');
@@ -161,7 +175,7 @@ export function ShareActions({
           });
         }
         
-        toast('Artifact sealed', { duration: 2000 });
+        // No success toast - quiet persistence
       } catch (err: any) {
         console.error('Failed to download image:', err);
         toast.error('Failed to download image');
@@ -188,13 +202,26 @@ export function ShareActions({
         const file = new File([imageBlob], filename, { type: 'image/png' });
         
         // Web Share API with file (use sanitized caption)
-        await navigator.share({
-          title: `My ${new Date().getFullYear()} Yearly Wrap`,
-          text: sanitizedCaption,
-          files: [file],
-        });
+        // Try files first, fallback to text only if files not supported
+        try {
+          await navigator.share({
+            title: `My ${new Date().getFullYear()} Yearly Wrap`,
+            text: sanitizedCaption,
+            files: [file],
+          });
+        } catch (fileError: any) {
+          // If file sharing fails, try text only
+          if (fileError.name !== 'AbortError') {
+            await navigator.share({
+              title: `My ${new Date().getFullYear()} Yearly Wrap`,
+              text: sanitizedCaption,
+            });
+          } else {
+            throw fileError; // Re-throw abort errors
+          }
+        }
         
-        toast('Artifact sealed', { duration: 2000 });
+        // No success toast - quiet persistence
       } catch (err: any) {
         // User cancelled or error - don't show error for cancellation
         if (err.name !== 'AbortError') {
@@ -225,15 +252,23 @@ export function ShareActions({
       // LinkedIn doesn't support direct text prefill, but we can copy caption
       handleCopyCaption().catch(() => {});
       window.open(intent.url, '_blank', 'noopener,noreferrer');
-      toast.info('Caption copied. Paste it when creating your post.');
+      // No toast - quiet action
       return;
     }
     
-    // For Instagram and TikTok, just open the platform
-    // User will need to upload manually
+    // For Instagram and TikTok, copy caption and download image, then open platform
+    if (platform === 'instagram' || platform === 'tiktok') {
+      handleCopyCaption().catch(() => {});
+      handleDownload();
+      window.open(intent.url, '_blank', 'noopener,noreferrer');
+      // No toast - quiet action
+      return;
+    }
+    
+    // For other platforms, just open and copy caption
     window.open(intent.url, '_blank', 'noopener,noreferrer');
     handleCopyCaption().catch(() => {});
-    toast.info('Caption copied. Upload the image and paste the caption.');
+    // No toast - quiet action
   };
 
   // Copy TikTok overlay
@@ -245,7 +280,7 @@ export function ShareActions({
 
     try {
       await navigator.clipboard.writeText(tiktokOverlay.join('\n'));
-      toast('TikTok overlay copied', { duration: 2000 });
+      // No success toast - quiet persistence
     } catch (err: any) {
       console.error('Failed to copy TikTok overlay:', err);
       toast.error('Failed to copy TikTok overlay');
