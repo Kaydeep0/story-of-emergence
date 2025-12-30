@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { useEncryptionSession } from '../../../lib/useEncryptionSession';
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
 import type { SourceEntryLite } from '../../lib/insights/fromSources';
-import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../../lib/reflectionSources';
-import { listExternalSources, type ExternalSourceDecrypted } from '../../../lib/externalSources';
+import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../lib/reflectionSources';
+import { listExternalSources, type ExternalSourceDecrypted } from '../../lib/externalSources';
 import { toast } from 'sonner';
 
 /**
