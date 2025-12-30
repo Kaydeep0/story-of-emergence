@@ -1,26 +1,21 @@
 'use client';
 
 /**
- * Year-over-Year Comparison - Narrative view comparing adjacent years
+ * Year-over-Year Comparison - Read-only view using insight engine
  * 
- * Read-only view that shows how themes, tone, and focus evolve over time.
- * Narrative-first, calm, thoughtful.
+ * Shows contrast and observation between two years.
+ * Narrative-first, contrast-focused, no rankings or scoring.
  */
 
 import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { useEncryptionSession } from '../../../lib/useEncryptionSession';
-import { rpcFetchEntries } from '../../../lib/entries';
-import { itemToReflectionEntry, attachDemoSourceLinks } from '../../../lib/insights/timelineSpikes';
-import { useReflectionLinks } from '../../../lib/reflectionLinks';
-import type { ReflectionEntry } from '../../../lib/insights/types';
-
-interface YearData {
-  year: number;
-  reflections: ReflectionEntry[];
-  summary: string;
-  dominantThemes: string[];
-}
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
+import { rpcFetchEntries } from '../../lib/entries';
+import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
+import { useReflectionLinks } from '../../lib/reflectionLinks';
+import { computeAllInsights } from '../../lib/insights/computeAllInsights';
+import type { ReflectionEntry, YearOverYearCard } from '../../lib/insights/types';
+import InsightDrawer from '../components/InsightDrawer';
 
 /**
  * Group reflections by year
@@ -38,108 +33,27 @@ function groupByYear(reflections: ReflectionEntry[]): Map<number, ReflectionEntr
     grouped.get(year)!.push(reflection);
   }
   
-  // Sort entries within each year by date (oldest first)
-  for (const [year, entries] of grouped.entries()) {
-    entries.sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-  }
-  
   return grouped;
 }
 
 /**
- * Extract dominant themes from reflections
+ * Generate narrative summary for a year
  */
-function extractDominantThemes(reflections: ReflectionEntry[], maxThemes = 5): string[] {
-  const wordFreq = new Map<string, number>();
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
-    'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-    'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that',
-    'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me',
-    'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our',
-    'their', 'what', 'which', 'who', 'whom', 'whose', 'where', 'when',
-    'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
-    'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same',
-    'so', 'than', 'too', 'very', 'just', 'now', 'then', 'here', 'there',
-  ]);
-
-  // Count word frequencies (simple tokenization)
-  for (const reflection of reflections) {
-    const text = reflection.plaintext || '';
-    const words = text
-      .toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 3 && !stopWords.has(w));
-    
-    for (const word of words) {
-      wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
-    }
-  }
-
-  // Get top themes (words that appear in multiple reflections)
-  return Array.from(wordFreq.entries())
-    .filter(([_, count]) => count >= 2)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, maxThemes)
-    .map(([word]) => word);
-}
-
-/**
- * Generate a short narrative summary for a year's reflections
- */
-function generateYearSummary(
-  year: number,
-  reflections: ReflectionEntry[]
-): string {
+function generateYearSummary(year: number, reflections: ReflectionEntry[]): string {
   if (reflections.length === 0) {
     return '';
   }
 
-  const themes = extractDominantThemes(reflections, 5);
-
-  // Build narrative summary
-  const parts: string[] = [];
-  
-  // Opening: reflection count
   const reflectionWord = reflections.length === 1 ? 'reflection' : 'reflections';
-  parts.push(`${reflections.length} ${reflectionWord}`);
+  const parts: string[] = [`${reflections.length} ${reflectionWord}`];
 
-  // Add themes if available
-  if (themes.length > 0) {
-    const themePhrase = themes.slice(0, 3).join(', ');
-    parts.push(`centered around ${themePhrase}`);
-  }
-
-  // Add a sense of time/evolution
   if (reflections.length >= 10) {
-    parts.push('marking a year of growth and change');
+    parts.push('marking a year of reflection');
   } else if (reflections.length >= 5) {
-    parts.push('capturing moments of reflection');
+    parts.push('capturing moments of thought');
   }
 
   return parts.join(' · ') + '.';
-}
-
-/**
- * Process year data for comparison
- */
-function processYearData(
-  year: number,
-  reflections: ReflectionEntry[]
-): YearData {
-  const summary = generateYearSummary(year, reflections);
-  const dominantThemes = extractDominantThemes(reflections, 5);
-
-  return {
-    year,
-    reflections,
-    summary,
-    dominantThemes,
-  };
 }
 
 export default function ComparePage() {
@@ -153,6 +67,8 @@ export default function ComparePage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [selectedYear1, setSelectedYear1] = useState<number | null>(null);
   const [selectedYear2, setSelectedYear2] = useState<number | null>(null);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const connected = isConnected && !!address;
 
@@ -237,18 +153,57 @@ export default function ComparePage() {
     }
   }, [availableYears, selectedYear1, selectedYear2]);
 
-  // Process selected years
+  // Compute year-over-year insights
+  const yearOverYearInsight = useMemo(() => {
+    if (!selectedYear1 || !selectedYear2 || reflections.length === 0) {
+      return null;
+    }
+
+    const result = computeAllInsights(reflections, {
+      fromYear: selectedYear1,
+      toYear: selectedYear2,
+    });
+
+    return result.yearOverYear;
+  }, [reflections, selectedYear1, selectedYear2]);
+
+  // Get year data for display
   const year1Data = useMemo(() => {
     if (!selectedYear1) return null;
     const yearReflections = groupedByYear.get(selectedYear1) || [];
-    return processYearData(selectedYear1, yearReflections);
-  }, [selectedYear1, groupedByYear]);
+    return {
+      year: selectedYear1,
+      reflections: yearReflections,
+      summary: generateYearSummary(selectedYear1, yearReflections),
+      themes: yearOverYearInsight?.data.themeContinuities
+        .filter(t => t.presentInYear1)
+        .map(t => t.theme)
+        .slice(0, 5) || [],
+    };
+  }, [selectedYear1, groupedByYear, yearOverYearInsight]);
 
   const year2Data = useMemo(() => {
     if (!selectedYear2) return null;
     const yearReflections = groupedByYear.get(selectedYear2) || [];
-    return processYearData(selectedYear2, yearReflections);
-  }, [selectedYear2, groupedByYear]);
+    return {
+      year: selectedYear2,
+      reflections: yearReflections,
+      summary: generateYearSummary(selectedYear2, yearReflections),
+      themes: yearOverYearInsight?.data.themeContinuities
+        .filter(t => t.presentInYear2)
+        .map(t => t.theme)
+        .slice(0, 5) || [],
+    };
+  }, [selectedYear2, groupedByYear, yearOverYearInsight]);
+
+  // Handle evidence click
+  const handleEvidenceClick = (entryId: string) => {
+    const reflection = reflections.find(r => r.id === entryId);
+    if (reflection) {
+      setSelectedReflection(reflection);
+      setPreviewOpen(true);
+    }
+  };
 
   if (!mounted) {
     return null;
@@ -276,7 +231,6 @@ export default function ComparePage() {
                 <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
                 <div className="h-4 w-full bg-white/5 rounded animate-pulse" />
                 <div className="h-4 w-3/4 bg-white/5 rounded animate-pulse" />
-                <div className="h-4 w-1/2 bg-white/5 rounded animate-pulse" />
               </div>
             ))}
           </div>
@@ -309,13 +263,13 @@ export default function ComparePage() {
     );
   }
 
-  if (availableYears.length < 1) {
+  if (availableYears.length < 2) {
     return (
       <div className="min-h-screen bg-black text-white p-8">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-light mb-4">Year-over-Year Comparison</h1>
           <p className="text-white/60">
-            Not enough data to compare. You need reflections from at least one year.
+            Year over Year requires reflections from at least two years. You currently have data from {availableYears.length} year{availableYears.length === 1 ? '' : 's'}.
           </p>
         </div>
       </div>
@@ -323,121 +277,267 @@ export default function ComparePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-light mb-8">Year-over-Year Comparison</h1>
-        
-        {/* Year selectors */}
-        <div className="flex flex-wrap gap-4 mb-8">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-white/60">First year:</label>
-            <select
-              value={selectedYear1 || ''}
-              onChange={(e) => setSelectedYear1(Number(e.target.value))}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
-            >
-              <option value="">Select year</option>
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
+    <>
+      <div className="min-h-screen bg-black text-white p-8">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-2xl font-light mb-8">Year-over-Year Comparison</h1>
           
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-white/60">Second year:</label>
-            <select
-              value={selectedYear2 || ''}
-              onChange={(e) => setSelectedYear2(Number(e.target.value))}
-              className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
-            >
-              <option value="">Select year</option>
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+          {/* Year selectors */}
+          <div className="flex flex-wrap gap-4 mb-8">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-white/60">First year:</label>
+              <select
+                value={selectedYear1 || ''}
+                onChange={(e) => setSelectedYear1(Number(e.target.value))}
+                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
+              >
+                <option value="">Select year</option>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-white/60">Second year:</label>
+              <select
+                value={selectedYear2 || ''}
+                onChange={(e) => setSelectedYear2(Number(e.target.value))}
+                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-white/20 transition-colors"
+              >
+                <option value="">Select year</option>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
 
-        {/* Comparison columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Year 1 */}
-          {year1Data && (
-            <div className="space-y-4 transition-opacity duration-300">
-              <h2 className="text-xl font-light text-white/80">
-                {year1Data.year}
-              </h2>
-              
-              <p className="text-white/60 leading-relaxed text-sm">
-                {year1Data.summary}
-              </p>
-              
-              {year1Data.dominantThemes.length > 0 && (
-                <div className="pt-4 border-t border-white/5">
-                  <p className="text-xs text-white/40 mb-2">Themes</p>
+          {/* Comparison content */}
+          {selectedYear1 && selectedYear2 && yearOverYearInsight ? (
+            <div className="space-y-8">
+              {/* Year summaries */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {year1Data && (
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-light text-white/80">
+                      {year1Data.year}
+                    </h2>
+                    <p className="text-white/60 leading-relaxed text-sm">
+                      {year1Data.summary}
+                    </p>
+                    {year1Data.themes.length > 0 && (
+                      <div className="pt-4 border-t border-white/5">
+                        <p className="text-xs text-white/40 mb-2">Themes</p>
+                        <div className="flex flex-wrap gap-2">
+                          {year1Data.themes.map((theme) => (
+                            <span
+                              key={theme}
+                              className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
+                            >
+                              {theme}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {year2Data && (
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-light text-white/80">
+                      {year2Data.year}
+                    </h2>
+                    <p className="text-white/60 leading-relaxed text-sm">
+                      {year2Data.summary}
+                    </p>
+                    {year2Data.themes.length > 0 && (
+                      <div className="pt-4 border-t border-white/5">
+                        <p className="text-xs text-white/40 mb-2">Themes</p>
+                        <div className="flex flex-wrap gap-2">
+                          {year2Data.themes.map((theme) => (
+                            <span
+                              key={theme}
+                              className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
+                            >
+                              {theme}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Contrast section */}
+              <div className="pt-8 border-t border-white/10 space-y-6">
+                <h3 className="text-lg font-light text-white/80">Contrast</h3>
+                
+                {/* Continuities */}
+                {yearOverYearInsight.data.themeContinuities.length > 0 && (
+                  <div>
+                    <p className="text-sm text-white/60 mb-3">Continued themes</p>
+                    <div className="flex flex-wrap gap-2">
+                      {yearOverYearInsight.data.themeContinuities.map((continuity) => (
+                        <span
+                          key={continuity.theme}
+                          className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
+                        >
+                          {continuity.theme}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Emergences */}
+                {yearOverYearInsight.data.themeEmergences.length > 0 && (
+                  <div>
+                    <p className="text-sm text-white/60 mb-3">New themes</p>
+                    <div className="flex flex-wrap gap-2">
+                      {yearOverYearInsight.data.themeEmergences.map((emergence) => (
+                        <span
+                          key={emergence.theme}
+                          className="text-xs text-emerald-400/70 px-2 py-1 rounded bg-emerald-500/10 capitalize"
+                        >
+                          {emergence.theme}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Disappearances */}
+                {yearOverYearInsight.data.themeDisappearances.length > 0 && (
+                  <div>
+                    <p className="text-sm text-white/60 mb-3">Faded themes</p>
+                    <div className="flex flex-wrap gap-2">
+                      {yearOverYearInsight.data.themeDisappearances.map((disappearance) => (
+                        <span
+                          key={disappearance.theme}
+                          className="text-xs text-white/40 px-2 py-1 rounded bg-white/5 capitalize line-through"
+                        >
+                          {disappearance.theme}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Language shifts */}
+                {yearOverYearInsight.data.languageShifts.length > 0 && (
+                  <div>
+                    <p className="text-sm text-white/60 mb-3">Language shifts</p>
+                    <div className="space-y-2">
+                      {yearOverYearInsight.data.languageShifts.map((shift, idx) => (
+                        <p key={idx} className="text-sm text-white/60 italic">
+                          {shift.descriptor}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notable absences */}
+                {yearOverYearInsight.data.notableAbsences.length > 0 && (
+                  <div>
+                    <p className="text-sm text-white/60 mb-3">Notable absences</p>
+                    <div className="space-y-2">
+                      {yearOverYearInsight.data.notableAbsences.map((absence, idx) => (
+                        <p key={idx} className="text-sm text-white/60">
+                          {absence.what} was present in {absence.previouslySeenIn} but absent in {absence.nowAbsentIn}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Evidence */}
+              {yearOverYearInsight.evidence.length > 0 && (
+                <div className="pt-8 border-t border-white/10">
+                  <p className="text-sm text-white/60 mb-3">Evidence</p>
                   <div className="flex flex-wrap gap-2">
-                    {year1Data.dominantThemes.map((theme) => (
-                      <span
-                        key={theme}
-                        className="text-xs text-white/50 px-2 py-1 rounded bg-white/5"
+                    {yearOverYearInsight.evidence.map((ev) => (
+                      <button
+                        key={ev.entryId}
+                        onClick={() => handleEvidenceClick(ev.entryId)}
+                        className="text-xs text-white/60 hover:text-white/80 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                        title={ev.preview}
                       >
-                        {theme}
-                      </span>
+                        {ev.preview?.slice(0, 30) || 'View reflection'}...
+                      </button>
                     ))}
                   </div>
                 </div>
               )}
             </div>
-          )}
-
-          {/* Year 2 */}
-          {year2Data && (
-            <div className="space-y-4 transition-opacity duration-300">
-              <h2 className="text-xl font-light text-white/80">
-                {year2Data.year}
-              </h2>
-              
-              <p className="text-white/60 leading-relaxed text-sm">
-                {year2Data.summary}
-              </p>
-              
-              {year2Data.dominantThemes.length > 0 && (
-                <div className="pt-4 border-t border-white/5">
-                  <p className="text-xs text-white/40 mb-2">Themes</p>
-                  <div className="flex flex-wrap gap-2">
-                    {year2Data.dominantThemes.map((theme) => (
-                      <span
-                        key={theme}
-                        className="text-xs text-white/50 px-2 py-1 rounded bg-white/5"
-                      >
-                        {theme}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+          ) : selectedYear1 && selectedYear2 ? (
+            <div className="text-white/60">
+              <p>Computing comparison...</p>
             </div>
-          )}
-
-          {/* Empty state for single year */}
-          {year1Data && !year2Data && (
-            <div className="space-y-4 text-white/40">
-              <p className="text-sm italic">Select a second year to compare.</p>
-            </div>
-          )}
-
-          {/* Empty state for no selection */}
-          {!year1Data && !year2Data && (
-            <div className="col-span-2 space-y-4 text-white/40">
-              <p className="text-sm italic">Select years above to begin comparison.</p>
+          ) : (
+            <div className="text-white/60">
+              <p>Select two years above to begin comparison.</p>
             </div>
           )}
         </div>
       </div>
-    </div>
+
+      {/* Reflection preview drawer */}
+      {selectedReflection && (
+        <div
+          className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[60] transition-opacity duration-[220ms] ease-out ${
+            previewOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={() => {
+            setPreviewOpen(false);
+            setSelectedReflection(null);
+          }}
+          aria-hidden={!previewOpen}
+        />
+      )}
+      {selectedReflection && previewOpen && (
+        <div className="fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-[70] flex-col shadow-2xl hidden sm:flex">
+          <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-semibold">Reflection</h3>
+              <p className="text-xs text-white/60 mt-1">
+                {new Date(selectedReflection.createdAt).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setPreviewOpen(false);
+                setSelectedReflection(null);
+              }}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+              aria-label="Close"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-6 overflow-y-auto flex-1">
+            <div className="prose prose-invert max-w-none">
+              <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
+                {selectedReflection.plaintext}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
