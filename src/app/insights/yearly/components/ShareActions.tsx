@@ -10,11 +10,12 @@
  * - Platform helper links
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import type { ShareFrame } from '../../../share/renderers/renderSharePack';
 import { sanitizeCaption } from '../../../lib/share/sanitizeShareMetadata';
 import { ShareSafetyBanner } from './ShareSafetyBanner';
+import { SHARE_DEFAULTS } from '../../../lib/share/shareDefaults';
 
 export interface ShareActionsProps {
   imageBlob: Blob | null;
@@ -75,6 +76,23 @@ export function ShareActions({
   // Sanitize caption to remove any sensitive metadata
   const sanitizedCaption = sanitizeCaption(captionText);
 
+  const [showIntentGate, setShowIntentGate] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+
+  // Share intent gate - confirmation before action
+  const confirmShareAction = (action: string, callback: () => void) => {
+    setShowIntentGate(action);
+    setPendingAction(() => callback);
+  };
+
+  const executePendingAction = () => {
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+      setShowIntentGate(null);
+    }
+  };
+
   // Copy caption to clipboard
   const handleCopyCaption = async () => {
     if (!sanitizedCaption) {
@@ -82,13 +100,15 @@ export function ShareActions({
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(sanitizedCaption);
-      toast.success('Caption copied');
-    } catch (err: any) {
-      console.error('Failed to copy caption:', err);
-      toast.error('Failed to copy caption');
-    }
+    confirmShareAction('copy-caption', async () => {
+      try {
+        await navigator.clipboard.writeText(sanitizedCaption);
+        toast('Caption copied', { duration: 2000 });
+      } catch (err: any) {
+        console.error('Failed to copy caption:', err);
+        toast.error('Failed to copy caption');
+      }
+    });
   };
 
   // Copy image to clipboard
@@ -103,15 +123,17 @@ export function ShareActions({
       return;
     }
 
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': imageBlob }),
-      ]);
-      toast.success('Image copied');
-    } catch (err: any) {
-      console.error('Failed to copy image:', err);
-      toast.error('Failed to copy image');
-    }
+    confirmShareAction('copy-image', async () => {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': imageBlob }),
+        ]);
+        toast('Image copied', { duration: 2000 });
+      } catch (err: any) {
+        console.error('Failed to copy image:', err);
+        toast.error('Failed to copy image');
+      }
+    });
   };
 
   // Download image
@@ -121,26 +143,30 @@ export function ShareActions({
       return;
     }
 
-    try {
-      const url = URL.createObjectURL(imageBlob);
-      const link = document.createElement('a');
-      link.download = filename;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      // Auto-copy caption after successful download
-      if (sanitizedCaption) {
-        handleCopyCaption().catch(() => {
-          // Silent fail - caption copy is nice-to-have
-        });
+    confirmShareAction('download', () => {
+      try {
+        const url = URL.createObjectURL(imageBlob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // Auto-copy caption after successful download
+        if (sanitizedCaption) {
+          navigator.clipboard.writeText(sanitizedCaption).catch(() => {
+            // Silent fail - caption copy is nice-to-have
+          });
+        }
+        
+        toast('Artifact sealed', { duration: 2000 });
+      } catch (err: any) {
+        console.error('Failed to download image:', err);
+        toast.error('Failed to download image');
       }
-    } catch (err: any) {
-      console.error('Failed to download image:', err);
-      toast.error('Failed to download image');
-    }
+    });
   };
 
   // Web Share API
@@ -156,26 +182,28 @@ export function ShareActions({
       return;
     }
 
-    try {
-      // Convert blob to File for Web Share API
-      const file = new File([imageBlob], filename, { type: 'image/png' });
-      
-      // Web Share API with file (use sanitized caption)
-      await navigator.share({
-        title: `My ${new Date().getFullYear()} Yearly Wrap`,
-        text: sanitizedCaption,
-        files: [file],
-      });
-      
-      toast.success('Shared successfully');
-    } catch (err: any) {
-      // User cancelled or error - don't show error for cancellation
-      if (err.name !== 'AbortError') {
-        console.error('Web Share failed:', err);
-        // Fallback to download on error
-        handleDownload();
+    confirmShareAction('web-share', async () => {
+      try {
+        // Convert blob to File for Web Share API
+        const file = new File([imageBlob], filename, { type: 'image/png' });
+        
+        // Web Share API with file (use sanitized caption)
+        await navigator.share({
+          title: `My ${new Date().getFullYear()} Yearly Wrap`,
+          text: sanitizedCaption,
+          files: [file],
+        });
+        
+        toast('Artifact sealed', { duration: 2000 });
+      } catch (err: any) {
+        // User cancelled or error - don't show error for cancellation
+        if (err.name !== 'AbortError') {
+          console.error('Web Share failed:', err);
+          // Fallback to download on error
+          handleDownload();
+        }
       }
-    }
+    });
   };
 
   // Platform helper - open platform with guidance
@@ -217,7 +245,7 @@ export function ShareActions({
 
     try {
       await navigator.clipboard.writeText(tiktokOverlay.join('\n'));
-      toast.success('TikTok overlay copied');
+      toast('TikTok overlay copied', { duration: 2000 });
     } catch (err: any) {
       console.error('Failed to copy TikTok overlay:', err);
       toast.error('Failed to copy TikTok overlay');
@@ -232,52 +260,85 @@ export function ShareActions({
       {/* Share Safety Banner */}
       <ShareSafetyBanner />
 
+      {/* Share Intent Gate - confirmation surface */}
+      {showIntentGate && (
+        <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
+          <p className="text-sm text-white/70">
+            Create a shareable artifact
+          </p>
+          <p className="text-xs text-white/50">
+            You control what leaves your vault.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={executePendingAction}
+              className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition-colors text-sm"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowIntentGate(null);
+                setPendingAction(null);
+              }}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-sm text-white/60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Primary actions */}
-      <div className="flex flex-wrap gap-2">
-        {/* Copy caption */}
-        {hasCaption && (
-          <button
-            type="button"
-            onClick={handleCopyCaption}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-          >
-            Copy caption
-          </button>
-        )}
+      {!showIntentGate && (
+        <div className="flex flex-wrap gap-2">
+          {/* Copy caption */}
+          {hasCaption && (
+            <button
+              type="button"
+              onClick={handleCopyCaption}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+            >
+              Copy caption
+            </button>
+          )}
 
-        {/* Download image */}
-        {hasImage && (
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-          >
-            Download image
-          </button>
-        )}
+          {/* Download image */}
+          {hasImage && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+            >
+              Download artifact
+            </button>
+          )}
 
-        {/* Copy image */}
-        {hasImage && navigator.clipboard && 'write' in navigator.clipboard && (
-          <button
-            type="button"
-            onClick={handleCopyImage}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-          >
-            Copy image
-          </button>
-        )}
+          {/* Copy image */}
+          {hasImage && navigator.clipboard && 'write' in navigator.clipboard && (
+            <button
+              type="button"
+              onClick={handleCopyImage}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+            >
+              Copy image
+            </button>
+          )}
 
-        {/* Web Share API (only show if supported) */}
-        {hasImage && isWebShareSupported() && (
-          <button
-            type="button"
-            onClick={handleWebShare}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
-          >
-            Share
-          </button>
-        )}
-      </div>
+          {/* Web Share API (only show if supported) */}
+          {hasImage && isWebShareSupported() && (
+            <button
+              type="button"
+              onClick={handleWebShare}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+            >
+              Share
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Platform helpers */}
       {hasImage && (

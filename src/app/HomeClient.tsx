@@ -11,6 +11,7 @@ import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from './components/ExportButton';
 import { SourceLinkMenu } from './components/SourceLinkMenu';
 import { ReflectionLinks } from '@/app/components/ReflectionLinks';
+import { LinkedSourcesBacklinks } from './components/LinkedSourcesBacklinks';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
@@ -108,7 +109,7 @@ const w = (address ?? '').toLowerCase();
 // Event logging hook
 const { logEvent } = useLogEvent();
 
-// Reflection links hook
+// Reflection links hook (legacy - keeping for compatibility)
 const { links: reflectionLinks, getSourceIdFor, setLink: setReflectionLink } = useReflectionLinks(address);
 
 // Log navigation event when page loads (connected wallet only)
@@ -117,18 +118,24 @@ useEffect(() => {
   logEvent('page_reflections');
 }, [mounted, connected, logEvent]);
 
-// Load sources for linking
+// Load sources for linking (using external_sources table)
 useEffect(() => {
-  if (!mounted || !connected || !address) return;
+  if (!mounted || !connected || !address || !encryptionReady || !sessionKey) return;
   let cancelled = false;
   async function loadSourcesList() {
-    if (!address) {
+    if (!address || !sessionKey) {
       setSources([]);
       return;
     }
     try {
-      const data = await listExternalEntries(address);
-      if (!cancelled) setSources(data as any[]);
+      const { listExternalSources } = await import('./lib/externalSources');
+      const data = await listExternalSources(address, sessionKey);
+      if (!cancelled) setSources(data.map(s => ({
+        sourceId: s.id,
+        source_id: s.id,
+        title: s.title,
+        kind: s.source_type,
+      })));
     } catch {
       if (!cancelled) setSources([]);
     }
@@ -137,7 +144,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [mounted, connected, address]);
+}, [mounted, connected, address, encryptionReady, sessionKey]);
 
 // ---- local state ----
 const [status, setStatus] = useState('');
@@ -261,14 +268,33 @@ const visibleItems = useMemo(
 );
 
 async function setSourceLink(reflectionId: string, sourceId: string | null): Promise<void> {
+  if (!address || !sessionKey) return;
+  
   try {
-    await setReflectionLink(reflectionId, sourceId);
-    // Only update local state on success (hook handles errors with toast)
+    // Use reflection_sources table for persistence
+    const { linkSourceToReflection, unlinkSourceFromReflection, listSourcesForReflection } = await import('./lib/reflectionSources');
+    
+    if (sourceId === null) {
+      // Unlink: find existing links and remove them
+      const linkedSources = await listSourcesForReflection(address, reflectionId, sessionKey);
+      for (const source of linkedSources) {
+        await unlinkSourceFromReflection(address, reflectionId, source.id);
+      }
+    } else {
+      // Link: create new link (handles duplicates gracefully)
+      await linkSourceToReflection(address, reflectionId, sourceId);
+    }
+    
+    // Update local state optimistically
     setItems((prev) =>
       prev.map((it) => (it.id === reflectionId ? { ...it, sourceId } : it))
     );
-  } catch {
-    // Error already handled in hook with toast notification
+    
+    // No success toast - quiet persistence
+  } catch (err: any) {
+    console.error('Failed to link source', err);
+    // Only show toast on failure
+    toast.error(err.message || 'Failed to link source');
   }
 }
 
@@ -1182,8 +1208,9 @@ async function createShare() {
             {it.note}
           </div>
 
+      {/* Link to source dropdown */}
       <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2">
-        <p className="text-xs text-white/60">Linked Source</p>
+        <p className="text-xs text-white/60">Link to source</p>
         <SourceLinkMenu
           reflectionId={it.id}
           currentSourceId={it.sourceId}
@@ -1191,6 +1218,14 @@ async function createShare() {
           onLink={setSourceLink}
         />
       </div>
+
+      {/* Linked sources backlinks (read-only) */}
+      <LinkedSourcesBacklinks
+        reflectionId={it.id}
+        walletAddress={address ?? ''}
+        sessionKey={sessionKey ?? null}
+        encryptionReady={encryptionReady}
+      />
 
       <ReflectionLinks
         reflectionId={it.id}

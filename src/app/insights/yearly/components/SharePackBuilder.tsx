@@ -536,7 +536,7 @@ export function SharePackBuilder({
 
     try {
       await navigator.clipboard.writeText(generatedTexts.caption);
-      toast.success('Caption copied.');
+      toast('Caption copied', { duration: 2000 });
     } catch (err: any) {
       console.error('Failed to copy caption:', err);
       toast.error('Failed to copy caption');
@@ -570,7 +570,7 @@ export function SharePackBuilder({
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': lastPngBlob }),
       ]);
-      toast.success('Image copied');
+      toast('Image copied', { duration: 2000 });
     } catch (err: any) {
       console.error('Failed to copy image:', err);
       toast.error('Failed to copy image');
@@ -593,7 +593,7 @@ export function SharePackBuilder({
 
     try {
       downloadBlob(lastPngBlob, lastExport.filename);
-      toast.success('Downloaded again');
+      toast('Artifact sealed', { duration: 2000 });
     } catch (err: any) {
       console.error('Failed to download again:', err);
       toast.error('Failed to download again');
@@ -608,7 +608,7 @@ export function SharePackBuilder({
 
     try {
       await navigator.clipboard.writeText(generatedTexts.tiktokOverlay.join('\n'));
-      toast.success('TikTok overlay copied');
+      toast('TikTok overlay copied', { duration: 2000 });
     } catch (err: any) {
       console.error('Failed to copy TikTok overlay:', err);
       toast.error('Failed to copy TikTok overlay');
@@ -644,16 +644,16 @@ export function SharePackBuilder({
       <div className="rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold mb-2">Share this year</h3>
-            <p className="text-sm text-white/60 mb-4">
-              Create a shareable version of your yearly wrap.
+            <h3 className="text-lg font-normal mb-2">Create a shareable artifact</h3>
+            <p className="text-sm text-white/50 mb-4">
+              You control what leaves your vault.
             </p>
             <button
               type="button"
               onClick={() => setIsExpanded(true)}
-              className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
             >
-              Create a shareable version
+              Create artifact
             </button>
           </div>
         </div>
@@ -678,9 +678,9 @@ export function SharePackBuilder({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold mb-2">Share this year</h3>
-          <p className="text-sm text-white/60">
-            Choose what you want to share. We&apos;ll generate a beautiful card and caption.
+          <h3 className="text-lg font-normal mb-2">Create a shareable artifact</h3>
+          <p className="text-sm text-white/50">
+            Choose what you want to include. We&apos;ll generate a card and caption.
           </p>
         </div>
         <button
@@ -845,8 +845,8 @@ export function SharePackBuilder({
             </span>
           </label>
           {!includeSelectedOnly && (
-            <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-2">
-              <p className="text-xs text-orange-300">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-2">
+              <p className="text-xs text-white/60">
                 Raw journal text sharing is not yet available. Only selected insights will be included.
               </p>
             </div>
@@ -859,8 +859,8 @@ export function SharePackBuilder({
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2 py-1 rounded ${
             hasPersonalContent
-              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-              : 'bg-green-500/20 text-green-300 border border-green-500/30'
+              ? 'bg-white/10 text-white/70 border border-white/10'
+              : 'bg-white/5 text-white/60 border border-white/5'
           }`}>
             {privacyBadge}
           </span>
@@ -871,9 +871,9 @@ export function SharePackBuilder({
       <button
         type="button"
         onClick={handleGenerate}
-        className="w-full px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition-colors text-sm font-medium"
+        className="w-full px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
       >
-        Generate Share Pack
+        Generate artifact
       </button>
 
       {/* Preview - always shows current selection (live updates) */}
@@ -1005,12 +1005,12 @@ export function SharePackBuilder({
             {shareComplete ? (
               /* Share Complete Panel */
               <div className="space-y-4">
-                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+                <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
                   <div>
-                    <p className="text-sm font-medium text-white mb-1">
-                      Your Yearly Wrap is ready to share.
+                    <p className="text-sm text-white/80 mb-1">
+                      Artifact sealed
                     </p>
-                    <p className="text-xs text-white/60 mb-1">
+                    <p className="text-xs text-white/50 mb-1">
                       Image saved locally. Nothing uploaded.
                     </p>
                   </div>
