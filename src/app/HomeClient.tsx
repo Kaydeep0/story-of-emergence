@@ -73,7 +73,8 @@ export default function HomeClient() {
   // Hooks must be called unconditionally - guard usage in effects/renders instead
   const searchParams = useSearchParams();
   const router = useRouter();
-  const focusId = searchParams?.get('focus') ?? null;
+  // Safely get focusId - handle case where searchParams might not be ready during SSR
+  const focusId = searchParams && typeof searchParams.get === 'function' ? searchParams.get('focus') : null;
 
   // Hooks must be called unconditionally - guard usage instead
   const chainId = useChainId();
