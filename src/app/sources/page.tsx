@@ -52,17 +52,20 @@ export default function SourcesPage() {
       try {
         const data = await listExternalSources(address, sessionKey);
         // Empty array is a valid state, not an error
-        setSources(data || []);
+        // Always default to [] - never null or undefined
+        setSources(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Failed to load sources', err);
         // Only set error for actual failures, not empty results
-        // Empty results should show the empty state, not an error
-        const errMessage = err instanceof Error ? err.message : 'Unknown error';
-        // Only show error for non-empty errors (network issues, auth failures, etc.)
-        if (errMessage && !errMessage.includes('No rows')) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        // Only show error for real failures (network, auth, etc.)
+        // Empty results from database are not errors
+        if (errMessage && !errMessage.includes('No rows') && !errMessage.includes('empty')) {
           setError('Unable to load sources');
+          // Still set empty array so UI doesn't break
+          setSources([]);
         } else {
-          // Empty result - show empty state instead
+          // Empty result or no data - valid state
           setSources([]);
         }
       } finally {
@@ -83,6 +86,7 @@ export default function SourcesPage() {
 
     try {
       setLoading(true);
+      // Write to external_sources with wallet_address included
       await insertExternalSource(address, sessionKey, {
         source_type: formData.source_type,
         title: formData.title.trim(),
@@ -94,11 +98,11 @@ export default function SourcesPage() {
         },
       });
       
-      // Reload sources
+      // Refetch sources after successful insert
       const data = await listExternalSources(address, sessionKey);
-      setSources(data);
+      setSources(Array.isArray(data) ? data : []);
       
-      // Reset form
+      // Reset form and close modal quietly
       setFormData({
         source_type: 'note',
         title: '',
@@ -108,9 +112,10 @@ export default function SourcesPage() {
         notes: '',
       });
       setAdding(false);
-      toast.success('Source added');
+      // No success toast - no celebration, no dopamine
     } catch (err: any) {
       console.error('Failed to add source', err);
+      // Only show toast on failure
       toast.error(err.message || 'Failed to add source');
     } finally {
       setLoading(false);
@@ -124,8 +129,9 @@ export default function SourcesPage() {
     
     try {
       await deleteExternalSource(address, id);
+      // Optimistically remove from list
       setSources(sources.filter(s => s.id !== id));
-      toast.success('Source deleted');
+      // No success toast - quiet removal
     } catch (err: any) {
       console.error('Failed to delete source', err);
       toast.error(err.message || 'Failed to delete source');
