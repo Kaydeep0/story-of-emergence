@@ -144,3 +144,29 @@ export async function listSourcesForReflection(
   return decrypted;
 }
 
+/**
+ * List all reflections linked to a source
+ */
+export async function listReflectionsForSource(
+  wallet: string,
+  sourceId: string
+): Promise<string[]> {
+  const sb = getSupabaseForWallet(wallet);
+  
+  const { data: links, error } = await sb
+    .from('reflection_sources')
+    .select('reflection_id')
+    .eq('user_wallet', wallet.toLowerCase())
+    .eq('source_id', sourceId);
+  
+  if (error) {
+    throw new Error(`Failed to list reflections for source: ${error.message}`);
+  }
+  
+  if (!links || links.length === 0) {
+    return [];
+  }
+  
+  return links.map(link => link.reflection_id);
+}
+
