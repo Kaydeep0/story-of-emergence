@@ -51,10 +51,20 @@ export default function SourcesPage() {
       setError(null);
       try {
         const data = await listExternalSources(address, sessionKey);
-        setSources(data);
+        // Empty array is a valid state, not an error
+        setSources(data || []);
       } catch (err) {
         console.error('Failed to load sources', err);
-        setError('Failed to load external sources');
+        // Only set error for actual failures, not empty results
+        // Empty results should show the empty state, not an error
+        const errMessage = err instanceof Error ? err.message : 'Unknown error';
+        // Only show error for non-empty errors (network issues, auth failures, etc.)
+        if (errMessage && !errMessage.includes('No rows')) {
+          setError('Unable to load sources');
+        } else {
+          // Empty result - show empty state instead
+          setSources([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -343,16 +353,9 @@ export default function SourcesPage() {
           </div>
         )}
 
-        {/* Error state */}
-        {error && !loading && (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center">
-            <p className="text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && !error && sources.length === 0 && (
-          <div className="rounded-2xl border border-white/10 p-6 text-center space-y-4">
+        {/* Empty state - shown when no sources or when error (sanctuary-safe) */}
+        {!loading && (sources.length === 0 || error) && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center space-y-4">
             <div className="mx-auto w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
               <svg
                 className="w-6 h-6 text-white/40"
@@ -368,15 +371,17 @@ export default function SourcesPage() {
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-medium">No external sources yet</h2>
-            <p className="text-sm text-white/60 max-w-md mx-auto">
-              Sources are references, not imports. Add references to YouTube videos, books, articles, conversations, or notes that have influenced your thinking.
+            <h2 className="text-lg font-normal text-white/80">
+              {error ? 'Unable to load sources' : 'No external material has been saved yet'}
+            </h2>
+            <p className="text-sm text-white/60 max-w-md mx-auto leading-relaxed">
+              Sources appear here only when you choose to keep them.
             </p>
           </div>
         )}
 
         {/* Secondary add button - bottom aligned, subtle */}
-        {!loading && !error && (
+        {!loading && (
           <div className="flex justify-center pt-6">
             <button
               type="button"
