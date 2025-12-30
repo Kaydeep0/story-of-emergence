@@ -1094,18 +1094,22 @@ export default function InsightsPage() {
   // Derive latest insight if available
   const latest = insights.length > 0 ? insights[0] : null;
 
+  // Sanctuary principle:
+  // This UI should reduce cognitive load over time.
+  // Prefer silence, spacing, and restraint over density.
+
   return (
     <main className="min-h-screen bg-black text-white">
-      <section className="max-w-2xl mx-auto px-4 py-10">
-        <h1 className="text-2xl font-semibold text-center mb-2">Insights</h1>
-        <p className="text-center text-sm text-white/60 mb-6">
+      <section className="max-w-2xl mx-auto px-4 py-12">
+        <h1 className="text-2xl font-normal text-center mb-3">Insights</h1>
+        <p className="text-center text-sm text-white/50 mb-8">
           Different ways to view your encrypted activity.
         </p>
 
         {/* Health strip - shows summary data when loaded and connected */}
         {connected && !summaryLoading && summaryData && (
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 mb-6">
-            <div className="flex items-center justify-center gap-6 text-xs text-white/60">
+          <div className="rounded-xl bg-white/[0.01] px-4 py-3 mb-8">
+            <div className="flex items-center justify-center gap-6 text-xs text-white/50">
               <span>
                 <span className="font-medium text-white/80">{summaryData.entries}</span> reflections
               </span>
@@ -1131,8 +1135,8 @@ export default function InsightsPage() {
         )}
 
         {/* Mode switcher */}
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex rounded-xl border border-white/10 p-1 bg-white/5">
+        <div className="flex justify-center mb-10">
+          <div className="inline-flex rounded-xl p-1 bg-white/3">
             {MODE_OPTIONS.map((opt) => {
               // Defensive routing: yearly -> /insights/yearly (exclusive, no fallthrough)
               if (opt.value === 'yearly') {
@@ -1902,8 +1906,8 @@ export default function InsightsPage() {
             {/* Summary data */}
             {connected && encryptionReady && !summaryLoading && !summaryError && summaryData && (
               <>
-                <div className="rounded-2xl border border-white/10 p-6 space-y-4">
-                  <h2 className="text-lg font-semibold text-zinc-50">
+                <div className="rounded-2xl p-8 space-y-5">
+                  <h2 className="text-lg font-normal text-zinc-50">
                     Current Lens
                   </h2>
 
@@ -1926,8 +1930,8 @@ export default function InsightsPage() {
                 </div>
 
                 {/* Observed themes */}
-                <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
-                  <p className="text-xs font-semibold text-white">
+                <section className="rounded-2xl bg-white/3 px-6 py-5">
+                  <p className="text-xs font-normal text-white/80">
                     Observed Patterns
                   </p>
                   {summaryReflectionsLoading ? (
@@ -1955,10 +1959,10 @@ export default function InsightsPage() {
                 </section>
 
                 {/* Source-driven topics */}
-                <section className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 space-y-3">
+                <section className="rounded-2xl bg-white/3 px-6 py-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-white">Observed Patterns</p>
-                    <span className="text-[11px] text-white/50">External sources</span>
+                    <p className="text-xs font-normal text-white/80">Observed Patterns</p>
+                    <span className="text-[11px] text-white/40">External sources</span>
                   </div>
                   {sources.length === 0 ? (
                     <p className="text-sm text-white/60">Connect a source to get topic insights.</p>
@@ -1988,8 +1992,8 @@ export default function InsightsPage() {
 
                 {/* Always On Summary Section */}
                 <div className="space-y-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <h2 className="text-lg font-normal flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                     </svg>
                     Always On Summary
@@ -2197,8 +2201,8 @@ export default function InsightsPage() {
                 </div>
 
                 {lifetimeStats.dominantTopics.length > 0 && (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                    <h2 className="text-lg font-semibold mb-3">Recurring Themes</h2>
+                  <div className="rounded-2xl bg-white/3 p-8">
+                    <h2 className="text-lg font-normal mb-4">Recurring Themes</h2>
                     <div className="flex flex-wrap gap-2">
                       {lifetimeStats.dominantTopics.map((topic) => (
                         <span
