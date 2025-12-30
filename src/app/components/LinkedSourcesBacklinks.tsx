@@ -27,6 +27,7 @@ export function LinkedSourcesBacklinks({
     }
 
     async function loadLinkedSources() {
+      if (!sessionKey) return; // Guard against null
       setLoading(true);
       try {
         const sources = await listSourcesForReflection(walletAddress, reflectionId, sessionKey);
