@@ -1,33 +1,39 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+/**
+ * Sources Page - Phase 5.1
+ * Read-only ingestion prep - references only, no content processing
+ */
+
+import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { useLogEvent } from '../lib/useLogEvent';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
-import { listExternalEntries } from '../lib/useSources';
-import { rpcFetchEntries } from '../lib/entries';
-import { itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
-import type { ReflectionEntry } from '../lib/insights/types';
-import { SourceCard, type SourceEntry } from '../components/SourceCard';
-import { SourceForm } from '../components/SourceForm';
-import { insertExternalSource } from '../lib/sources';
+import { 
+  listExternalSources, 
+  insertExternalSource,
+  deleteExternalSource,
+  type ExternalSourceDecrypted,
+  type ExternalSourceType 
+} from '../lib/externalSources';
 import { toast } from 'sonner';
-import { useReflectionLinks } from '../lib/reflectionLinks';
-import { importYoutubeTakeout } from '../lib/sources/importYoutubeTakeout';
 
 export default function SourcesPage() {
   const { address, isConnected } = useAccount();
-  const { logEvent } = useLogEvent();
-  const { ready: encryptionReady, error: encryptionError, aesKey: sessionKey } = useEncryptionSession();
-  const { getSourceIdFor } = useReflectionLinks(address);
+  const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
+  
   const [mounted, setMounted] = useState(false);
-  const [sources, setSources] = useState<SourceEntry[]>([]);
-  const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
+  const [sources, setSources] = useState<ExternalSourceDecrypted[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [formData, setFormData] = useState({
+    source_type: 'note' as ExternalSourceType,
+    title: '',
+    author: '',
+    url: '',
+    occurred_at_year: new Date().getFullYear(),
+    notes: '',
+  });
 
   const connected = isConnected && !!address;
 
@@ -35,23 +41,17 @@ export default function SourcesPage() {
     setMounted(true);
   }, []);
 
-  // Log navigation event when page loads (connected wallet only)
-  useEffect(() => {
-    if (!mounted || !connected) return;
-    logEvent('navigate_sources');
-  }, [mounted, connected, logEvent]);
-
   // Load sources when wallet is connected and encryption is ready
   useEffect(() => {
-    if (!mounted || !connected || !encryptionReady || !address) return;
+    if (!mounted || !connected || !encryptionReady || !address || !sessionKey) return;
     
     async function loadSources() {
-      if (!address) return;
+      if (!address || !sessionKey) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await listExternalEntries(address);
-        setSources(data as SourceEntry[]);
+        const data = await listExternalSources(address, sessionKey);
+        setSources(data);
       } catch (err) {
         console.error('Failed to load sources', err);
         setError('Failed to load external sources');
@@ -61,63 +61,66 @@ export default function SourcesPage() {
     }
 
     loadSources();
-  }, [mounted, connected, encryptionReady, address]);
+  }, [mounted, connected, encryptionReady, address, sessionKey]);
 
-  // Load decrypted reflections for demo linking
-  useEffect(() => {
-    if (!mounted || !connected || !encryptionReady || !address || !sessionKey) {
+  const handleAddSource = async () => {
+    if (!address || !sessionKey) return;
+    
+    if (!formData.title.trim()) {
+      toast.error('Title is required');
       return;
     }
 
-    let cancelled = false;
-
-    async function loadReflections() {
-      if (!address || !sessionKey) {
-        setReflections([]);
-        return;
-      }
-
-      try {
-        const { items } = await rpcFetchEntries(address, sessionKey, {
-          includeDeleted: false,
-          limit: 200,
-          offset: 0,
-        });
-
-        if (cancelled) return;
-
-        const reflectionEntries = attachDemoSourceLinks(
-          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
-        );
-        setReflections(reflectionEntries);
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Failed to load reflections for source linking', err);
-          setReflections([]);
-        }
-      } finally {
-        // no-op
-      }
+    try {
+      setLoading(true);
+      await insertExternalSource(address, sessionKey, {
+        source_type: formData.source_type,
+        title: formData.title.trim(),
+        author: formData.author.trim() || null,
+        url: formData.url.trim() || null,
+        occurred_at_year: formData.occurred_at_year,
+        metadata: {
+          notes: formData.notes.trim() || undefined,
+        },
+      });
+      
+      // Reload sources
+      const data = await listExternalSources(address, sessionKey);
+      setSources(data);
+      
+      // Reset form
+      setFormData({
+        source_type: 'note',
+        title: '',
+        author: '',
+        url: '',
+        occurred_at_year: new Date().getFullYear(),
+        notes: '',
+      });
+      setAdding(false);
+      toast.success('Source added');
+    } catch (err: any) {
+      console.error('Failed to add source', err);
+      toast.error(err.message || 'Failed to add source');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    loadReflections();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mounted, connected, encryptionReady, address, sessionKey, getSourceIdFor]);
-
-  const reflectionsBySource = useMemo(() => {
-    const map = new Map<string, ReflectionEntry[]>();
-    reflections.forEach((reflection) => {
-      if (!reflection.sourceId) return;
-      if (!map.has(reflection.sourceId)) {
-        map.set(reflection.sourceId, []);
-      }
-      map.get(reflection.sourceId)!.push(reflection);
-    });
-    return map;
-  }, [reflections]);
+  const handleDeleteSource = async (id: string) => {
+    if (!address) return;
+    
+    if (!confirm('Delete this source reference?')) return;
+    
+    try {
+      await deleteExternalSource(address, id);
+      setSources(sources.filter(s => s.id !== id));
+      toast.success('Source deleted');
+    } catch (err: any) {
+      console.error('Failed to delete source', err);
+      toast.error(err.message || 'Failed to delete source');
+    }
+  };
 
   if (!mounted) return null;
 
@@ -154,104 +157,128 @@ export default function SourcesPage() {
     <main className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-2">Sources</h1>
+        
         <div className="flex items-center justify-between mb-4">
           {!loading && (
             <p className="text-sm text-white/60">
-              You have {sources.length} external source{sources.length === 1 ? '' : 's'} linked to this wallet.
+              {sources.length} source{sources.length === 1 ? '' : 's'}
             </p>
           )}
-          <div className="flex gap-2">
-            {/* Dev-only YouTube Takeout import button */}
-            {process.env.NODE_ENV === 'development' && (
-              <label className="rounded-lg border border-yellow-500/30 px-3 py-1.5 text-sm text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/15 transition-colors cursor-pointer">
-                <input
-                  type="file"
-                  accept=".json"
-                  className="hidden"
-                  disabled={importing}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    
-                    setImporting(true);
-                    try {
-                      const result = await importYoutubeTakeout(file);
-                      
-                      // Log results to console
-                      console.group('📥 YouTube Takeout Import Results');
-                      console.log('Total events:', result.stats.total);
-                      console.log('Watch events:', result.stats.watchCount);
-                      console.log('Like events:', result.stats.likeCount);
-                      console.log('Date range:', {
-                        earliest: result.stats.dateRange.earliest?.toISOString() || 'N/A',
-                        latest: result.stats.dateRange.latest?.toISOString() || 'N/A',
-                      });
-                      console.log('Sample events (first 3):', result.events.slice(0, 3));
-                      console.log('All events:', result.events);
-                      console.groupEnd();
-                      
-                      toast.success(`Imported ${result.stats.total} events (${result.stats.watchCount} watches, ${result.stats.likeCount} likes)`);
-                    } catch (error) {
-                      console.error('YouTube Takeout import failed:', error);
-                      toast.error(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                    } finally {
-                      setImporting(false);
-                      // Reset input
-                      e.target.value = '';
-                    }
-                  }}
-                />
-                {importing ? 'Importing...' : '📥 Import YouTube Takeout (Dev)'}
-              </label>
-            )}
-            <button
-              type="button"
-              onClick={() => setAdding((v) => !v)}
-              className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors"
-            >
-              {adding ? 'Close' : 'Add source'}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setAdding((v) => !v)}
+            className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors"
+          >
+            {adding ? 'Close' : 'Add source'}
+          </button>
         </div>
 
+        {/* Add form */}
         {adding && (
-          <div className="mb-6">
-            <SourceForm
-              onSubmit={async ({ title, kind, sourceId, notes, url, sourceType }) => {
-                if (!address) return;
-                const row = await insertExternalSource(address, {
-                  title,
-                  kind,
-                  sourceId,
-                  notes,
-                  url,
-                  platform: 'manual',
-                  sourceType,
-                });
-                const mapped: SourceEntry = {
-                  id: row.id,
-                  walletAddress: row.wallet_address,
-                  kind: row.kind,
-                  sourceId: row.source_id,
-                  title: row.title,
-                  url: row.url,
-                  createdAt: row.created_at,
-                  notes: row.notes,
-                  capturedAt: row.captured_at,
-                  platform: 'manual',
-                  sourceType: sourceType || 'note',
-                };
-                setSources((prev) => [mapped, ...prev]);
-                toast.success('Source added');
-                setAdding(false);
-              }}
-              onCancel={() => setAdding(false)}
-            />
+          <div className="mb-6 rounded-2xl border border-white/10 p-6 space-y-4">
+            <div>
+              <label className="block text-sm text-white/60 mb-1">Type</label>
+              <select
+                value={formData.source_type}
+                onChange={(e) => setFormData({ ...formData, source_type: e.target.value as ExternalSourceType })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+              >
+                <option value="youtube">YouTube</option>
+                <option value="book">Book</option>
+                <option value="article">Article</option>
+                <option value="conversation">Conversation</option>
+                <option value="note">Note</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm text-white/60 mb-1">Title *</label>
+              <input
+                type="text"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                placeholder="Source title"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm text-white/60 mb-1">Author</label>
+              <input
+                type="text"
+                value={formData.author}
+                onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                placeholder="Author name"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm text-white/60 mb-1">URL</label>
+              <input
+                type="url"
+                value={formData.url}
+                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                placeholder="https://..."
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm text-white/60 mb-1">Year</label>
+              <input
+                type="number"
+                value={formData.occurred_at_year}
+                onChange={(e) => setFormData({ ...formData, occurred_at_year: parseInt(e.target.value) || new Date().getFullYear() })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                min="1900"
+                max={new Date().getFullYear() + 1}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm text-white/60 mb-1">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20 resize-none"
+                rows={3}
+                placeholder="Optional notes"
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleAddSource}
+                disabled={loading}
+                className="flex-1 rounded-lg border border-white/20 px-3 py-2 text-sm text-white/90 bg-white/10 hover:bg-white/15 transition-colors disabled:opacity-50"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setFormData({
+                    source_type: 'note',
+                    title: '',
+                    author: '',
+                    url: '',
+                    occurred_at_year: new Date().getFullYear(),
+                    notes: '',
+                  });
+                }}
+                className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-sm text-white/60 hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
         {/* Loading state */}
-        {loading && (
+        {loading && !adding && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70">Loading sources…</p>
           </div>
@@ -284,7 +311,7 @@ export default function SourcesPage() {
             </div>
             <h2 className="text-lg font-medium">No external sources yet</h2>
             <p className="text-sm text-white/60 max-w-md mx-auto">
-              Once you import YouTube, books, or articles, they will appear here.
+              Sources are references, not imports. Add references to YouTube videos, books, articles, conversations, or notes that have influenced your thinking.
             </p>
           </div>
         )}
@@ -292,24 +319,68 @@ export default function SourcesPage() {
         {/* Sources list */}
         {!loading && !error && sources.length > 0 && (
           <div className="space-y-4">
-            {sources.map((entry) => {
-              const linkedReflections = entry.sourceId
-                ? reflectionsBySource.get(entry.sourceId) ?? []
-                : [];
-
-              return (
-                <SourceCard
-                  key={entry.id}
-                  entry={entry}
-                  linkedReflections={linkedReflections}
-                  expanded={expandedId === entry.id}
-                  detailHref={entry.sourceId ? `/sources/${entry.sourceId}` : undefined}
-                  onToggle={() =>
-                    setExpandedId((prev) => (prev === entry.id ? null : entry.id))
-                  }
-                />
-              );
-            })}
+            {sources.map((source) => (
+              <div
+                key={source.id}
+                className="rounded-2xl border border-white/10 p-6 space-y-2"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs px-2 py-0.5 rounded bg-white/5 text-white/60 capitalize">
+                        {source.source_type}
+                      </span>
+                      <span className="text-xs text-white/40">
+                        {source.occurred_at_year}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-medium text-white/90 mb-1">
+                      {source.title}
+                    </h3>
+                    {source.author && (
+                      <p className="text-sm text-white/60 mb-1">
+                        by {source.author}
+                      </p>
+                    )}
+                    {source.url && (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-400 hover:text-blue-300 break-all"
+                      >
+                        {source.url}
+                      </a>
+                    )}
+                    {source.metadata?.notes && (
+                      <p className="text-sm text-white/60 mt-2">
+                        {source.metadata.notes}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSource(source.id)}
+                    className="text-white/40 hover:text-white/60 transition-colors"
+                    title="Delete source"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
