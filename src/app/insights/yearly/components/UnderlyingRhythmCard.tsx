@@ -24,7 +24,7 @@ export function UnderlyingRhythmCard({
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h2 className="text-lg font-semibold mb-4">Your underlying rhythm</h2>
+      <h2 className="text-lg font-semibold mb-4">What repeated itself</h2>
       
       {/* Primary metrics - always visible */}
       <div className="grid grid-cols-3 gap-4 mb-4">

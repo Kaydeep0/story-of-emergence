@@ -53,12 +53,12 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h2 className="text-lg font-semibold mb-6">Mirror: what you wrote about</h2>
+      <h2 className="text-lg font-semibold mb-6">What you returned to</h2>
       
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recurring words - always visible */}
         <div>
-          <h3 className="text-sm font-semibold text-white/90 mb-3">Recurring words</h3>
+          <h3 className="text-sm font-semibold text-white/90 mb-3">Words that stayed</h3>
           {mirrorInsights.keywords.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {mirrorInsights.keywords.map((word) => (
@@ -77,7 +77,7 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
 
         {/* Three moments - always visible */}
         <div>
-          <h3 className="text-sm font-semibold text-white/90 mb-1">Three moments</h3>
+          <h3 className="text-sm font-semibold text-white/90 mb-1">When attention gathered</h3>
           <p className="text-xs text-white/50 mb-3">
             These moments reflect days with unusual activity, emotional density, or sustained focus.
           </p>
@@ -127,7 +127,7 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
         {/* Word shift - hidden by default */}
         {showDeeperPatterns && mirrorInsights.wordShift.rising.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-white/90 mb-3">Your shift this year</h3>
+            <h3 className="text-sm font-semibold text-white/90 mb-3">What shifted</h3>
             <div className="space-y-3">
               {mirrorInsights.wordShift.rising.length > 0 && (
                 <div>

@@ -493,20 +493,6 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Top 10 Days - Keep but less prominent */}
-            {distributionResult.topDays.length > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h3 className="text-md font-semibold mb-3">Top 10 Days</h3>
-                <div className="space-y-2">
-                  {distributionResult.topDays.slice(0, 10).map((day) => (
-                    <div key={day.date} className="flex items-center justify-between text-sm">
-                      <span className="text-white/70">{formatDate(day.date)}</span>
-                      <span className="text-white/90 font-medium">{day.count} entries</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* 5️⃣ IMPLICATION: Future rhythm (Last section, emphasized) */}
             {archetype && (
