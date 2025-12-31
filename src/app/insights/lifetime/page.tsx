@@ -12,7 +12,7 @@ import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
-import { useLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
+import { buildLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import type {
   ReflectionMeta,
@@ -158,11 +158,13 @@ export default function LifetimePage() {
     return { reflectionMetas, deterministicCandidates: allCandidates };
   }, [allReflections]);
 
-  // Build inventory
-  const inventory = useLifetimeSignalInventory({
-    reflections: reflectionMetas,
-    candidates: deterministicCandidates,
-  });
+  // Build inventory (pure function, deterministic)
+  const inventory = useMemo(() => {
+    return buildLifetimeSignalInventory({
+      reflections: reflectionMetas,
+      candidates: deterministicCandidates,
+    });
+  }, [reflectionMetas, deterministicCandidates]);
 
   // Format date to YYYY-MM using safe date helper
   // Returns empty string for invalid dates (never shows "unknown")
