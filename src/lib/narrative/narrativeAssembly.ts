@@ -35,6 +35,8 @@ export type YearNarrativeDraft = {
  * @param year - The year to assemble narrative for
  * @param reflections - Array of reflection entries with id, created_at, and text
  * @returns YearNarrativeDraft with candidates linked to source reflections
+ * 
+ * @deprecated Use assembleYearNarrative from assembleYearNarrativeDeterministic.ts
  */
 export function assembleYearNarrative(
   year: number,
