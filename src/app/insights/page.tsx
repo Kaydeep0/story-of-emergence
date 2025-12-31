@@ -403,7 +403,7 @@ type SimpleEvent = {
   plaintext?: unknown;
 };
 
-import { FEATURE_LIFETIME_INVENTORY } from '../lib/featureFlags';
+import { FEATURE_LIFETIME_INVENTORY } from '../../lib/featureFlags';
 
 const BASE_MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
   { value: 'weekly', label: 'Weekly' },
