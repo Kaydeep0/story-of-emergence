@@ -18,6 +18,21 @@ import {
 } from './confidenceScoring';
 
 /**
+ * Safe date parsing - returns null for invalid dates
+ */
+function safeDate(value: unknown): Date | null {
+  const d = new Date(String(value ?? ''));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Format date as YYYY-MM-DD
+ */
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
  * Assemble a year's narrative using only deterministic signals:
  * - Count of reflections
  * - Reflection timestamps
@@ -42,39 +57,73 @@ export function assembleYearNarrative(
     };
   }
 
+  // Filter reflections to only include those with valid dates
+  const reflectionsWithValidDates = reflections
+    .map(r => ({ 
+      r, 
+      d: safeDate((r as any).created_at ?? (r as any).createdAt ?? (r as any).date) 
+    }))
+    .filter(x => x.d)
+    .map(x => x.r);
+
+  // If nothing valid, return empty candidates for that year
+  if (reflectionsWithValidDates.length === 0) {
+    return {
+      year,
+      generatedAt: new Date().toISOString(),
+      candidates,
+    };
+  }
+
   // Sort reflections by timestamp (oldest first)
-  const sortedReflections = [...reflections].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
+  const sortedReflections = [...reflectionsWithValidDates].sort((a: any, b: any) => {
+    const da = safeDate(a.created_at ?? a.createdAt ?? a.date)?.getTime() ?? 0;
+    const db = safeDate(b.created_at ?? b.createdAt ?? b.date)?.getTime() ?? 0;
+    return da - db;
+  });
 
   // Anchors: First and last reflection
   const firstReflection = sortedReflections[0];
   const lastReflection = sortedReflections[sortedReflections.length - 1];
 
   if (firstReflection) {
-    const firstDate = new Date(firstReflection.created_at);
-    candidates.push({
-      section: 'anchors',
-      text: `First recorded reflection on ${firstDate.toISOString().split('T')[0]}`,
-      sourceReflectionIds: [firstReflection.id],
-      confidence: computeConfidence({
+    const firstDate = safeDate(
+      (firstReflection as any).created_at ?? 
+      (firstReflection as any).createdAt ?? 
+      (firstReflection as any).date
+    );
+    
+    if (firstDate) {
+      candidates.push({
+        section: 'anchors',
+        text: `First recorded reflection on ${ymd(firstDate)}`,
         sourceReflectionIds: [firstReflection.id],
-        isFirstOrLast: true,
-      }),
-    });
+        confidence: computeConfidence({
+          sourceReflectionIds: [firstReflection.id],
+          isFirstOrLast: true,
+        }),
+      });
+    }
   }
 
   if (lastReflection && lastReflection.id !== firstReflection?.id) {
-    const lastDate = new Date(lastReflection.created_at);
-    candidates.push({
-      section: 'anchors',
-      text: `Last recorded reflection on ${lastDate.toISOString().split('T')[0]}`,
-      sourceReflectionIds: [lastReflection.id],
-      confidence: computeConfidence({
+    const lastDate = safeDate(
+      (lastReflection as any).created_at ?? 
+      (lastReflection as any).createdAt ?? 
+      (lastReflection as any).date
+    );
+    
+    if (lastDate) {
+      candidates.push({
+        section: 'anchors',
+        text: `Last recorded reflection on ${ymd(lastDate)}`,
         sourceReflectionIds: [lastReflection.id],
-        isFirstOrLast: true,
-      }),
-    });
+        confidence: computeConfidence({
+          sourceReflectionIds: [lastReflection.id],
+          isFirstOrLast: true,
+        }),
+      });
+    }
   }
 
   // Themes: Most frequent words (simple counting only)
@@ -109,8 +158,12 @@ export function assembleYearNarrative(
     if (data.count >= 2) { // Only include if appears at least twice
       // Get dates for reflections containing this word
       const reflectionDates = Array.from(data.reflectionIds)
-        .map(id => sortedReflections.find(r => r.id === id)?.created_at)
-        .filter((d): d is string => !!d);
+        .map(id => {
+          const r = sortedReflections.find(r => r.id === id);
+          if (!r) return null;
+          return (r as any).created_at ?? (r as any).createdAt ?? (r as any).date;
+        })
+        .filter((d): d is string => !!d && !!safeDate(d));
 
       const distinctMonths = computeDistinctMonths(reflectionDates);
       const timeSpanDays = computeTimeSpanDays(reflectionDates);
@@ -136,8 +189,19 @@ export function assembleYearNarrative(
     const current = sortedReflections[i];
     const next = sortedReflections[i + 1];
     
-    const currentDate = new Date(current.created_at);
-    const nextDate = new Date(next.created_at);
+    const currentDate = safeDate(
+      (current as any).created_at ?? 
+      (current as any).createdAt ?? 
+      (current as any).date
+    );
+    const nextDate = safeDate(
+      (next as any).created_at ?? 
+      (next as any).createdAt ?? 
+      (next as any).date
+    );
+    
+    if (!currentDate || !nextDate) continue;
+    
     const gapMs = nextDate.getTime() - currentDate.getTime();
     const gapDays = Math.floor(gapMs / (1000 * 60 * 60 * 24));
     
@@ -180,7 +244,9 @@ export function assembleYearNarrative(
   }
 
   // Anchors: Total reflection count
-  const allReflectionDates = sortedReflections.map(r => r.created_at);
+  const allReflectionDates = sortedReflections
+    .map(r => (r as any).created_at ?? (r as any).createdAt ?? (r as any).date)
+    .filter((d): d is string => !!d && !!safeDate(d));
   const totalTimeSpanDays = computeTimeSpanDays(allReflectionDates);
   const totalDistinctMonths = computeDistinctMonths(allReflectionDates);
 
