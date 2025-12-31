@@ -45,10 +45,29 @@ export type DeterministicCandidate = {
 };
 
 /**
- * Helper: Get month key from ISO date string (YYYY-MM format).
+ * Safe date parsing - returns null for invalid dates
  */
-function monthKey(iso: string): string {
-  const d = new Date(iso);
+function safeDate(value: unknown): Date | null {
+  const d = new Date(String(value ?? ''));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Normalize timestamp: prefer created_at, fallback to createdAt, exclude invalid
+ */
+function normalizeTimestamp(item: ReflectionMeta | { created_at?: string; createdAt?: string }): string | null {
+  const date = safeDate((item as any).created_at ?? (item as any).createdAt);
+  if (!date) return null;
+  return date.toISOString();
+}
+
+/**
+ * Helper: Get month key from ISO date string (YYYY-MM format).
+ * Returns null for invalid dates.
+ */
+function monthKey(iso: string): string | null {
+  const d = safeDate(iso);
+  if (!d) return null;
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, '0');
   return `${y}-${m}`;
@@ -56,26 +75,43 @@ function monthKey(iso: string): string {
 
 /**
  * Helper: Compute distinct months spanned by a set of dates.
+ * Only counts valid dates.
  */
 function computeDistinctMonths(dates: string[]): number {
-  const set = new Set(dates.map(monthKey));
+  const validMonths = dates
+    .map(monthKey)
+    .filter((m): m is string => m !== null);
+  const set = new Set(validMonths);
   return set.size;
 }
 
 /**
- * Helper: Get minimum ISO date string.
+ * Helper: Get minimum ISO date string from valid dates only.
  */
 function minIso(dates: string[]): string {
-  if (dates.length === 0) return '';
-  return dates.reduce((a, b) => (a < b ? a : b));
+  const validDates = dates.filter(d => safeDate(d) !== null);
+  if (validDates.length === 0) return '';
+  return validDates.reduce((a, b) => (a < b ? a : b));
 }
 
 /**
- * Helper: Get maximum ISO date string.
+ * Helper: Get maximum ISO date string from valid dates only.
  */
 function maxIso(dates: string[]): string {
-  if (dates.length === 0) return '';
-  return dates.reduce((a, b) => (a > b ? a : b));
+  const validDates = dates.filter(d => safeDate(d) !== null);
+  if (validDates.length === 0) return '';
+  return validDates.reduce((a, b) => (a > b ? a : b));
+}
+
+/**
+ * Clamp confidence value between 0 and 1.
+ * Defaults to 0.5 if value is invalid or cannot be computed.
+ */
+function clampConfidence(value: number | undefined | null): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return 0.5;
+  }
+  return Math.max(0, Math.min(1, value));
 }
 
 /**
@@ -93,32 +129,46 @@ export function buildLifetimeSignalInventory(args: {
   reflections: ReflectionMeta[];
   candidates: DeterministicCandidate[];
 }): LifetimeSignalInventory {
-  // Build reflection date lookup
+  // Build reflection date lookup with normalized timestamps
+  // Filter out reflections with invalid dates
   const dateById = new Map<string, string>();
+  const validReflections: ReflectionMeta[] = [];
+  
   for (const r of args.reflections) {
-    dateById.set(r.id, r.createdAt);
+    const normalized = normalizeTimestamp(r);
+    if (normalized) {
+      dateById.set(r.id, normalized);
+      validReflections.push(r);
+    }
   }
 
   // Map candidates into LifetimeSignal
   const signals: LifetimeSignal[] = args.candidates
     .map((c) => {
-      // Resolve reflection dates using dateById
+      // Resolve reflection dates using dateById (only valid dates)
       const dates = c.reflectionIds
         .map((id) => dateById.get(id))
-        .filter((x): x is string => typeof x === 'string');
+        .filter((x): x is string => typeof x === 'string' && safeDate(x) !== null);
 
       // Filter out candidates with no valid dates
       if (!dates.length) return null;
+
+      // Ensure firstSeen and lastSeen are valid
+      const firstSeen = minIso(dates);
+      const lastSeen = maxIso(dates);
+      if (!firstSeen || !lastSeen || !safeDate(firstSeen) || !safeDate(lastSeen)) {
+        return null;
+      }
 
       return {
         id: c.id,
         label: c.label, // Never modify the label text
         category: c.category,
         totalCount: dates.length,
-        firstSeen: minIso(dates),
-        lastSeen: maxIso(dates),
+        firstSeen,
+        lastSeen,
         distinctMonths: computeDistinctMonths(dates),
-        confidence: c.confidence, // Confidence comes from candidate untouched
+        confidence: clampConfidence(c.confidence), // Clamp confidence between 0 and 1
         reflectionIds: c.reflectionIds.filter((id) => dateById.has(id)),
       } satisfies LifetimeSignal;
     })
@@ -137,7 +187,7 @@ export function buildLifetimeSignalInventory(args: {
 
   return {
     generatedAt: new Date().toISOString(),
-    totalReflections: args.reflections.length,
+    totalReflections: validReflections.length, // Only count valid reflections
     signals,
   };
 }

@@ -103,11 +103,19 @@ export default function LifetimePage() {
       return { reflectionMetas: [], deterministicCandidates: [] };
     }
 
-    // Convert to ReflectionMeta format
-    const reflectionMetas: ReflectionMeta[] = allReflections.map((item) => ({
-      id: item.id,
-      createdAt: item.created_at,
-    }));
+    // Convert to ReflectionMeta format with normalized timestamps
+    // Prefer created_at, fallback to createdAt, exclude invalid dates
+    const reflectionMetas: ReflectionMeta[] = allReflections
+      .map((item) => {
+        const timestamp = (item as any).created_at ?? (item as any).createdAt;
+        const date = safeDate(timestamp);
+        if (!date) return null;
+        return {
+          id: item.id,
+          createdAt: date.toISOString(),
+        };
+      })
+      .filter((x): x is ReflectionMeta => x !== null);
 
     // Group by year
     const byYear = new Map<number, Array<{ id: string; created_at: string; text: string }>>();
@@ -157,6 +165,7 @@ export default function LifetimePage() {
   });
 
   // Format date to YYYY-MM using safe date helper
+  // Returns empty string for invalid dates (never shows "unknown")
   const formatYearMonth = (iso: string): string => {
     if (!iso) return '';
     const date = safeDate(iso);
@@ -228,9 +237,9 @@ export default function LifetimePage() {
         {/* Structural Table */}
         {inventory.totalReflections === 0 || inventory.signals.length === 0 ? (
           <div className="py-12 text-center">
-            <h2 className="text-sm text-white/60 mb-2">No lifetime signals yet</h2>
+            <h2 className="text-sm text-white/60 mb-2">No lifetime signals yet.</h2>
             <p className="text-xs text-white/40">
-              Add a few dated reflections and this table will populate.
+              Signals appear once enough dated reflections exist.
             </p>
           </div>
         ) : (
