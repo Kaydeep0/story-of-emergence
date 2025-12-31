@@ -458,6 +458,7 @@ export default function YearlyWrapPage() {
               entries={reflections}
               distributionResult={distributionResult}
               windowDistribution={windowDistribution}
+              encryptionReady={encryptionReady}
             />
 
             {/* 4️⃣ MEMORY: Mirror section (Recurring words + Three moments, word shift hidden by default) */}

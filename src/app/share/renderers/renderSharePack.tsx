@@ -319,9 +319,14 @@ export function renderSharePack(
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{ marginTop: 'auto', paddingTop: spacing.footerTop, ...typography.footer }}>
-        Computed locally. Nothing uploaded.
+      {/* Footer with watermark */}
+      <div style={{ marginTop: 'auto', paddingTop: spacing.footerTop }}>
+        <div style={{ ...typography.footer, marginBottom: '8px' }}>
+          Computed locally. Nothing uploaded.
+        </div>
+        <div style={{ ...typography.footer, fontSize: '14px', color: 'rgba(255, 255, 255, 0.25)' }}>
+          Private reflection · Shared intentionally
+        </div>
       </div>
     </div>
   );

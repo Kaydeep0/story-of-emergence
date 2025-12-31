@@ -147,6 +147,7 @@ export interface SharePackBuilderProps {
   entries?: ReflectionEntry[]; // For computing moment context
   distributionResult?: DistributionResult | null; // For computing moment context
   windowDistribution?: WindowDistribution | null; // For distribution label
+  encryptionReady?: boolean; // Disable sharing if vault is locked
 }
 
 export function SharePackBuilder({
@@ -160,6 +161,7 @@ export function SharePackBuilder({
   entries = [],
   distributionResult = null,
   windowDistribution = null,
+  encryptionReady = true,
 }: SharePackBuilderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selection, setSelection] = useState<SharePackSelection>({
@@ -1033,6 +1035,7 @@ export function SharePackBuilder({
                     platform={platform}
                     tiktokOverlay={generatedTexts?.tiktokOverlay}
                     filename={lastExport?.filename || getDownloadFilename(platform, year)}
+                    encryptionReady={encryptionReady}
                   />
                   
                   <div className="flex flex-wrap gap-2 pt-2">
@@ -1090,6 +1093,7 @@ export function SharePackBuilder({
                   platform={platform}
                   tiktokOverlay={generatedTexts.tiktokOverlay}
                   filename={lastExport?.filename || getDownloadFilename(platform, year)}
+                  encryptionReady={encryptionReady}
                 />
 
                 {/* Platform-specific micro copy */}

@@ -16,6 +16,7 @@ import type { ShareFrame } from '../../../share/renderers/renderSharePack';
 import { sanitizeCaption } from '../../../lib/share/sanitizeShareMetadata';
 import { ShareSafetyBanner } from './ShareSafetyBanner';
 import { SHARE_DEFAULTS } from '../../../lib/share/shareDefaults';
+import { ShareConfirmationModal, shouldShowShareConfirmation } from './ShareConfirmationModal';
 
 export interface ShareActionsProps {
   imageBlob: Blob | null;
@@ -24,6 +25,7 @@ export interface ShareActionsProps {
   platform: 'instagram' | 'linkedin' | 'x' | 'tiktok' | 'threads';
   tiktokOverlay?: string[];
   filename?: string;
+  encryptionReady?: boolean; // Disable sharing if vault is locked
 }
 
 /**
@@ -72,17 +74,49 @@ export function ShareActions({
   platform,
   tiktokOverlay,
   filename = 'story-of-emergence-yearly-wrap.png',
+  encryptionReady = true,
 }: ShareActionsProps) {
   // Sanitize caption to remove any sensitive metadata
   const sanitizedCaption = sanitizeCaption(captionText);
 
   const [showIntentGate, setShowIntentGate] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationAction, setConfirmationAction] = useState<(() => void) | null>(null);
 
   // Share intent gate - confirmation before action
   const confirmShareAction = (action: string, callback: () => void) => {
+    // Check if vault is locked
+    if (!encryptionReady) {
+      toast.error('Unlock your vault to export');
+      return;
+    }
+    
+    // Check if first-time confirmation is needed
+    if (shouldShowShareConfirmation()) {
+      setShowConfirmation(true);
+      setConfirmationAction(() => callback);
+      return;
+    }
+    
+    // Otherwise proceed with intent gate
     setShowIntentGate(action);
     setPendingAction(() => callback);
+  };
+
+  const handleConfirmationConfirm = () => {
+    setShowConfirmation(false);
+    if (confirmationAction) {
+      // Now proceed with intent gate
+      setShowIntentGate('confirmed');
+      setPendingAction(() => confirmationAction);
+      setConfirmationAction(null);
+    }
+  };
+
+  const handleConfirmationCancel = () => {
+    setShowConfirmation(false);
+    setConfirmationAction(null);
   };
 
   const executePendingAction = () => {
@@ -290,8 +324,17 @@ export function ShareActions({
   const hasImage = !!imageBlob;
   const hasCaption = !!sanitizedCaption;
 
+  const isDisabled = !encryptionReady;
+
   return (
     <div className="space-y-3">
+      {/* Share Confirmation Modal */}
+      <ShareConfirmationModal
+        isOpen={showConfirmation}
+        onConfirm={handleConfirmationConfirm}
+        onCancel={handleConfirmationCancel}
+      />
+
       {/* Share Safety Banner */}
       <ShareSafetyBanner />
 
@@ -334,7 +377,9 @@ export function ShareActions({
             <button
               type="button"
               onClick={handleCopyCaption}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+              disabled={isDisabled}
+              title={isDisabled ? 'Unlock your vault to export' : 'Copy caption'}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Copy caption
             </button>
@@ -345,7 +390,9 @@ export function ShareActions({
             <button
               type="button"
               onClick={handleDownload}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+              disabled={isDisabled}
+              title={isDisabled ? 'Unlock your vault to export' : 'Download artifact'}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Download artifact
             </button>
@@ -356,7 +403,9 @@ export function ShareActions({
             <button
               type="button"
               onClick={handleCopyImage}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+              disabled={isDisabled}
+              title={isDisabled ? 'Unlock your vault to export' : 'Copy image'}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Copy image
             </button>
@@ -367,7 +416,9 @@ export function ShareActions({
             <button
               type="button"
               onClick={handleWebShare}
-              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+              disabled={isDisabled}
+              title={isDisabled ? 'Unlock your vault to export' : 'Share'}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Share
             </button>
@@ -381,7 +432,9 @@ export function ShareActions({
           <button
             type="button"
             onClick={handlePlatformHelper}
-            className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm"
+            disabled={isDisabled}
+            title={isDisabled ? 'Unlock your vault to export' : getPlatformShareIntent(platform).label}
+            className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {getPlatformShareIntent(platform).label}
           </button>
