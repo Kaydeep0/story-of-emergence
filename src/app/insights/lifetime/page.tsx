@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
+import { toast } from 'sonner';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
@@ -177,6 +178,180 @@ export default function LifetimePage() {
     return `${year}-${month}`;
   };
 
+  // Generate caption from Lifetime summary
+  const generateCaption = (): string => {
+    if (inventory.totalReflections === 0 || inventory.signals.length === 0) {
+      return 'Lifetime Signal Inventory\n\nNo signals yet.';
+    }
+    const lines = [
+      'Lifetime Signal Inventory',
+      '',
+      `Generated from ${inventory.totalReflections} reflections`,
+      `Found ${inventory.signals.length} structural signals`,
+    ];
+    return lines.join('\n');
+  };
+
+  // Generate simple PNG image from Lifetime data
+  const generateLifetimeImage = async (): Promise<Blob> => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Canvas context not available');
+    }
+
+    // Set canvas size
+    canvas.width = 1200;
+    canvas.height = 800;
+
+    // Dark background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('Lifetime Signal Inventory', 60, 80);
+
+    // Subtitle
+    ctx.font = '24px sans-serif';
+    ctx.fillStyle = '#cccccc';
+    ctx.fillText(`Generated from ${inventory.totalReflections} reflections`, 60, 130);
+    ctx.fillText(`Found ${inventory.signals.length} structural signals`, 60, 170);
+
+    // Table header
+    let y = 250;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('Label', 60, y);
+    ctx.fillText('Category', 400, y);
+    ctx.fillText('Count', 600, y);
+    ctx.fillText('Months', 700, y);
+    ctx.fillText('Confidence', 850, y);
+
+    // Table rows (first 10 signals)
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#cccccc';
+    const signalsToShow = inventory.signals.slice(0, 10);
+    for (let i = 0; i < signalsToShow.length; i++) {
+      y += 40;
+      const signal = signalsToShow[i];
+      ctx.fillText(signal.label.slice(0, 30), 60, y);
+      ctx.fillText(signal.category, 400, y);
+      ctx.fillText(String(signal.totalCount), 600, y);
+      ctx.fillText(String(signal.distinctMonths), 700, y);
+      ctx.fillText(signal.confidence.toFixed(2), 850, y);
+    }
+
+    // Footer
+    y = canvas.height - 40;
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#666666';
+    ctx.textAlign = 'center';
+    ctx.fillText('Private reflection · Shared intentionally', canvas.width / 2, y);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Failed to generate image'));
+        }
+      }, 'image/png');
+    });
+  };
+
+  // Copy caption handler
+  const handleCopyCaption = async () => {
+    if (!FEATURE_LIFETIME_INVENTORY) return;
+    
+    const caption = generateCaption();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(caption);
+        toast('Caption copied');
+      } else {
+        // Fallback: create hidden textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = caption;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        toast('Caption copied');
+      }
+    } catch (err) {
+      toast.error('Failed to copy caption');
+    }
+  };
+
+  // Download image handler
+  const handleDownloadImage = async () => {
+    if (!FEATURE_LIFETIME_INVENTORY) return;
+    
+    try {
+      const blob = await generateLifetimeImage();
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const filename = `soe-lifetime-${year}-${month}-${day}.png`;
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast('Image downloaded');
+    } catch (err) {
+      toast.error('Failed to generate image');
+    }
+  };
+
+  // Web share handler
+  const handleWebShare = async () => {
+    if (!FEATURE_LIFETIME_INVENTORY) return;
+    
+    if (!navigator.share) {
+      toast('Web Share is not available');
+      return;
+    }
+
+    try {
+      const blob = await generateLifetimeImage();
+      const caption = generateCaption();
+      const file = new File([blob], `soe-lifetime-${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'Lifetime Signal Inventory',
+          text: caption,
+          files: [file],
+        });
+        toast('Shared');
+      } else {
+        // Fallback: share text only
+        await navigator.share({
+          title: 'Lifetime Signal Inventory',
+          text: caption,
+        });
+        toast('Shared');
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        toast.error('Failed to share');
+      }
+    }
+  };
+
   if (!mounted) {
     return null;
   }
@@ -236,18 +411,30 @@ export default function LifetimePage() {
           </p>
         </div>
 
-        {/* Generate Artifact Button (hidden behind feature flag) */}
+        {/* Share Actions (hidden behind feature flag) */}
         {FEATURE_LIFETIME_INVENTORY && (
-          <div className="mb-6">
-            <button
-              onClick={() => {
-                const artifact = generateLifetimeArtifact(inventory);
-                console.log('Generated Lifetime Artifact:', artifact);
-              }}
-              className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
-            >
-              Generate artifact
-            </button>
+          <div className="mb-6 p-4 border border-white/10 bg-white/5 rounded-lg">
+            <h2 className="text-sm text-white/70 mb-3">Share artifact</h2>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCopyCaption}
+                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
+              >
+                Copy caption
+              </button>
+              <button
+                onClick={handleDownloadImage}
+                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
+              >
+                Download image
+              </button>
+              <button
+                onClick={handleWebShare}
+                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
+              >
+                Web share
+              </button>
+            </div>
           </div>
         )}
 
