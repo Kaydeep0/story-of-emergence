@@ -1179,7 +1179,27 @@ export default function InsightsPage() {
                   </Link>
                 );
               }
-              // Internal modes: weekly, timeline, summary, lifetime (use state, not routing)
+              // Defensive routing: lifetime -> /insights/lifetime
+              if (opt.value === 'lifetime') {
+                return (
+                  <Link
+                    key={opt.value}
+                    href="/insights/lifetime"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      router.push('/insights/lifetime');
+                    }}
+                    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      pathname === '/insights/lifetime'
+                        ? 'bg-white text-black font-medium'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              }
+              // Internal modes: weekly, timeline, summary (use state, not routing)
               // These remain on /insights with mode state
               return (
                 <button
