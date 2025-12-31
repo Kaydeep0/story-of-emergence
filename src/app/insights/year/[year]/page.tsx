@@ -16,6 +16,8 @@ import { useReflectionLinks } from '../../../lib/reflectionLinks';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
 import { getConfidenceBandInfo } from '../../../lib/narrative/confidenceBands';
 import type { NarrativeCandidate } from '../../../lib/narrative/narrativeAssembly';
+import { computeNarrativeTrace, formatTraceDate, type NarrativeTrace } from '../../../lib/narrative/narrativeTrace';
+import { useRouter } from 'next/navigation';
 
 interface YearPageProps {
   params: {
@@ -28,11 +30,13 @@ export default function YearPage({ params }: YearPageProps) {
   const { address, isConnected } = useAccount();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   const { getSourceIdFor } = useReflectionLinks(address);
+  const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allReflections, setAllReflections] = useState<any[]>([]);
+  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
 
   const connected = isConnected && !!address;
 
@@ -146,9 +150,47 @@ export default function YearPage({ params }: YearPageProps) {
     return grouped;
   }, [narrativeDraft]);
 
-  // Render candidate with confidence-based styling
+  // Create map of reflection IDs to dates for trace computation
+  const reflectionDateMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of allReflections) {
+      if (item.id && item.created_at) {
+        map.set(item.id, item.created_at);
+      }
+    }
+    return map;
+  }, [allReflections]);
+
+  // Toggle trace expansion
+  const toggleTrace = (candidateKey: string) => {
+    setExpandedTraces(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateKey)) {
+        next.delete(candidateKey);
+      } else {
+        next.add(candidateKey);
+      }
+      return next;
+    });
+  };
+
+  // Navigate to reflections with IDs
+  const navigateToReflections = (reflectionIds: string[]) => {
+    if (reflectionIds.length === 0) return;
+    
+    // Navigate to first reflection (user can navigate others manually)
+    const firstId = reflectionIds[0];
+    router.push(`/?focus=${encodeURIComponent(firstId)}`);
+  };
+
+  // Render candidate with confidence-based styling and trace
   const renderCandidate = (candidate: NarrativeCandidate) => {
     const bandInfo = getConfidenceBandInfo(candidate.confidence);
+    const candidateKey = `${candidate.section}-${candidate.text}`;
+    const isExpanded = expandedTraces.has(candidateKey);
+    
+    // Compute trace metadata
+    const trace = computeNarrativeTrace(candidate.sourceReflectionIds, reflectionDateMap);
     
     // Apply visual treatment by band
     let textClassName = 'text-sm';
@@ -166,11 +208,58 @@ export default function YearPage({ params }: YearPageProps) {
     }
 
     return (
-      <div key={`${candidate.section}-${candidate.text}`} className="mb-4">
-        <p className={textClassName}>{candidate.text}</p>
-        <p className={confidenceClassName}>
-          Structural confidence: {candidate.confidence.toFixed(2)} ({bandInfo.label})
-        </p>
+      <div key={candidateKey} className="mb-6">
+        <div className="mb-2">
+          <p className={textClassName}>{candidate.text}</p>
+          <p className={confidenceClassName}>
+            Structural confidence: {candidate.confidence.toFixed(2)} ({bandInfo.label})
+          </p>
+        </div>
+
+        {/* Trace toggle */}
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => toggleTrace(candidateKey)}
+            className="text-xs text-white/40 hover:text-white/60 transition-colors"
+          >
+            {isExpanded ? 'Hide trace' : 'Show trace'}
+          </button>
+
+          {isExpanded && (
+            <div className="mt-2 pl-4 border-l border-white/10 space-y-1">
+              <p className="text-xs text-white/40">
+                Appears in {trace.count} reflection{trace.count === 1 ? '' : 's'}
+              </p>
+              {trace.firstSeen && (
+                <p className="text-xs text-white/40">
+                  First: {formatTraceDate(trace.firstSeen)}
+                </p>
+              )}
+              {trace.lastSeen && trace.lastSeen !== trace.firstSeen && (
+                <p className="text-xs text-white/40">
+                  Last: {formatTraceDate(trace.lastSeen)}
+                </p>
+              )}
+              
+              {/* Link to reflections */}
+              {trace.reflectionIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigateToReflections(trace.reflectionIds)}
+                  className="text-xs text-white/50 hover:text-white/70 transition-colors mt-2"
+                >
+                  View source reflections →
+                </button>
+              )}
+
+              {/* Privacy guardrail */}
+              <p className="text-xs text-white/30 italic mt-3">
+                Sources are private reflections. Content is never exposed.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
