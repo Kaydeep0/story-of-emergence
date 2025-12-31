@@ -11,6 +11,11 @@ import type {
   NarrativeCandidate,
   YearNarrativeDraft,
 } from './narrativeAssembly';
+import {
+  computeConfidence,
+  computeDistinctMonths,
+  computeTimeSpanDays,
+} from './confidenceScoring';
 
 /**
  * Assemble a year's narrative using only deterministic signals:
@@ -52,6 +57,10 @@ export function assembleYearNarrative(
       section: 'anchors',
       text: `First recorded reflection on ${firstDate.toISOString().split('T')[0]}`,
       sourceReflectionIds: [firstReflection.id],
+      confidence: computeConfidence({
+        sourceReflectionIds: [firstReflection.id],
+        isFirstOrLast: true,
+      }),
     });
   }
 
@@ -61,6 +70,10 @@ export function assembleYearNarrative(
       section: 'anchors',
       text: `Last recorded reflection on ${lastDate.toISOString().split('T')[0]}`,
       sourceReflectionIds: [lastReflection.id],
+      confidence: computeConfidence({
+        sourceReflectionIds: [lastReflection.id],
+        isFirstOrLast: true,
+      }),
     });
   }
 
@@ -94,10 +107,24 @@ export function assembleYearNarrative(
 
   for (const [word, data] of topWords) {
     if (data.count >= 2) { // Only include if appears at least twice
+      // Get dates for reflections containing this word
+      const reflectionDates = Array.from(data.reflectionIds)
+        .map(id => sortedReflections.find(r => r.id === id)?.created_at)
+        .filter((d): d is string => !!d);
+
+      const distinctMonths = computeDistinctMonths(reflectionDates);
+      const timeSpanDays = computeTimeSpanDays(reflectionDates);
+
       candidates.push({
         section: 'themes',
         text: `Word "${word}" appears ${data.count} times`,
         sourceReflectionIds: Array.from(data.reflectionIds),
+        confidence: computeConfidence({
+          sourceReflectionIds: Array.from(data.reflectionIds),
+          frequencyCount: data.count,
+          appearsAcrossMonths: distinctMonths,
+          timeSpanDays,
+        }),
       });
     }
   }
@@ -130,19 +157,42 @@ export function assembleYearNarrative(
 
   for (const gap of topGaps) {
     if (gap.gapDays >= 7) { // Only include gaps of at least a week
+      const beforeReflection = sortedReflections.find(r => r.id === gap.beforeId);
+      const afterReflection = sortedReflections.find(r => r.id === gap.afterId);
+      
+      const reflectionDates: string[] = [];
+      if (beforeReflection) reflectionDates.push(beforeReflection.created_at);
+      if (afterReflection) reflectionDates.push(afterReflection.created_at);
+      
+      const distinctMonths = computeDistinctMonths(reflectionDates);
+
       candidates.push({
         section: 'transitions',
         text: `Gap of ${gap.gapDays} days between reflections`,
         sourceReflectionIds: [gap.beforeId, gap.afterId],
+        confidence: computeConfidence({
+          sourceReflectionIds: [gap.beforeId, gap.afterId],
+          timeSpanDays: gap.gapDays,
+          appearsAcrossMonths: distinctMonths,
+        }),
       });
     }
   }
 
   // Anchors: Total reflection count
+  const allReflectionDates = sortedReflections.map(r => r.created_at);
+  const totalTimeSpanDays = computeTimeSpanDays(allReflectionDates);
+  const totalDistinctMonths = computeDistinctMonths(allReflectionDates);
+
   candidates.push({
     section: 'anchors',
     text: `Total of ${sortedReflections.length} reflection${sortedReflections.length === 1 ? '' : 's'} recorded`,
     sourceReflectionIds: sortedReflections.map(r => r.id),
+    confidence: computeConfidence({
+      sourceReflectionIds: sortedReflections.map(r => r.id),
+      timeSpanDays: totalTimeSpanDays,
+      appearsAcrossMonths: totalDistinctMonths,
+    }),
   });
 
   return {

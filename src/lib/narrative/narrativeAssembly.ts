@@ -18,6 +18,9 @@ export type NarrativeCandidate = {
   section: NarrativeSection;
   text: string;
   sourceReflectionIds: string[];
+  confidence: number; // 0.0 – 1.0
+  // Confidence reflects structural support only.
+  // It does not imply truth or importance.
 };
 
 export type YearNarrativeDraft = {
