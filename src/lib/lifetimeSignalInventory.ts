@@ -192,7 +192,7 @@ export function buildLifetimeSignalInventory(args: {
   };
 }
 
-import type { ShareArtifact } from './shareArtifacts';
+import type { LifetimeArtifact } from './lifetimeArtifact';
 
 /**
  * Generate a shareable artifact from lifetime signal inventory.
@@ -200,20 +200,80 @@ import type { ShareArtifact } from './shareArtifacts';
  * Rules:
  * - Uses already sanitized data (no recomputation)
  * - No interpretation
- * - Payload is raw inventory snapshot
+ * - No UI language
+ * - No derived prose
+ * - No undefined values (use null for missing)
  * - No network calls, storage, sharing, mutation, or persistence
  * - Artifact exists only in memory
  */
 export function generateLifetimeArtifact(
-  inventory: LifetimeSignalInventory
-): ShareArtifact {
-  return {
-    id: `lifetime-${inventory.generatedAt}`,
-    source: 'lifetime',
-    title: 'Lifetime Signal Inventory',
-    subtitle: `Generated from ${inventory.totalReflections} reflections`,
+  inventory: LifetimeSignalInventory,
+  wallet: string
+): LifetimeArtifact {
+  // Compute first and last reflection dates from signals
+  let firstReflectionDate: string | null = null;
+  let lastReflectionDate: string | null = null;
+  const allDates: string[] = [];
+
+  for (const signal of inventory.signals) {
+    if (signal.firstSeen) {
+      allDates.push(signal.firstSeen);
+    }
+    if (signal.lastSeen) {
+      allDates.push(signal.lastSeen);
+    }
+  }
+
+  if (allDates.length > 0) {
+    const sortedDates = [...allDates].sort();
+    firstReflectionDate = sortedDates[0];
+    lastReflectionDate = sortedDates[sortedDates.length - 1];
+  }
+
+  // Compute distinct months from all signal dates
+  const monthSet = new Set<string>();
+  for (const signal of inventory.signals) {
+    if (signal.firstSeen) {
+      const date = safeDate(signal.firstSeen);
+      if (date) {
+        const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        monthSet.add(monthKey);
+      }
+    }
+    if (signal.lastSeen) {
+      const date = safeDate(signal.lastSeen);
+      if (date) {
+        const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        monthSet.add(monthKey);
+      }
+    }
+  }
+
+  const artifact: LifetimeArtifact = {
+    kind: 'lifetime',
     generatedAt: new Date().toISOString(),
-    payload: inventory, // Raw inventory snapshot
+    wallet: wallet.toLowerCase(),
+
+    inventory: {
+      totalReflections: inventory.totalReflections,
+      firstReflectionDate,
+      lastReflectionDate,
+      distinctMonths: monthSet.size,
+    },
+
+    signals: inventory.signals.map((signal) => ({
+      id: signal.id,
+      label: signal.label,
+      confidence: Math.max(0, Math.min(1, signal.confidence)), // Clamp 0-1
+      evidenceCount: signal.totalCount,
+    })),
   };
+
+  // Runtime guard: ensure contract is valid
+  if (!artifact.inventory) {
+    throw new Error('LifetimeArtifact invariant violated: inventory is missing');
+  }
+
+  return artifact;
 }
 

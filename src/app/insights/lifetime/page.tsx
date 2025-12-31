@@ -35,6 +35,7 @@ export default function LifetimePage() {
     return null;
   }
   const { address, isConnected } = useAccount();
+  const wallet = address || '';
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
   const [mounted, setMounted] = useState(false);
