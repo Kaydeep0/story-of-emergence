@@ -19,7 +19,20 @@ import type {
   DeterministicCandidate,
 } from '../../../lib/lifetimeSignalInventory';
 
+/**
+ * Safe date parsing - returns null for invalid dates
+ */
+function safeDate(value: unknown): Date | null {
+  const d = new Date(String(value ?? ''));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function LifetimePage() {
+  // Route gate: return null immediately if feature flag is false
+  // This prevents any hooks or data fetching from running
+  if (!FEATURE_LIFETIME_INVENTORY) {
+    return null;
+  }
   const { address, isConnected } = useAccount();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
@@ -143,19 +156,15 @@ export default function LifetimePage() {
     candidates: deterministicCandidates,
   });
 
-  // Format date to YYYY-MM
+  // Format date to YYYY-MM using safe date helper
   const formatYearMonth = (iso: string): string => {
     if (!iso) return '';
-    const date = new Date(iso);
-    if (isNaN(date.getTime())) return '';
+    const date = safeDate(iso);
+    if (!date) return '';
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
   };
-
-  if (!FEATURE_LIFETIME_INVENTORY) {
-    return null;
-  }
 
   if (!mounted) {
     return null;
@@ -217,7 +226,14 @@ export default function LifetimePage() {
         </div>
 
         {/* Structural Table */}
-        {inventory.signals.length > 0 ? (
+        {inventory.totalReflections === 0 || inventory.signals.length === 0 ? (
+          <div className="py-12 text-center">
+            <h2 className="text-sm text-white/60 mb-2">No lifetime signals yet</h2>
+            <p className="text-xs text-white/40">
+              Add a few dated reflections and this table will populate.
+            </p>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
@@ -277,10 +293,6 @@ export default function LifetimePage() {
               </tbody>
             </table>
           </div>
-        ) : (
-          <p className="text-sm text-white/40">
-            No signals found.
-          </p>
         )}
       </div>
     </div>

@@ -403,7 +403,9 @@ type SimpleEvent = {
   plaintext?: unknown;
 };
 
-const MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
+import { FEATURE_LIFETIME_INVENTORY } from '../lib/featureFlags';
+
+const BASE_MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'timeline', label: 'Timeline' },
   { value: 'summary', label: 'Summary' },
@@ -412,6 +414,11 @@ const MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; 
   { value: 'distributions', label: 'Distributions' },
   { value: 'lifetime', label: 'Lifetime' },
 ];
+
+// Filter out lifetime if feature flag is disabled
+const MODE_OPTIONS = BASE_MODE_OPTIONS.filter(
+  opt => opt.value !== 'lifetime' || FEATURE_LIFETIME_INVENTORY
+);
 
 const TOPIC_KEYWORDS = {
   focus: ['focus', 'concentrate', 'attention', 'distracted', 'productive', 'flow'],
