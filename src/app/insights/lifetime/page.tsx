@@ -9,8 +9,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { useEncryptionSession } from '../../../lib/useEncryptionSession';
-import { rpcFetchEntries } from '../../../lib/entries';
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
+import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
 import { useLifetimeSignalInventory } from '../../../lib/useLifetimeSignalInventory';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
