@@ -12,7 +12,7 @@ import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
-import { useLifetimeSignalInventory } from '../../../lib/useLifetimeSignalInventory';
+import { useLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import type {
   ReflectionMeta,
@@ -233,6 +233,21 @@ export default function LifetimePage() {
             All conclusions remain user-authored.
           </p>
         </div>
+
+        {/* Generate Artifact Button (hidden behind feature flag) */}
+        {FEATURE_LIFETIME_INVENTORY && (
+          <div className="mb-6">
+            <button
+              onClick={() => {
+                const artifact = generateLifetimeArtifact(inventory);
+                console.log('Generated Lifetime Artifact:', artifact);
+              }}
+              className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
+            >
+              Generate artifact
+            </button>
+          </div>
+        )}
 
         {/* Structural Table */}
         {inventory.totalReflections === 0 || inventory.signals.length === 0 ? (

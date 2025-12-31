@@ -192,3 +192,28 @@ export function buildLifetimeSignalInventory(args: {
   };
 }
 
+import type { ShareArtifact } from './shareArtifacts';
+
+/**
+ * Generate a shareable artifact from lifetime signal inventory.
+ * 
+ * Rules:
+ * - Uses already sanitized data (no recomputation)
+ * - No interpretation
+ * - Payload is raw inventory snapshot
+ * - No network calls, storage, sharing, mutation, or persistence
+ * - Artifact exists only in memory
+ */
+export function generateLifetimeArtifact(
+  inventory: LifetimeSignalInventory
+): ShareArtifact {
+  return {
+    id: `lifetime-${inventory.generatedAt}`,
+    source: 'lifetime',
+    title: 'Lifetime Signal Inventory',
+    subtitle: `Generated from ${inventory.totalReflections} reflections`,
+    generatedAt: new Date().toISOString(),
+    payload: inventory, // Raw inventory snapshot
+  };
+}
+
