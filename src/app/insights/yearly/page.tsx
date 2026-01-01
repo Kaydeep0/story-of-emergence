@@ -391,18 +391,8 @@ export default function YearlyWrapPage() {
             </div>
 
             {/* Share Actions */}
-            {address && (() => {
-              const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
-              const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
-              
-              useEffect(() => {
-                generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch((err) => {
-                  console.error('Failed to generate yearly artifact', err);
-                  setYearlyArtifact(null);
-                });
-              }, [reflections, distributionResult, address]);
-              
-              const caption = yearlyArtifact ? generateLifetimeCaption(yearlyArtifact) : '';
+            {address && yearlyArtifact && (() => {
+              const caption = generateLifetimeCaption(yearlyArtifact);
               
               const handleCopyCaption = async () => {
                 try {
@@ -580,7 +570,7 @@ export default function YearlyWrapPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => setShowCapsuleDialog(true)}
+                      onClick={() => setShowYearlyCapsuleDialog(true)}
                       className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -591,14 +581,6 @@ export default function YearlyWrapPage() {
                       Send privately
                     </button>
                   </div>
-                  {yearlyArtifact && (
-                    <ShareCapsuleDialog
-                      artifact={yearlyArtifact}
-                      senderWallet={address}
-                      isOpen={showCapsuleDialog}
-                      onClose={() => setShowCapsuleDialog(false)}
-                    />
-                  )}
                 </>
               );
             })()}
