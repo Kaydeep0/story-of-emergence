@@ -143,6 +143,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     if (!artifact) return;
 
     // Debug: log artifact structure
+    console.log('PNG artifact payload', artifact);
     console.log('weeklyArtifact for export:', artifact);
     console.log('Artifact signals:', artifact.signals);
     console.log('Artifact inventory:', artifact.inventory);
