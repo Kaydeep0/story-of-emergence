@@ -26,10 +26,15 @@ export interface ShareActionsBarProps {
 /**
  * Generate PNG from artifact
  */
-async function generateArtifactPNG(artifact: ShareArtifact): Promise<Blob> {
+async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: string[]): Promise<Blob> {
   if (!artifact.artifactId) {
     throw new Error('Artifact missing identity: artifactId is required');
   }
+
+  // Debug logging
+  console.log('generateArtifactPNG called with artifact:', artifact);
+  console.log('Artifact signals:', artifact.signals);
+  console.log('Fallback patterns:', fallbackPatterns);
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -62,21 +67,25 @@ async function generateArtifactPNG(artifact: ShareArtifact): Promise<Blob> {
     y += 40;
   }
 
-  // Observed patterns
-  if (artifact.signals && artifact.signals.length > 0) {
+  // Observed patterns - use signals if available, otherwise fallback to patterns array
+  const patternsToRender = artifact.signals && artifact.signals.length > 0
+    ? artifact.signals.map(s => s.label)
+    : (fallbackPatterns && fallbackPatterns.length > 0 ? fallbackPatterns : []);
+
+  if (patternsToRender.length > 0) {
     y += 20;
     ctx.font = 'bold 18px sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('Observed Patterns', 60, y);
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#cccccc';
-    artifact.signals.slice(0, 5).forEach((signal) => {
+    patternsToRender.slice(0, 5).forEach((pattern) => {
       y += 30;
-      ctx.fillText(`• ${signal.label}`, 80, y);
+      ctx.fillText(`• ${pattern}`, 80, y);
     });
   } else {
-    // Debug: log when signals are missing
-    console.warn('Artifact has no signals to render:', artifact);
+    // Debug: log when patterns are missing
+    console.warn('No patterns to render. Artifact signals:', artifact.signals, 'Fallback:', fallbackPatterns);
     y += 20;
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#888888';
@@ -98,7 +107,7 @@ async function generateArtifactPNG(artifact: ShareArtifact): Promise<Blob> {
   return blob;
 }
 
-export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately }: ShareActionsBarProps) {
+export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns }: ShareActionsBarProps) {
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
 
   if (!artifact || !senderWallet) {
