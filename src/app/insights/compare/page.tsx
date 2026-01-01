@@ -336,18 +336,30 @@ export default function ComparePage() {
           {selectedYear1 && selectedYear2 ? (
             <>
               {/* Empty state: year 1 has no reflections */}
-              {selectedYear1 && !year1Artifact && (groupedByYear.get(selectedYear1) || []).length === 0 && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-                  <p className="text-white/60">No reflections found for {selectedYear1} yet.</p>
-                </div>
-              )}
+              {(() => {
+                const year1Reflections = groupedByYear.get(selectedYear1) || [];
+                if (year1Reflections.length === 0 && !year1Artifact) {
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+                      <p className="text-white/60">No reflections found for {selectedYear1} yet.</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               
               {/* Empty state: year 2 has no reflections */}
-              {selectedYear2 && !year2Artifact && (groupedByYear.get(selectedYear2) || []).length === 0 && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
-                  <p className="text-white/60">No reflections found for {selectedYear2} yet.</p>
-                </div>
-              )}
+              {(() => {
+                const year2Reflections = groupedByYear.get(selectedYear2) || [];
+                if (year2Reflections.length === 0 && !year2Artifact) {
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+                      <p className="text-white/60">No reflections found for {selectedYear2} yet.</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               
               {/* Narrative card */}
               {year1Artifact && year2Artifact && narrative ? (
@@ -399,11 +411,19 @@ export default function ComparePage() {
                     </p>
                   </div>
                 </div>
-              ) : year1Artifact && year2Artifact ? (
-                <div className="text-white/60">
-                  <p>Generating narrative...</p>
-                </div>
-              ) : null}
+              ) : (() => {
+                const year1Reflections = groupedByYear.get(selectedYear1) || [];
+                const year2Reflections = groupedByYear.get(selectedYear2) || [];
+                // Only show "Generating narrative..." if both years have reflections (artifacts are generating)
+                if (year1Reflections.length > 0 && year2Reflections.length > 0 && (!year1Artifact || !year2Artifact)) {
+                  return (
+                    <div className="text-white/60">
+                      <p>Generating narrative...</p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </>
           ) : (
             <div className="text-white/60">
