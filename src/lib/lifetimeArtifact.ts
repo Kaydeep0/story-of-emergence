@@ -13,6 +13,7 @@ export type ShareArtifact = {
   kind: 'lifetime' | 'weekly' | 'yearly';
   generatedAt: string; // ISO
   wallet: string;
+  artifactId: string; // Deterministic SHA-256 hash
 
   inventory: {
     totalReflections: number;

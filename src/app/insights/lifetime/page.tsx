@@ -15,6 +15,7 @@ import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
 import { buildLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
+import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import type {
   ReflectionMeta,
@@ -180,12 +181,19 @@ export default function LifetimePage() {
     return `${year}-${month}`;
   };
 
-  // Generate artifact for caption and share
-  const artifact = useMemo(() => {
-    if (!wallet || inventory.totalReflections === 0) {
-      return null;
+  // Generate artifact for caption and share (async)
+  const [artifact, setArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  
+  useEffect(() => {
+    if (!FEATURE_LIFETIME_INVENTORY || !wallet || inventory.totalReflections === 0) {
+      setArtifact(null);
+      return;
     }
-    return generateLifetimeArtifact(inventory, wallet);
+    
+    generateLifetimeArtifact(inventory, wallet).then(setArtifact).catch((err) => {
+      console.error('Failed to generate artifact', err);
+      setArtifact(null);
+    });
   }, [inventory, wallet]);
 
   // Generate simple PNG image from Lifetime data
@@ -240,12 +248,17 @@ export default function LifetimePage() {
       ctx.fillText(signal.confidence.toFixed(2), 850, y);
     }
 
-    // Footer
+    // Provenance line (under artifact body)
     y = canvas.height - 40;
     ctx.font = '14px sans-serif';
     ctx.fillStyle = '#666666';
     ctx.textAlign = 'center';
-    ctx.fillText('Private reflection · Shared intentionally', canvas.width / 2, y);
+    if (artifact) {
+      const provenanceLine = generateProvenanceLine(artifact);
+      ctx.fillText(provenanceLine, canvas.width / 2, y);
+    } else {
+      ctx.fillText('Private reflection • Generated from encrypted data', canvas.width / 2, y);
+    }
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -261,6 +274,11 @@ export default function LifetimePage() {
   // Copy caption handler
   const handleCopyCaption = async () => {
     if (!FEATURE_LIFETIME_INVENTORY || !artifact) return;
+    
+    // Guardrail check
+    if (!artifact.artifactId) {
+      throw new Error('Artifact missing identity: artifactId is required');
+    }
     
     const caption = generateLifetimeCaption(artifact);
     try {
@@ -287,7 +305,12 @@ export default function LifetimePage() {
 
   // Download image handler
   const handleDownloadImage = async () => {
-    if (!FEATURE_LIFETIME_INVENTORY) return;
+    if (!FEATURE_LIFETIME_INVENTORY || !artifact) return;
+    
+    // Guardrail check
+    if (!artifact.artifactId) {
+      throw new Error('Artifact missing identity: artifactId is required');
+    }
     
     try {
       const blob = await generateLifetimeImage();
@@ -315,6 +338,11 @@ export default function LifetimePage() {
   // Web share handler
   const handleWebShare = async () => {
     if (!FEATURE_LIFETIME_INVENTORY || !artifact) return;
+    
+    // Guardrail check
+    if (!artifact.artifactId) {
+      throw new Error('Artifact missing identity: artifactId is required');
+    }
     
     if (!navigator.share) {
       toast('Share not available on this device');

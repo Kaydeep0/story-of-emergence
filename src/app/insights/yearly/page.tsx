@@ -34,6 +34,7 @@ import { UnderlyingRhythmCard } from './components/UnderlyingRhythmCard';
 import { MirrorSection } from './components/MirrorSection';
 import { generateYearlyArtifact } from '../../../lib/artifacts/yearlyArtifact';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
+import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 
 // Yearly Wrap v1 - Locked
 const YEARLY_WRAP_VERSION = 'v1' as const;
@@ -400,6 +401,13 @@ export default function YearlyWrapPage() {
               };
 
               const handleDownloadImage = async () => {
+                if (!yearlyArtifact) return;
+                
+                // Guardrail check
+                if (!yearlyArtifact.artifactId) {
+                  throw new Error('Artifact missing identity: artifactId is required');
+                }
+                
                 try {
                   const canvas = document.createElement('canvas');
                   const ctx = canvas.getContext('2d');
@@ -434,11 +442,13 @@ export default function YearlyWrapPage() {
                     });
                   }
                   
+                  // Provenance line
                   y = canvas.height - 40;
                   ctx.font = '14px sans-serif';
                   ctx.fillStyle = '#666666';
                   ctx.textAlign = 'center';
-                  ctx.fillText('Private reflection · Shared intentionally', canvas.width / 2, y);
+                  const provenanceLine = generateProvenanceLine(yearlyArtifact);
+                  ctx.fillText(provenanceLine, canvas.width / 2, y);
                   
                   const blob = await new Promise<Blob>((resolve, reject) => {
                     canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Failed')), 'image/png');
@@ -461,6 +471,13 @@ export default function YearlyWrapPage() {
               };
 
               const handleWebShare = async () => {
+                if (!yearlyArtifact) return;
+                
+                // Guardrail check
+                if (!yearlyArtifact.artifactId) {
+                  throw new Error('Artifact missing identity: artifactId is required');
+                }
+                
                 if (!navigator.share) {
                   toast('Share not available on this device');
                   return;

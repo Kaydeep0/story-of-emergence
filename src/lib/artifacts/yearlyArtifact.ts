@@ -8,6 +8,7 @@
 import type { ShareArtifact } from '../lifetimeArtifact';
 import type { ReflectionEntry } from '../../app/lib/insights/types';
 import type { DistributionResult } from '../../app/lib/insights/distributionLayer';
+import { generateArtifactId } from './artifactId';
 
 /**
  * Generate a shareable artifact from Yearly data.
@@ -19,11 +20,11 @@ import type { DistributionResult } from '../../app/lib/insights/distributionLaye
  * - No derived prose
  * - No undefined values (use null for missing)
  */
-export function generateYearlyArtifact(
+export async function generateYearlyArtifact(
   reflections: ReflectionEntry[],
   distributionResult: DistributionResult | null,
   wallet: string
-): ShareArtifact {
+): Promise<ShareArtifact> {
   // Extract dates from reflections
   let firstReflectionDate: string | null = null;
   let lastReflectionDate: string | null = null;
@@ -73,10 +74,19 @@ export function generateYearlyArtifact(
     }
   }
 
+  // Generate deterministic artifact ID
+  const artifactId = await generateArtifactId(
+    wallet,
+    'yearly',
+    firstReflectionDate,
+    lastReflectionDate
+  );
+
   const artifact: ShareArtifact = {
     kind: 'yearly',
     generatedAt: new Date().toISOString(),
     wallet: wallet.toLowerCase(),
+    artifactId,
 
     inventory: {
       totalReflections: reflections.length,
@@ -91,6 +101,9 @@ export function generateYearlyArtifact(
   // Runtime guard: ensure contract is valid
   if (!artifact.inventory) {
     throw new Error('YearlyArtifact invariant violated: inventory is missing');
+  }
+  if (!artifact.artifactId) {
+    throw new Error('YearlyArtifact invariant violated: artifactId is missing');
   }
 
   return artifact;

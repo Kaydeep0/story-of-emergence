@@ -193,6 +193,7 @@ export function buildLifetimeSignalInventory(args: {
 }
 
 import type { ShareArtifact } from './lifetimeArtifact';
+import { generateArtifactId } from './artifacts/artifactId';
 
 /**
  * Generate a shareable artifact from lifetime signal inventory.
@@ -206,10 +207,10 @@ import type { ShareArtifact } from './lifetimeArtifact';
  * - No network calls, storage, sharing, mutation, or persistence
  * - Artifact exists only in memory
  */
-export function generateLifetimeArtifact(
+export async function generateLifetimeArtifact(
   inventory: LifetimeSignalInventory,
   wallet: string
-): ShareArtifact {
+): Promise<ShareArtifact> {
   // Compute first and last reflection dates from signals
   let firstReflectionDate: string | null = null;
   let lastReflectionDate: string | null = null;
@@ -249,10 +250,19 @@ export function generateLifetimeArtifact(
     }
   }
 
+  // Generate deterministic artifact ID
+  const artifactId = await generateArtifactId(
+    wallet,
+    'lifetime',
+    firstReflectionDate,
+    lastReflectionDate
+  );
+
   const artifact: ShareArtifact = {
     kind: 'lifetime',
     generatedAt: new Date().toISOString(),
     wallet: wallet.toLowerCase(),
+    artifactId,
 
     inventory: {
       totalReflections: inventory.totalReflections,
@@ -272,6 +282,9 @@ export function generateLifetimeArtifact(
   // Runtime guard: ensure contract is valid
   if (!artifact.inventory) {
     throw new Error('LifetimeArtifact invariant violated: inventory is missing');
+  }
+  if (!artifact.artifactId) {
+    throw new Error('LifetimeArtifact invariant violated: artifactId is missing');
   }
 
   return artifact;

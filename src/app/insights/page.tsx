@@ -406,6 +406,7 @@ type SimpleEvent = {
 import { FEATURE_LIFETIME_INVENTORY } from '../../lib/featureFlags';
 import { generateWeeklyArtifact } from '../../lib/artifacts/weeklyArtifact';
 import { generateLifetimeCaption } from '../../lib/artifacts/lifetimeCaption';
+import { generateProvenanceLine } from '../../lib/artifacts/provenance';
 
 const BASE_MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
   { value: 'weekly', label: 'Weekly' },
@@ -2269,10 +2270,25 @@ export default function InsightsPage() {
               <>
                 {/* Share Actions */}
                 {address && (() => {
-                  const weeklyArtifact = generateWeeklyArtifact(latest, address);
-                  const caption = generateLifetimeCaption(weeklyArtifact);
+                  const [weeklyArtifact, setWeeklyArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+                  
+                  useEffect(() => {
+                    generateWeeklyArtifact(latest, address).then(setWeeklyArtifact).catch((err) => {
+                      console.error('Failed to generate weekly artifact', err);
+                      setWeeklyArtifact(null);
+                    });
+                  }, [latest, address]);
+                  
+                  const caption = weeklyArtifact ? generateLifetimeCaption(weeklyArtifact) : '';
                   
                   const handleCopyCaption = async () => {
+                    if (!weeklyArtifact) return;
+                    
+                    // Guardrail check
+                    if (!weeklyArtifact.artifactId) {
+                      throw new Error('Artifact missing identity: artifactId is required');
+                    }
+                    
                     try {
                       if (navigator.clipboard && navigator.clipboard.writeText) {
                         await navigator.clipboard.writeText(caption);
@@ -2295,6 +2311,18 @@ export default function InsightsPage() {
                   };
 
                   const handleDownloadImage = async () => {
+                    if (!weeklyArtifact) return;
+                    
+                    // Guardrail check
+                    if (!weeklyArtifact.artifactId) {
+                      throw new Error('Artifact missing identity: artifactId is required');
+                    }
+                    
+                    // Guardrail check
+                    if (!weeklyArtifact.artifactId) {
+                      throw new Error('Artifact missing identity: artifactId is required');
+                    }
+                    
                     try {
                       const canvas = document.createElement('canvas');
                       const ctx = canvas.getContext('2d');
@@ -2328,11 +2356,13 @@ export default function InsightsPage() {
                         });
                       }
                       
+                      // Provenance line
                       y = canvas.height - 40;
                       ctx.font = '14px sans-serif';
                       ctx.fillStyle = '#666666';
                       ctx.textAlign = 'center';
-                      ctx.fillText('Private reflection · Shared intentionally', canvas.width / 2, y);
+                      const provenanceLine = generateProvenanceLine(weeklyArtifact);
+                      ctx.fillText(provenanceLine, canvas.width / 2, y);
                       
                       const blob = await new Promise<Blob>((resolve, reject) => {
                         canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Failed')), 'image/png');
@@ -2355,6 +2385,13 @@ export default function InsightsPage() {
                   };
 
                   const handleWebShare = async () => {
+                    if (!weeklyArtifact) return;
+                    
+                    // Guardrail check
+                    if (!weeklyArtifact.artifactId) {
+                      throw new Error('Artifact missing identity: artifactId is required');
+                    }
+                    
                     if (!navigator.share) {
                       toast('Share not available on this device');
                       return;

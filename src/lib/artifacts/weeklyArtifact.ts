@@ -7,6 +7,7 @@
 
 import type { ShareArtifact } from '../lifetimeArtifact';
 import type { WeeklyInsight } from '../../app/lib/weeklyInsights';
+import { generateArtifactId } from './artifactId';
 
 /**
  * Generate a shareable artifact from Weekly insights.
@@ -18,10 +19,10 @@ import type { WeeklyInsight } from '../../app/lib/weeklyInsights';
  * - No derived prose
  * - No undefined values (use null for missing)
  */
-export function generateWeeklyArtifact(
+export async function generateWeeklyArtifact(
   weeklyInsight: WeeklyInsight,
   wallet: string
-): ShareArtifact {
+): Promise<ShareArtifact> {
   // Extract dates
   const firstReflectionDate = weeklyInsight.startDate.toISOString();
   const lastReflectionDate = weeklyInsight.endDate.toISOString();
@@ -39,10 +40,19 @@ export function generateWeeklyArtifact(
     evidenceCount: weeklyInsight.journalEvents,
   }));
 
+  // Generate deterministic artifact ID
+  const artifactId = await generateArtifactId(
+    wallet,
+    'weekly',
+    firstReflectionDate,
+    lastReflectionDate
+  );
+
   const artifact: ShareArtifact = {
     kind: 'weekly',
     generatedAt: new Date().toISOString(),
     wallet: wallet.toLowerCase(),
+    artifactId,
 
     inventory: {
       totalReflections: weeklyInsight.journalEvents,
@@ -57,6 +67,9 @@ export function generateWeeklyArtifact(
   // Runtime guard: ensure contract is valid
   if (!artifact.inventory) {
     throw new Error('WeeklyArtifact invariant violated: inventory is missing');
+  }
+  if (!artifact.artifactId) {
+    throw new Error('WeeklyArtifact invariant violated: artifactId is missing');
   }
 
   return artifact;
