@@ -1,6 +1,13 @@
 'use client';
 
 /**
+ * PHASE 3 DISTRIBUTION LAYER
+ * Do not add new insight logic here.
+ * All lenses must conform to the ShareArtifact contract.
+ * See docs/PHASE_3_DISTRIBUTION.md for details.
+ */
+
+/**
  * PHASE ONE VERIFICATION CHECKLIST
  * 
  * This page is considered healthy when:
