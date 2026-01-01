@@ -61,7 +61,7 @@ async function generateArtifactPNG(artifact: ShareArtifact): Promise<Blob> {
   }
 
   // Observed patterns
-  if (artifact.signals.length > 0) {
+  if (artifact.signals && artifact.signals.length > 0) {
     y += 20;
     ctx.font = 'bold 18px sans-serif';
     ctx.fillStyle = '#ffffff';
@@ -72,6 +72,13 @@ async function generateArtifactPNG(artifact: ShareArtifact): Promise<Blob> {
       y += 30;
       ctx.fillText(`• ${signal.label}`, 80, y);
     });
+  } else {
+    // Debug: log when signals are missing
+    console.warn('Artifact has no signals to render:', artifact);
+    y += 20;
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#888888';
+    ctx.fillText('No patterns detected', 60, y);
   }
 
   // Provenance line
@@ -123,6 +130,11 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
 
   const handleDownloadImage = async () => {
     if (!artifact) return;
+
+    // Debug: log artifact structure
+    console.log('Artifact for PNG export:', artifact);
+    console.log('Artifact signals:', artifact.signals);
+    console.log('Artifact inventory:', artifact.inventory);
 
     try {
       const blob = await generateArtifactPNG(artifact);

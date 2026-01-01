@@ -1139,7 +1139,11 @@ export default function InsightsPage() {
       setWeeklyArtifact(null);
       return;
     }
-    generateWeeklyArtifact(latest, address).then(setWeeklyArtifact).catch((err) => {
+    generateWeeklyArtifact(latest, address).then((artifact) => {
+      console.log('Generated weekly artifact:', artifact);
+      console.log('Weekly artifact signals:', artifact.signals);
+      setWeeklyArtifact(artifact);
+    }).catch((err) => {
       console.error('Failed to generate weekly artifact', err);
       setWeeklyArtifact(null);
     });
