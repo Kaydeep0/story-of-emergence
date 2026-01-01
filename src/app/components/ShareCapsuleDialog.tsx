@@ -9,8 +9,8 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
-import { createShareCapsule } from '../../../lib/shareCapsule';
+import type { ShareArtifact } from '../../lib/lifetimeArtifact';
+import { createShareCapsule } from '../../lib/shareCapsule';
 
 type ShareCapsuleDialogProps = {
   artifact: ShareArtifact;

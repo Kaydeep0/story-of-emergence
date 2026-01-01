@@ -518,6 +518,10 @@ export default function InsightsPage() {
   // Distribution insights view toggle
   const [insightView, setInsightView] = useState<'panel' | 'timeline'>('panel');
 
+  // Weekly artifact share state (moved to top level to avoid hooks order violation)
+  const [weeklyArtifact, setWeeklyArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [showWeeklyCapsuleDialog, setShowWeeklyCapsuleDialog] = useState(false);
+
 
   // Helper to check if a spike card is expanded
   function isExpanded(dateKey: string): boolean {
@@ -2269,18 +2273,8 @@ export default function InsightsPage() {
             {connected && encryptionReady && !loading && latest && (
               <>
                 {/* Share Actions */}
-                {address && (() => {
-                  const [weeklyArtifact, setWeeklyArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
-                  const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
-                  
-                  useEffect(() => {
-                    generateWeeklyArtifact(latest, address).then(setWeeklyArtifact).catch((err) => {
-                      console.error('Failed to generate weekly artifact', err);
-                      setWeeklyArtifact(null);
-                    });
-                  }, [latest, address]);
-                  
-                  const caption = weeklyArtifact ? generateLifetimeCaption(weeklyArtifact) : '';
+                {address && weeklyArtifact && (() => {
+                  const caption = generateLifetimeCaption(weeklyArtifact);
                   
                   const handleCopyCaption = async () => {
                     if (!weeklyArtifact) return;
@@ -2469,7 +2463,7 @@ export default function InsightsPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => setShowCapsuleDialog(true)}
+                          onClick={() => setShowWeeklyCapsuleDialog(true)}
                           className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2480,14 +2474,12 @@ export default function InsightsPage() {
                           Send privately
                         </button>
                       </div>
-                      {weeklyArtifact && (
-                        <ShareCapsuleDialog
-                          artifact={weeklyArtifact}
-                          senderWallet={address}
-                          isOpen={showCapsuleDialog}
-                          onClose={() => setShowCapsuleDialog(false)}
-                        />
-                      )}
+                      <ShareCapsuleDialog
+                        artifact={weeklyArtifact}
+                        senderWallet={address}
+                        isOpen={showWeeklyCapsuleDialog}
+                        onClose={() => setShowWeeklyCapsuleDialog(false)}
+                      />
                     </>
                   );
                 })()}
