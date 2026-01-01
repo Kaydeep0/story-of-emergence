@@ -1,6 +1,10 @@
 /**
  * Year-over-Year Narrative Generator
  * 
+ * PHASE 4 NARRATIVE CODE
+ * Do not move this into artifacts.
+ * Do not modify ShareArtifact contract here.
+ * 
  * Phase 4: Interpretation layer
  * 
  * Compares two yearly artifacts and produces a narrative delta.

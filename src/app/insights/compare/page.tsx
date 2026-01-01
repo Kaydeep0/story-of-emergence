@@ -3,6 +3,10 @@
 /**
  * Year-over-Year Comparison - Read-only view using insight engine
  * 
+ * PHASE 4 NARRATIVE CODE
+ * Do not move this into artifacts.
+ * Do not modify ShareArtifact contract here.
+ * 
  * Shows contrast and observation between two years.
  * Narrative-first, contrast-focused, no rankings or scoring.
  */
@@ -329,59 +333,78 @@ export default function ComparePage() {
           </div>
 
           {/* Narrative card */}
-          {selectedYear1 && selectedYear2 && narrative ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-8 space-y-6">
-              <div>
-                <h2 className="text-xl font-light text-white/90 mb-2">
-                  {narrative.headline}
-                </h2>
-                <p className="text-white/70 leading-relaxed">
-                  {narrative.dominantShift}
-                </p>
-              </div>
-
-              {narrative.themesIntroduced.length > 0 && (
-                <div className="pt-4 border-t border-white/10">
-                  <p className="text-sm text-white/60 mb-3">Themes introduced</p>
-                  <div className="flex flex-wrap gap-2">
-                    {narrative.themesIntroduced.map((theme, idx) => (
-                      <span
-                        key={idx}
-                        className="text-xs text-emerald-400/70 px-2 py-1 rounded bg-emerald-500/10"
-                      >
-                        {theme}
-                      </span>
-                    ))}
-                  </div>
+          {selectedYear1 && selectedYear2 ? (
+            <>
+              {/* Empty state: year 1 has no reflections */}
+              {selectedYear1 && !year1Artifact && (groupedByYear.get(selectedYear1) || []).length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+                  <p className="text-white/60">No reflections found for {selectedYear1} yet.</p>
                 </div>
               )}
-
-              {narrative.themesFaded.length > 0 && (
-                <div className="pt-4 border-t border-white/10">
-                  <p className="text-sm text-white/60 mb-3">Themes faded</p>
-                  <div className="flex flex-wrap gap-2">
-                    {narrative.themesFaded.map((theme, idx) => (
-                      <span
-                        key={idx}
-                        className="text-xs text-white/40 px-2 py-1 rounded bg-white/5 line-through"
-                      >
-                        {theme}
-                      </span>
-                    ))}
-                  </div>
+              
+              {/* Empty state: year 2 has no reflections */}
+              {selectedYear2 && !year2Artifact && (groupedByYear.get(selectedYear2) || []).length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+                  <p className="text-white/60">No reflections found for {selectedYear2} yet.</p>
                 </div>
               )}
+              
+              {/* Narrative card */}
+              {year1Artifact && year2Artifact && narrative ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-8 space-y-6">
+                  <div>
+                    <h2 className="text-xl font-light text-white/90 mb-2">
+                      {narrative.headline}
+                    </h2>
+                    <p className="text-white/70 leading-relaxed">
+                      {narrative.dominantShift}
+                    </p>
+                  </div>
 
-              <div className="pt-4 border-t border-white/10">
-                <p className="text-xs text-white/40">
-                  Intensity: {narrative.intensityChange === 'up' ? 'increased' : narrative.intensityChange === 'down' ? 'decreased' : 'remained consistent'}
-                </p>
-              </div>
-            </div>
-          ) : selectedYear1 && selectedYear2 ? (
-            <div className="text-white/60">
-              <p>Generating narrative...</p>
-            </div>
+                  {narrative.themesIntroduced.length > 0 && (
+                    <div className="pt-4 border-t border-white/10">
+                      <p className="text-sm text-white/60 mb-3">Themes introduced</p>
+                      <div className="flex flex-wrap gap-2">
+                        {narrative.themesIntroduced.map((theme, idx) => (
+                          <span
+                            key={idx}
+                            className="text-xs text-emerald-400/70 px-2 py-1 rounded bg-emerald-500/10"
+                          >
+                            {theme}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {narrative.themesFaded.length > 0 && (
+                    <div className="pt-4 border-t border-white/10">
+                      <p className="text-sm text-white/60 mb-3">Themes faded</p>
+                      <div className="flex flex-wrap gap-2">
+                        {narrative.themesFaded.map((theme, idx) => (
+                          <span
+                            key={idx}
+                            className="text-xs text-white/40 px-2 py-1 rounded bg-white/5 line-through"
+                          >
+                            {theme}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-white/10">
+                    <p className="text-xs text-white/40">
+                      Intensity: {narrative.intensityChange === 'up' ? 'increased' : narrative.intensityChange === 'down' ? 'decreased' : 'remained consistent'}
+                    </p>
+                  </div>
+                </div>
+              ) : year1Artifact && year2Artifact ? (
+                <div className="text-white/60">
+                  <p>Generating narrative...</p>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="text-white/60">
               <p>Select two years above to begin comparison.</p>
