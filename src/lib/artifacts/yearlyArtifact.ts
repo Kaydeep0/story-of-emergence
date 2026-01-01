@@ -1,0 +1,98 @@
+/**
+ * Yearly Artifact Generator
+ * 
+ * Generates shareable artifacts from Yearly insights.
+ * Uses the same contract as Lifetime artifacts.
+ */
+
+import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ReflectionEntry } from '../../app/lib/insights/types';
+import type { DistributionResult } from '../../app/lib/insights/distributionLayer';
+
+/**
+ * Generate a shareable artifact from Yearly data.
+ * 
+ * Rules:
+ * - Uses already sanitized data (no recomputation)
+ * - No interpretation
+ * - No UI language
+ * - No derived prose
+ * - No undefined values (use null for missing)
+ */
+export function generateYearlyArtifact(
+  reflections: ReflectionEntry[],
+  distributionResult: DistributionResult | null,
+  wallet: string
+): ShareArtifact {
+  // Extract dates from reflections
+  let firstReflectionDate: string | null = null;
+  let lastReflectionDate: string | null = null;
+  
+  if (reflections.length > 0) {
+    const dates = reflections
+      .map(r => r.timestamp)
+      .filter((d): d is string => !!d)
+      .sort();
+    
+    if (dates.length > 0) {
+      firstReflectionDate = dates[0];
+      lastReflectionDate = dates[dates.length - 1];
+    }
+  }
+
+  // Compute distinct months
+  const monthSet = new Set<string>();
+  for (const reflection of reflections) {
+    if (reflection.timestamp) {
+      try {
+        const date = new Date(reflection.timestamp);
+        if (!isNaN(date.getTime())) {
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          monthSet.add(monthKey);
+        }
+      } catch {
+        // Skip invalid dates
+      }
+    }
+  }
+
+  // Map distribution insights to signals
+  const signals: ShareArtifact['signals'] = [];
+  
+  if (distributionResult) {
+    // Add top spike days as signals
+    const topSpikes = distributionResult.topDays.slice(0, 5);
+    for (let i = 0; i < topSpikes.length; i++) {
+      const spike = topSpikes[i];
+      signals.push({
+        id: `yearly-spike-${i}`,
+        label: `${spike.count} entries on ${spike.date}`,
+        confidence: Math.min(1.0, spike.count / 10), // Normalize to 0-1
+        evidenceCount: spike.count,
+      });
+    }
+  }
+
+  const artifact: ShareArtifact = {
+    kind: 'yearly',
+    generatedAt: new Date().toISOString(),
+    wallet: wallet.toLowerCase(),
+
+    inventory: {
+      totalReflections: reflections.length,
+      firstReflectionDate,
+      lastReflectionDate,
+      distinctMonths: monthSet.size,
+    },
+
+    signals,
+  };
+
+  // Runtime guard: ensure contract is valid
+  if (!artifact.inventory) {
+    throw new Error('YearlyArtifact invariant violated: inventory is missing');
+  }
+
+  return artifact;
+}
+

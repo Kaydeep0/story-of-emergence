@@ -1,7 +1,7 @@
 /**
- * Lifetime Artifact Contract
+ * Share Artifact Contract
  * 
- * Frozen contract for Lifetime shareable artifacts.
+ * Frozen contract for shareable artifacts (Lifetime, Weekly, Yearly).
  * 
  * This is a strict contract. No optional fields unless strictly necessary.
  * All fields must be present. Missing values must be null, not undefined.
@@ -9,8 +9,8 @@
  * This contract is locked and must not change without explicit versioning.
  */
 
-export type LifetimeArtifact = {
-  kind: 'lifetime';
+export type ShareArtifact = {
+  kind: 'lifetime' | 'weekly' | 'yearly';
   generatedAt: string; // ISO
   wallet: string;
 
@@ -28,4 +28,7 @@ export type LifetimeArtifact = {
     evidenceCount: number;
   }>;
 };
+
+// Legacy type alias for backward compatibility
+export type LifetimeArtifact = ShareArtifact;
 

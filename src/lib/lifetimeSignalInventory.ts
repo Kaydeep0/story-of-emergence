@@ -192,7 +192,7 @@ export function buildLifetimeSignalInventory(args: {
   };
 }
 
-import type { LifetimeArtifact } from './lifetimeArtifact';
+import type { ShareArtifact } from './lifetimeArtifact';
 
 /**
  * Generate a shareable artifact from lifetime signal inventory.
@@ -209,7 +209,7 @@ import type { LifetimeArtifact } from './lifetimeArtifact';
 export function generateLifetimeArtifact(
   inventory: LifetimeSignalInventory,
   wallet: string
-): LifetimeArtifact {
+): ShareArtifact {
   // Compute first and last reflection dates from signals
   let firstReflectionDate: string | null = null;
   let lastReflectionDate: string | null = null;
@@ -249,7 +249,7 @@ export function generateLifetimeArtifact(
     }
   }
 
-  const artifact: LifetimeArtifact = {
+  const artifact: ShareArtifact = {
     kind: 'lifetime',
     generatedAt: new Date().toISOString(),
     wallet: wallet.toLowerCase(),

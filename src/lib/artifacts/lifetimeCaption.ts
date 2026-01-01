@@ -11,7 +11,7 @@
  * - Stable and deterministic
  */
 
-import type { LifetimeArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from '../lifetimeArtifact';
 
 /**
  * Format date from ISO string to YYYY-MM-DD
@@ -31,7 +31,7 @@ function formatDate(iso: string | null): string {
  * Extract category keywords from signal labels
  * Returns unique, lowercase keywords (max 5)
  */
-function extractPatterns(signals: LifetimeArtifact['signals']): string[] {
+function extractPatterns(signals: ShareArtifact['signals']): string[] {
   const patterns = new Set<string>();
   
   for (const signal of signals) {
@@ -54,13 +54,31 @@ function extractPatterns(signals: LifetimeArtifact['signals']): string[] {
 }
 
 /**
- * Generate canonical caption from Lifetime artifact
+ * Get scope label for caption header
  */
-export function generateLifetimeCaption(artifact: LifetimeArtifact): string {
+function getScopeLabel(kind: ShareArtifact['kind']): string {
+  switch (kind) {
+    case 'lifetime':
+      return 'Lifetime Reflection';
+    case 'weekly':
+      return 'Weekly Reflection';
+    case 'yearly':
+      return 'Yearly Reflection';
+    default:
+      return 'Reflection';
+  }
+}
+
+/**
+ * Generate canonical caption from share artifact (Lifetime, Weekly, or Yearly)
+ * 
+ * This is the single source of truth for all artifact captions.
+ */
+export function generateLifetimeCaption(artifact: ShareArtifact): string {
   const lines: string[] = [];
   
   // Header
-  lines.push('Story of Emergence — Lifetime Reflection');
+  lines.push(`Story of Emergence — ${getScopeLabel(artifact.kind)}`);
   lines.push('');
   
   // Date range
