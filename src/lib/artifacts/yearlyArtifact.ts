@@ -61,13 +61,26 @@ export async function generateYearlyArtifact(
   const signals: ShareArtifact['signals'] = [];
   
   if (distributionResult) {
+    // Helper to format date nicely
+    const formatDate = (dateStr: string): string => {
+      try {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+      } catch {
+        return dateStr; // Fallback to original if parsing fails
+      }
+    };
+
     // Add top spike days as signals
     const topSpikes = distributionResult.topDays.slice(0, 5);
     for (let i = 0; i < topSpikes.length; i++) {
       const spike = topSpikes[i];
+      const formattedDate = formatDate(spike.date);
       signals.push({
         id: `yearly-spike-${i}`,
-        label: `${spike.count} entries on ${spike.date}`,
+        label: `${spike.count} reflection${spike.count === 1 ? '' : 's'} on ${formattedDate}`,
         confidence: Math.min(1.0, spike.count / 10), // Normalize to 0-1
         evidenceCount: spike.count,
       });
