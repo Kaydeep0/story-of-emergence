@@ -86,6 +86,7 @@ import { generateInsightLabel } from '../lib/insights/labels';
 import { assertInsightTone } from '../lib/insights/insightGuardrails';
 import { InsightPanel } from './components/InsightPanel';
 import { ShareCapsuleDialog } from '../components/ShareCapsuleDialog';
+import { ShareActionsBar } from './components/ShareActionsBar';
 import { InsightTimeline } from './components/InsightTimeline';
 
 
