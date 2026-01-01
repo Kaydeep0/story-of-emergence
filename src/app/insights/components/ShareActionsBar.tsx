@@ -334,8 +334,13 @@ function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[])
 }
 
 /**
- * Generate deterministic filename for artifact download
- * Format: soe-{lens}-{startDate}-{endDate}-{artifactId}.png
+ * Generate deterministic, human-friendly filename for artifact download
+ * 
+ * Formats:
+ * - Weekly: soe-weekly-YYYY-MM-DD_to_YYYY-MM-DD.png
+ * - Yearly: soe-yearly-YYYY.png
+ * - Lifetime: soe-lifetime-YYYY-MM-DD.png (generation date)
+ * - Summary: soe-summary-YYYY-MM-DD.png (generation date)
  */
 function generateArtifactFilename(artifact: ShareArtifact): string {
   const kind = artifact.kind;
@@ -343,24 +348,42 @@ function generateArtifactFilename(artifact: ShareArtifact): string {
   // Extract dates (YYYY-MM-DD format)
   const startDate = artifact.inventory.firstReflectionDate 
     ? artifact.inventory.firstReflectionDate.split('T')[0]
-    : '';
+    : null;
   const endDate = artifact.inventory.lastReflectionDate 
     ? artifact.inventory.lastReflectionDate.split('T')[0]
-    : '';
+    : null;
   
-  // Artifact ID (use first 8 chars for brevity)
-  const artifactId = artifact.artifactId 
-    ? artifact.artifactId.substring(0, 8)
-    : '';
+  // Generation date (fallback for lifetime/summary)
+  const generationDate = new Date().toISOString().split('T')[0];
   
-  // Build filename parts
-  const parts: string[] = ['soe', kind];
-  
-  if (startDate) parts.push(startDate);
-  if (endDate && endDate !== startDate) parts.push(endDate);
-  if (artifactId) parts.push(artifactId);
-  
-  return `${parts.join('-')}.png`;
+  if (kind === 'weekly') {
+    // Weekly: soe-weekly-YYYY-MM-DD_to_YYYY-MM-DD.png
+    if (startDate && endDate) {
+      return `soe-weekly-${startDate}_to_${endDate}.png`;
+    } else if (startDate) {
+      return `soe-weekly-${startDate}.png`;
+    } else {
+      return `soe-weekly-${generationDate}.png`;
+    }
+  } else if (kind === 'yearly') {
+    // Yearly: soe-yearly-YYYY.png
+    if (startDate) {
+      const year = startDate.split('-')[0];
+      return `soe-yearly-${year}.png`;
+    } else if (endDate) {
+      const year = endDate.split('-')[0];
+      return `soe-yearly-${year}.png`;
+    } else {
+      const year = generationDate.split('-')[0];
+      return `soe-yearly-${year}.png`;
+    }
+  } else if (kind === 'lifetime') {
+    // Lifetime: soe-lifetime-YYYY-MM-DD.png (generation date)
+    return `soe-lifetime-${generationDate}.png`;
+  } else {
+    // Summary or other: soe-summary-YYYY-MM-DD.png (generation date)
+    return `soe-summary-${generationDate}.png`;
+  }
 }
 
 /**
@@ -430,26 +453,28 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     if (!artifact) return;
 
     if (!navigator.share) {
-      toast('Share not available on this device');
+      toast('Web share not supported');
       return;
     }
 
     try {
       const blob = await generateArtifactPNG(artifact, fallbackPatterns);
-      const file = new File([blob], `soe-${artifact.kind}-${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
+      const filename = generateArtifactFilename(artifact);
+      const file = new File([blob], filename, { type: 'image/png' });
       
       const shareData: ShareData = {
-        title: `Story of Emergence — ${artifact.kind === 'lifetime' ? 'Lifetime' : artifact.kind === 'weekly' ? 'Weekly' : 'Yearly'} Reflection`,
         text: caption,
       };
 
+      // Include file if supported
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         shareData.files = [file];
       }
 
       await navigator.share(shareData);
-      toast('Ready to share');
+      // User cancelled or shared successfully - no toast needed
     } catch (err: any) {
+      // AbortError means user cancelled - don't show error
       if (err.name !== 'AbortError') {
         toast.error('Failed to share');
       }
@@ -466,62 +491,81 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
 
   const handleXShare = () => {
     // X (Twitter) intent URL with pre-filled text
-    const encodedText = encodeURIComponent(caption);
+    // Twitter has a ~280 character limit, but URL encoding adds overhead
+    // Safe limit is ~200 characters to account for encoding
+    const safeLength = 200;
+    let textToShare = caption;
+    
+    if (caption.length > safeLength) {
+      // Truncate and add ellipsis
+      textToShare = caption.substring(0, safeLength - 1) + '…';
+    }
+    
+    const encodedText = encodeURIComponent(textToShare);
     const url = `https://x.com/intent/tweet?text=${encodedText}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      toast('Popup blocked. Use the X icon again after allowing popups.');
+    } else {
+      toast('Opening X');
+    }
   };
 
-  const handleLinkedInShare = () => {
-    // LinkedIn share-offsite intent (text only, no image upload)
-    // Use placeholder URL since we're sharing text content
-    const placeholderUrl = encodeURIComponent('https://storyofemergence.com');
-    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${placeholderUrl}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleLinkedInShare = async () => {
+    // Step 1: Copy caption to clipboard
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(caption);
+      } else {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = caption;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+    } catch (err) {
+      toast.error('Failed to copy caption');
+      return;
+    }
     
-    // Also copy caption to clipboard for easy pasting
-    handleCopyCaption();
-    toast('LinkedIn opened. Caption copied to clipboard.');
+    // Step 2: Open LinkedIn share composer
+    const url = 'https://www.linkedin.com/feed/?shareActive=true';
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      toast('Popup blocked. Use the LinkedIn icon again after allowing popups.');
+    } else {
+      toast('Opening LinkedIn');
+    }
   };
 
   const handleIMessageShare = async () => {
-    // Prefer Web Share API if available (works on iOS Safari, Chrome mobile)
-    if (navigator.share) {
-      try {
-        // Generate image blob for sharing
-        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
-        const filename = generateArtifactFilename(artifact);
-        const file = new File([blob], filename, { type: 'image/png' });
-        
-        const shareData: ShareData = {
-          text: caption,
-        };
-        
-        // Include file if supported
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          shareData.files = [file];
-        }
-        
-        await navigator.share(shareData);
-        // User cancelled or shared successfully - no toast needed
-        return;
-      } catch (err: any) {
-        // AbortError means user cancelled - don't show error
-        if (err.name === 'AbortError') {
-          return;
-        }
-        // Fall through to fallback
+    // Copy caption to clipboard (no deep linking - unreliable)
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(caption);
+      } else {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = caption;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
       }
-    }
-    
-    // Fallback: SMS link (iOS) or copy caption
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
-      const encodedText = encodeURIComponent(caption);
-      window.location.href = `sms:&body=${encodedText}`;
-    } else {
-      // Copy caption and show instruction
-      handleCopyCaption();
-      toast('Caption copied. Paste into Messages');
+      toast('Paste caption into iMessage');
+    } catch (err) {
+      toast.error('Failed to copy caption');
     }
   };
 
@@ -562,12 +606,27 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             </svg>
             PNG
           </button>
-          {typeof navigator !== 'undefined' && 'share' in navigator && (
+          {typeof navigator !== 'undefined' && 'share' in navigator ? (
             <button
               onClick={handleWebShare}
               disabled={isDisabled}
               className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               title={helperText || 'Share via native share dialog'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              Share
+            </button>
+          ) : (
+            <button
+              disabled
+              className="px-3 py-1.5 text-xs text-white/20 flex items-center gap-1.5 cursor-not-allowed"
+              title="Web share not supported"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3"></circle>
