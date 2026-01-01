@@ -741,17 +741,16 @@ export default function YearlyWrapPage() {
             </div>
           </div>
         )}
-      </section>
 
-      {/* Share Capsule Dialog */}
-      {address && yearlyArtifact && (
-        <ShareCapsuleDialog
-          artifact={yearlyArtifact}
-          senderWallet={address}
-          isOpen={showYearlyCapsuleDialog}
-          onClose={() => setShowYearlyCapsuleDialog(false)}
-        />
-      )}
-    </section>
+        {/* Share Capsule Dialog */}
+        {address && yearlyArtifact && (
+          <ShareCapsuleDialog
+            artifact={yearlyArtifact}
+            senderWallet={address}
+            isOpen={showYearlyCapsuleDialog}
+            onClose={() => setShowYearlyCapsuleDialog(false)}
+          />
+        )}
+      </section>
   );
 }
