@@ -19,6 +19,8 @@ export interface ShareActionsBarProps {
   senderWallet: string | undefined;
   encryptionReady: boolean;
   onSendPrivately?: () => void; // Optional callback for external dialog handling
+  // Optional: fallback data for when artifact signals are empty but UI has content
+  fallbackPatterns?: string[]; // For Weekly: latest.topGuessedTopics
 }
 
 /**
@@ -132,12 +134,13 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     if (!artifact) return;
 
     // Debug: log artifact structure
-    console.log('Artifact for PNG export:', artifact);
+    console.log('weeklyArtifact for export:', artifact);
     console.log('Artifact signals:', artifact.signals);
     console.log('Artifact inventory:', artifact.inventory);
+    console.log('Fallback patterns:', fallbackPatterns);
 
     try {
-      const blob = await generateArtifactPNG(artifact);
+      const blob = await generateArtifactPNG(artifact, fallbackPatterns);
       const url = URL.createObjectURL(blob);
       const now = new Date();
       const filename = `soe-${artifact.kind}-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.png`;
@@ -163,7 +166,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     }
 
     try {
-      const blob = await generateArtifactPNG(artifact);
+      const blob = await generateArtifactPNG(artifact, fallbackPatterns);
       const file = new File([blob], `soe-${artifact.kind}-${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
       
       const shareData: ShareData = {

@@ -2382,6 +2382,7 @@ export default function InsightsPage() {
                   senderWallet={address}
                   encryptionReady={encryptionReady}
                   onSendPrivately={() => setShowWeeklyCapsuleDialog(true)}
+                  fallbackPatterns={latest.topGuessedTopics}
                 />
 
                 <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
