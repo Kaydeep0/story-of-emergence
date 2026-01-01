@@ -406,6 +406,8 @@ type SimpleEvent = {
 
 import { FEATURE_LIFETIME_INVENTORY } from '../../lib/featureFlags';
 import { generateWeeklyArtifact } from '../../lib/artifacts/weeklyArtifact';
+import { generateTimelineArtifact } from '../../lib/artifacts/timelineArtifact';
+import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
 import { generateLifetimeCaption } from '../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../lib/artifacts/provenance';
 
@@ -1929,6 +1931,23 @@ export default function InsightsPage() {
             {connected && encryptionReady && !summaryLoading && summaryError && (
               <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
                 <p className="text-sm text-rose-400">{summaryError}</p>
+              </div>
+            )}
+
+            {/* Share Actions - Summary */}
+            {connected && encryptionReady && address && summaryArtifact && (
+              <div className="mb-6 flex gap-2 items-center">
+                <button
+                  onClick={() => setShowSummaryCapsuleDialog(true)}
+                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  Send privately
+                </button>
               </div>
             )}
 
