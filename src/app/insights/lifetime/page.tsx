@@ -14,6 +14,7 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
 import { buildLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
+import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import type {
   ReflectionMeta,
@@ -179,19 +180,13 @@ export default function LifetimePage() {
     return `${year}-${month}`;
   };
 
-  // Generate caption from Lifetime summary
-  const generateCaption = (): string => {
-    if (inventory.totalReflections === 0 || inventory.signals.length === 0) {
-      return 'Lifetime Signal Inventory\n\nNo signals yet.';
+  // Generate artifact for caption and share
+  const artifact = useMemo(() => {
+    if (!wallet || inventory.totalReflections === 0) {
+      return null;
     }
-    const lines = [
-      'Lifetime Signal Inventory',
-      '',
-      `Generated from ${inventory.totalReflections} reflections`,
-      `Found ${inventory.signals.length} structural signals`,
-    ];
-    return lines.join('\n');
-  };
+    return generateLifetimeArtifact(inventory, wallet);
+  }, [inventory, wallet]);
 
   // Generate simple PNG image from Lifetime data
   const generateLifetimeImage = async (): Promise<Blob> => {
@@ -265,9 +260,9 @@ export default function LifetimePage() {
 
   // Copy caption handler
   const handleCopyCaption = async () => {
-    if (!FEATURE_LIFETIME_INVENTORY) return;
+    if (!FEATURE_LIFETIME_INVENTORY || !artifact) return;
     
-    const caption = generateCaption();
+    const caption = generateLifetimeCaption(artifact);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(caption);
@@ -319,32 +314,32 @@ export default function LifetimePage() {
 
   // Web share handler
   const handleWebShare = async () => {
-    if (!FEATURE_LIFETIME_INVENTORY) return;
+    if (!FEATURE_LIFETIME_INVENTORY || !artifact) return;
     
     if (!navigator.share) {
-      toast('Web Share is not available');
+      toast('Share not available on this device');
       return;
     }
 
     try {
       const blob = await generateLifetimeImage();
-      const caption = generateCaption();
+      const caption = generateLifetimeCaption(artifact);
       const file = new File([blob], `soe-lifetime-${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: 'Lifetime Signal Inventory',
+          title: 'Story of Emergence — Lifetime Reflection',
           text: caption,
           files: [file],
         });
-        toast('Shared');
+        toast('Ready to share');
       } else {
         // Fallback: share text only
         await navigator.share({
-          title: 'Lifetime Signal Inventory',
+          title: 'Story of Emergence — Lifetime Reflection',
           text: caption,
         });
-        toast('Shared');
+        toast('Ready to share');
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
