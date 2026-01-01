@@ -1245,6 +1245,7 @@ export default function InsightsPage() {
               }
               // Defensive routing: year-over-year -> /insights/compare (exclusive, separate from yearly)
               if (opt.value === 'year-over-year') {
+                const isActive = pathname === '/insights/compare' || pathname.startsWith('/insights/year-over-year');
                 return (
                   <Link
                     key={opt.value}
@@ -1255,7 +1256,7 @@ export default function InsightsPage() {
                       router.push('/insights/compare');
                     }}
                     className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                      pathname === '/insights/compare'
+                      isActive
                         ? 'bg-white text-black font-medium'
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                     }`}
