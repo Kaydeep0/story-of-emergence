@@ -13,6 +13,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
@@ -64,6 +66,7 @@ function generateYearSummary(year: number, reflections: ReflectionEntry[]): stri
 
 export default function ComparePage() {
   const { address, isConnected } = useAccount();
+  const router = useRouter();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   const { getSourceIdFor } = useReflectionLinks(address);
   
@@ -226,76 +229,134 @@ export default function ComparePage() {
 
   if (!connected) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-4">Year-over-Year Comparison</h1>
-          <p className="text-white/60">Please connect your wallet to view your comparison.</p>
+      <main className="min-h-screen bg-black text-white">
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-4 mb-4">
+              <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+              <Link
+                href="/insights"
+                className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+              >
+                Back to Insights
+              </Link>
+            </div>
+            <p className="text-white/60">Please connect your wallet to view your comparison.</p>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-8">Year-over-Year Comparison</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {[1, 2].map((i) => (
-              <div key={i} className="space-y-4">
-                <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
-                <div className="h-4 w-full bg-white/5 rounded animate-pulse" />
-                <div className="h-4 w-3/4 bg-white/5 rounded animate-pulse" />
-              </div>
-            ))}
+      <main className="min-h-screen bg-black text-white">
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-4 mb-8">
+              <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+              <Link
+                href="/insights"
+                className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+              >
+                Back to Insights
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {[1, 2].map((i) => (
+                <div key={i} className="space-y-4">
+                  <div className="h-6 w-24 bg-white/10 rounded animate-pulse" />
+                  <div className="h-4 w-full bg-white/5 rounded animate-pulse" />
+                  <div className="h-4 w-3/4 bg-white/5 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-4">Year-over-Year Comparison</h1>
-          <p className="text-red-400">Error: {error}</p>
+      <main className="min-h-screen bg-black text-white">
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-4 mb-4">
+              <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+              <Link
+                href="/insights"
+                className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+              >
+                Back to Insights
+              </Link>
+            </div>
+            <p className="text-red-400">Error: {error}</p>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (reflections.length === 0) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-4">Year-over-Year Comparison</h1>
-          <p className="text-white/60">
-            No reflections yet. Start writing to see your comparison.
-          </p>
+      <main className="min-h-screen bg-black text-white">
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-4 mb-4">
+              <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+              <Link
+                href="/insights"
+                className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+              >
+                Back to Insights
+              </Link>
+            </div>
+            <p className="text-white/60">
+              No reflections yet. Start writing to see your comparison.
+            </p>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (availableYears.length < 2) {
     return (
-      <div className="min-h-screen bg-black text-white p-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-4">Year-over-Year Comparison</h1>
-          <p className="text-white/60">
-            Year over Year requires reflections from at least two years. You currently have data from {availableYears.length} year{availableYears.length === 1 ? '' : 's'}.
-          </p>
+      <main className="min-h-screen bg-black text-white">
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-4 mb-4">
+              <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+              <Link
+                href="/insights"
+                className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+              >
+                Back to Insights
+              </Link>
+            </div>
+            <p className="text-white/60">
+              Year over Year requires reflections from at least two years. You currently have data from {availableYears.length} year{availableYears.length === 1 ? '' : 's'}.
+            </p>
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <>
-      <div className="min-h-screen bg-black text-white p-8">
+    <main className="min-h-screen bg-black text-white">
+      <div className="p-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-light mb-8">Year-over-Year Comparison</h1>
+          <div className="flex items-center gap-4 mb-8">
+            <h1 className="text-2xl font-light">Year-over-Year Comparison</h1>
+            <Link
+              href="/insights"
+              className="text-sm text-white/60 hover:text-white/80 transition-colors underline"
+            >
+              Back to Insights
+            </Link>
+          </div>
           
           {/* Year selectors */}
           <div className="flex flex-wrap gap-4 mb-8">
@@ -432,7 +493,6 @@ export default function ComparePage() {
           )}
         </div>
       </div>
-
-    </>
+    </main>
   );
 }
