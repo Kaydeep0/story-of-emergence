@@ -5,14 +5,27 @@
  * 
  * Single source of truth for share actions across all Insights views.
  * Supports: Copy caption, Download PNG, Native Share, Send privately.
+ * 
+ * Phase 3.4: Adds privacy context, confirmation modal, and audit logging.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
+
+/**
+ * Canonical privacy label string
+ * Used consistently across UI, captions, and PNG footers
+ */
+const PRIVACY_LABEL = 'Private reflection · Generated from encrypted data';
+
+/**
+ * SessionStorage key for share confirmation
+ */
+const SHARE_CONFIRMED_KEY = 'soe_share_confirmed';
 
 export interface ShareActionsBarProps {
   artifact: ShareArtifact | null;
@@ -207,13 +220,12 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
     ctx.fillText('No patterns detected', 60, y);
   }
 
-  // Provenance line
+  // Provenance line (canonical privacy label)
   y = canvas.height - 40;
   ctx.font = '14px sans-serif';
   ctx.fillStyle = '#666666';
   ctx.textAlign = 'center';
-  const provenanceLine = generateProvenanceLine(artifact);
-  ctx.fillText(provenanceLine, canvas.width / 2, y);
+  ctx.fillText(PRIVACY_LABEL, canvas.width / 2, y);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Failed to generate blob')), 'image/png');
@@ -327,8 +339,8 @@ function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[])
   
   lines.push(''); // Blank line
   
-  // Provenance footer
-  lines.push('Generated privately from encrypted data.');
+  // Provenance footer (canonical privacy label)
+  lines.push(PRIVACY_LABEL);
   
   return lines.join('\n');
 }
@@ -394,9 +406,113 @@ function hasShareableContent(artifact: ShareArtifact, fallbackPatterns?: string[
   return summaryLines.length > 0 || patterns.length > 0 || artifact.signals.length > 0;
 }
 
+/**
+ * Check if user has confirmed sharing intent this session
+ */
+function hasShareConfirmed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return sessionStorage.getItem(SHARE_CONFIRMED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark share as confirmed for this session
+ */
+function setShareConfirmed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(SHARE_CONFIRMED_KEY, 'true');
+  } catch {
+    // Silent fail - sessionStorage may not be available
+  }
+}
+
+/**
+ * Fire-and-forget audit logging for share actions
+ * Non-blocking: sharing proceeds even if logging fails
+ */
+function logShareAction(action: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage', artifact: ShareArtifact): void {
+  // Fire-and-forget: don't block sharing if logging fails
+  try {
+    // In a real implementation, this would send to an analytics endpoint
+    // For now, we just log to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Share Audit]', {
+        action,
+        artifactKind: artifact.kind,
+        artifactId: artifact.artifactId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    // Future: send to analytics endpoint
+    // fetch('/api/analytics/share', { method: 'POST', body: JSON.stringify({...}) }).catch(() => {});
+  } catch {
+    // Silent fail - audit logging never blocks sharing
+  }
+}
+
+/**
+ * Share Confirmation Modal Component
+ */
+function ShareConfirmationModal({
+  isOpen,
+  onConfirm,
+  onCancel,
+}: {
+  isOpen: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onCancel]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onCancel}>
+      <div className="bg-black border border-white/20 rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-white mb-3">Share insight?</h3>
+        <p className="text-sm text-white/70 mb-4">
+          This will share a summary of your reflections, not the raw entries. The shared content includes patterns and insights derived from your encrypted data.
+        </p>
+        <p className="text-xs text-white/50 mb-6">
+          {PRIVACY_LABEL}
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-white/60 hover:text-white/80 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm bg-white text-black hover:bg-white/90 transition-colors rounded"
+          >
+            Share
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns }: ShareActionsBarProps) {
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
   const [linkedInCaptionCopied, setLinkedInCaptionCopied] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   if (!artifact || !senderWallet) {
     return null;
@@ -404,49 +520,77 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
 
   const caption = buildShareCaption(artifact, fallbackPatterns);
   const hasContent = hasShareableContent(artifact, fallbackPatterns);
+  const shareConfirmed = hasShareConfirmed();
   const isDisabled = !encryptionReady || !hasContent;
 
-  const handleCopyCaption = async () => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(caption);
-        toast('Caption copied');
-      } else {
-        // Fallback for older browsers
-        const textarea = document.createElement('textarea');
-        textarea.value = caption;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.left = '-999999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        toast('Caption copied');
-      }
-    } catch (err) {
-      toast.error('Failed to copy caption');
+  // Check if confirmation is needed before executing share action
+  const executeWithConfirmation = (action: () => void, logAction: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage') => {
+    if (shareConfirmed) {
+      // Already confirmed this session, execute immediately
+      logShareAction(logAction, artifact);
+      action();
+    } else {
+      // Need confirmation first
+      setPendingAction(() => {
+        return () => {
+          setShareConfirmed();
+          logShareAction(logAction, artifact);
+          action();
+        };
+      });
+      setShowConfirmationModal(true);
     }
+  };
+
+  const handleCopyCaption = async () => {
+    const doCopy = async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(caption);
+          toast('Caption copied');
+        } else {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = caption;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          toast('Caption copied');
+        }
+      } catch (err) {
+        toast.error('Failed to copy caption');
+      }
+    };
+    
+    executeWithConfirmation(doCopy, 'caption');
   };
 
   const handleDownloadImage = async () => {
     if (!artifact) return;
 
-    try {
-      const blob = await generateArtifactPNG(artifact, fallbackPatterns);
-      const url = URL.createObjectURL(blob);
-      const filename = generateArtifactFilename(artifact);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast('Image downloaded');
-    } catch (err) {
-      toast.error('Failed to generate image');
-    }
+    const doDownload = async () => {
+      try {
+        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
+        const url = URL.createObjectURL(blob);
+        const filename = generateArtifactFilename(artifact);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('Image downloaded');
+      } catch (err) {
+        toast.error('Failed to generate image');
+      }
+    };
+    
+    executeWithConfirmation(doDownload, 'download');
   };
 
   const handleWebShare = async () => {
@@ -457,28 +601,32 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       return;
     }
 
-    try {
-      const blob = await generateArtifactPNG(artifact, fallbackPatterns);
-      const filename = generateArtifactFilename(artifact);
-      const file = new File([blob], filename, { type: 'image/png' });
-      
-      const shareData: ShareData = {
-        text: caption,
-      };
+    const doShare = async () => {
+      try {
+        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
+        const filename = generateArtifactFilename(artifact);
+        const file = new File([blob], filename, { type: 'image/png' });
+        
+        const shareData: ShareData = {
+          text: caption,
+        };
 
-      // Include file if supported
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        shareData.files = [file];
-      }
+        // Include file if supported
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          shareData.files = [file];
+        }
 
-      await navigator.share(shareData);
-      // User cancelled or shared successfully - no toast needed
-    } catch (err: any) {
-      // AbortError means user cancelled - don't show error
-      if (err.name !== 'AbortError') {
-        toast.error('Failed to share');
+        await navigator.share(shareData);
+        // User cancelled or shared successfully - no toast needed
+      } catch (err: any) {
+        // AbortError means user cancelled - don't show error
+        if (err.name !== 'AbortError') {
+          toast.error('Failed to share');
+        }
       }
-    }
+    };
+    
+    executeWithConfirmation(doShare, 'web_share');
   };
 
   const handleSendPrivately = () => {
@@ -490,83 +638,95 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   };
 
   const handleXShare = () => {
-    // X (Twitter) intent URL with pre-filled text
-    // Twitter has a ~280 character limit, but URL encoding adds overhead
-    // Safe limit is ~200 characters to account for encoding
-    const safeLength = 200;
-    let textToShare = caption;
+    const doShare = () => {
+      // X (Twitter) intent URL with pre-filled text
+      // Twitter has a ~280 character limit, but URL encoding adds overhead
+      // Safe limit is ~200 characters to account for encoding
+      const safeLength = 200;
+      let textToShare = caption;
+      
+      if (caption.length > safeLength) {
+        // Truncate and add ellipsis
+        textToShare = caption.substring(0, safeLength - 1) + '…';
+      }
+      
+      const encodedText = encodeURIComponent(textToShare);
+      const url = `https://x.com/intent/tweet?text=${encodedText}`;
+      
+      const popup = window.open(url, '_blank', 'noopener,noreferrer');
+      
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        toast('Popup blocked. Use the X icon again after allowing popups.');
+      } else {
+        toast('Opening X');
+      }
+    };
     
-    if (caption.length > safeLength) {
-      // Truncate and add ellipsis
-      textToShare = caption.substring(0, safeLength - 1) + '…';
-    }
-    
-    const encodedText = encodeURIComponent(textToShare);
-    const url = `https://x.com/intent/tweet?text=${encodedText}`;
-    
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-    
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      toast('Popup blocked. Use the X icon again after allowing popups.');
-    } else {
-      toast('Opening X');
-    }
+    executeWithConfirmation(doShare, 'x');
   };
 
   const handleLinkedInShare = async () => {
-    // Step 1: Copy caption to clipboard
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(caption);
-      } else {
-        // Fallback for older browsers
-        const textarea = document.createElement('textarea');
-        textarea.value = caption;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.left = '-999999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+    const doShare = async () => {
+      // Step 1: Copy caption to clipboard
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(caption);
+        } else {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = caption;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+      } catch (err) {
+        toast.error('Failed to copy caption');
+        return;
       }
-    } catch (err) {
-      toast.error('Failed to copy caption');
-      return;
-    }
+      
+      // Step 2: Open LinkedIn share composer
+      const url = 'https://www.linkedin.com/feed/?shareActive=true';
+      const popup = window.open(url, '_blank', 'noopener,noreferrer');
+      
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        toast('Popup blocked. Use the LinkedIn icon again after allowing popups.');
+      } else {
+        toast('Opening LinkedIn');
+      }
+    };
     
-    // Step 2: Open LinkedIn share composer
-    const url = 'https://www.linkedin.com/feed/?shareActive=true';
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-    
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      toast('Popup blocked. Use the LinkedIn icon again after allowing popups.');
-    } else {
-      toast('Opening LinkedIn');
-    }
+    executeWithConfirmation(doShare, 'linkedin');
   };
 
   const handleIMessageShare = async () => {
-    // Copy caption to clipboard (no deep linking - unreliable)
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(caption);
-      } else {
-        // Fallback for older browsers
-        const textarea = document.createElement('textarea');
-        textarea.value = caption;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.left = '-999999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+    const doShare = async () => {
+      // Copy caption to clipboard (no deep linking - unreliable)
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(caption);
+        } else {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = caption;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        toast('Paste caption into iMessage');
+      } catch (err) {
+        toast.error('Failed to copy caption');
       }
-      toast('Paste caption into iMessage');
-    } catch (err) {
-      toast.error('Failed to copy caption');
-    }
+    };
+    
+    executeWithConfirmation(doShare, 'imessage');
   };
 
   // Helper text for empty artifacts
@@ -582,7 +742,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
         {/* Primary actions row */}
         <div className="flex flex-wrap gap-2 items-center">
           <button
-            onClick={handleCopyCaption}
+            onClick={isDisabled ? undefined : handleCopyCaption}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title={helperText || 'Copy caption to clipboard'}
@@ -594,7 +754,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             Caption
           </button>
           <button
-            onClick={handleDownloadImage}
+            onClick={isDisabled ? undefined : handleDownloadImage}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title={helperText || 'Download PNG image'}
@@ -608,7 +768,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
           </button>
           {typeof navigator !== 'undefined' && 'share' in navigator ? (
             <button
-              onClick={handleWebShare}
+              onClick={isDisabled ? undefined : handleWebShare}
               disabled={isDisabled}
               className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               title={helperText || 'Share via native share dialog'}
@@ -639,7 +799,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             </button>
           )}
           <button
-            onClick={handleSendPrivately}
+            onClick={isDisabled ? undefined : handleSendPrivately}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title={helperText || 'Send privately to one recipient'}
@@ -694,7 +854,28 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
         {helperText && (
           <p className="text-xs text-white/40 mt-2">{helperText}</p>
         )}
+        
+        {/* Privacy context label */}
+        {hasContent && encryptionReady && (
+          <p className="text-xs text-white/40 mt-2">{PRIVACY_LABEL}</p>
+        )}
       </div>
+
+      {/* Share Confirmation Modal */}
+      <ShareConfirmationModal
+        isOpen={showConfirmationModal}
+        onConfirm={() => {
+          setShowConfirmationModal(false);
+          if (pendingAction) {
+            pendingAction();
+            setPendingAction(null);
+          }
+        }}
+        onCancel={() => {
+          setShowConfirmationModal(false);
+          setPendingAction(null);
+        }}
+      />
 
       {showCapsuleDialog && artifact && senderWallet && (
         <ShareCapsuleDialog
