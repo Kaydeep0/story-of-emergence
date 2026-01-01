@@ -31,10 +31,14 @@ function normalizeWeeklyExport(artifact: ShareArtifact, fallbackPatterns?: strin
   const artifactAny = artifact as any;
   
   // Extract summary lines from multiple possible fields
-  const summaryLines: string[] =
-    artifactAny?.summaryLines?.filter(Boolean) ??
-    (artifactAny?.summaryText ? [String(artifactAny.summaryText)] : []) ??
-    (artifactAny?.summary ? [String(artifactAny.summary)] : []);
+  let summaryLines: string[] = [];
+  if (artifactAny?.summaryLines && Array.isArray(artifactAny.summaryLines)) {
+    summaryLines = artifactAny.summaryLines.filter(Boolean);
+  } else if (artifactAny?.summaryText) {
+    summaryLines = [String(artifactAny.summaryText)];
+  } else if (artifactAny?.summary) {
+    summaryLines = [String(artifactAny.summary)];
+  }
 
   // Extract patterns from multiple possible fields
   let patterns: string[] = [];
@@ -100,11 +104,6 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
   if (!artifact.artifactId) {
     throw new Error('Artifact missing identity: artifactId is required');
   }
-
-  // Debug logging
-  console.log('generateArtifactPNG called with artifact:', artifact);
-  console.log('Artifact signals:', artifact.signals);
-  console.log('Fallback patterns:', fallbackPatterns);
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -175,21 +174,33 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
 
   // Render Observed Patterns section if available
   if (patterns.length > 0) {
-    y += 20;
-    ctx.font = 'bold 18px sans-serif';
+    y += 30; // Match Summary section spacing
+    ctx.font = 'bold 20px sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('Observed Patterns', 60, y);
+    ctx.fillText('Observed Patterns', 60, y); // Align with Summary header (60px left margin)
+    y += 30;
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#cccccc';
-    patterns.slice(0, 5).forEach((pattern) => {
+    const maxPatterns = 5;
+    const patternsToShow = patterns.slice(0, maxPatterns);
+    const remainingCount = patterns.length - maxPatterns;
+    
+    patternsToShow.forEach((pattern) => {
       y += 30;
-      ctx.fillText(`• ${pattern}`, 80, y);
+      ctx.fillText(`• ${pattern}`, 60, y); // Align with Summary content (60px left margin)
     });
+    
+    // Show "and N more" if there are additional patterns
+    if (remainingCount > 0) {
+      y += 30;
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#888888';
+      ctx.fillText(`and ${remainingCount} more`, 60, y);
+    }
   }
 
   // Only show "No patterns detected" if both summary and patterns are empty
   if (summaryLines.length === 0 && patterns.length === 0) {
-    console.warn('No summary or patterns to render. Artifact signals:', artifact.signals, 'Fallback:', fallbackPatterns);
     y += 20;
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#888888';
@@ -245,16 +256,6 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
 
   const handleDownloadImage = async () => {
     if (!artifact) return;
-
-    // Debug: log artifact structure
-    console.log('PNG artifact payload', artifact);
-    console.log('Artifact keys:', Object.keys(artifact));
-    console.log('Artifact signals:', artifact.signals);
-    console.log('Artifact summary:', (artifact as any).summaryText);
-    console.log('Artifact summaryLines:', (artifact as any).summaryLines);
-    console.log('Artifact topGuessedTopics:', (artifact as any).topGuessedTopics);
-    console.log('Artifact inventory:', artifact.inventory);
-    console.log('Fallback patterns:', fallbackPatterns);
 
     try {
       const blob = await generateArtifactPNG(artifact, fallbackPatterns);
