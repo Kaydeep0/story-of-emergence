@@ -12,8 +12,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
-import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
-import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 
 /**
