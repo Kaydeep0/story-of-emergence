@@ -375,8 +375,16 @@ export default function YearlyWrapPage() {
 
             {/* Share Actions */}
             {address && (() => {
-              const yearlyArtifact = generateYearlyArtifact(reflections, distributionResult, address);
-              const caption = generateLifetimeCaption(yearlyArtifact);
+              const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+              
+              useEffect(() => {
+                generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch((err) => {
+                  console.error('Failed to generate yearly artifact', err);
+                  setYearlyArtifact(null);
+                });
+              }, [reflections, distributionResult, address]);
+              
+              const caption = yearlyArtifact ? generateLifetimeCaption(yearlyArtifact) : '';
               
               const handleCopyCaption = async () => {
                 try {
