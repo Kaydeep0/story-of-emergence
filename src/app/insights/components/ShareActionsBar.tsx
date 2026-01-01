@@ -24,76 +24,73 @@ export interface ShareActionsBarProps {
 }
 
 /**
- * Resolve patterns from artifact using multiple fallback strategies
+ * Normalize Weekly export data from various artifact shapes
+ * Ensures both summary and patterns are extracted regardless of artifact version
  */
-function resolvePatterns(artifact: ShareArtifact, fallbackPatterns?: string[]): string[] {
-  // Try multiple field paths
+function normalizeWeeklyExport(artifact: ShareArtifact, fallbackPatterns?: string[]): { summaryLines: string[]; patterns: string[] } {
   const artifactAny = artifact as any;
   
-  // Priority order:
+  // Extract summary lines from multiple possible fields
+  const summaryLines: string[] =
+    artifactAny?.summaryLines?.filter(Boolean) ??
+    (artifactAny?.summaryText ? [String(artifactAny.summaryText)] : []) ??
+    (artifactAny?.summary ? [String(artifactAny.summary)] : []);
+
+  // Extract patterns from multiple possible fields
+  let patterns: string[] = [];
+  
+  // Priority order for patterns:
   // 1. artifact.signals (standard contract)
   if (artifact.signals && artifact.signals.length > 0) {
-    return artifact.signals.map(s => s.label);
+    patterns = artifact.signals.map(s => s.label);
   }
-  
   // 2. artifact.signals.topGuessedTopics (if signals is an object)
-  if (artifactAny.signals?.topGuessedTopics && Array.isArray(artifactAny.signals.topGuessedTopics)) {
-    return artifactAny.signals.topGuessedTopics;
+  else if (artifactAny.signals?.topGuessedTopics && Array.isArray(artifactAny.signals.topGuessedTopics)) {
+    patterns = artifactAny.signals.topGuessedTopics;
   }
-  
   // 3. artifact.signals.topics
-  if (artifactAny.signals?.topics && Array.isArray(artifactAny.signals.topics)) {
-    return artifactAny.signals.topics;
+  else if (artifactAny.signals?.topics && Array.isArray(artifactAny.signals.topics)) {
+    patterns = artifactAny.signals.topics;
   }
-  
   // 4. artifact.topGuessedTopics (direct)
-  if (artifactAny.topGuessedTopics && Array.isArray(artifactAny.topGuessedTopics)) {
-    return artifactAny.topGuessedTopics;
+  else if (artifactAny.topGuessedTopics && Array.isArray(artifactAny.topGuessedTopics)) {
+    patterns = artifactAny.topGuessedTopics;
   }
-  
   // 5. artifact.topGuessedTopic (singular)
-  if (artifactAny.topGuessedTopic) {
-    return Array.isArray(artifactAny.topGuessedTopic) ? artifactAny.topGuessedTopic : [artifactAny.topGuessedTopic];
+  else if (artifactAny.topGuessedTopic) {
+    patterns = Array.isArray(artifactAny.topGuessedTopic) ? artifactAny.topGuessedTopic : [artifactAny.topGuessedTopic];
   }
-  
   // 6. artifact.topics
-  if (artifactAny.topics && Array.isArray(artifactAny.topics)) {
-    return artifactAny.topics;
+  else if (artifactAny.topics && Array.isArray(artifactAny.topics)) {
+    patterns = artifactAny.topics;
   }
-  
   // 7. artifact.patterns
-  if (artifactAny.patterns && Array.isArray(artifactAny.patterns)) {
-    return artifactAny.patterns;
+  else if (artifactAny.patterns && Array.isArray(artifactAny.patterns)) {
+    patterns = artifactAny.patterns.filter(Boolean);
   }
-  
-  // 8. Fallback patterns prop
-  if (fallbackPatterns && fallbackPatterns.length > 0) {
-    return fallbackPatterns;
+  // 8. artifact.observedPatterns
+  else if (artifactAny.observedPatterns && Array.isArray(artifactAny.observedPatterns)) {
+    patterns = artifactAny.observedPatterns.filter(Boolean);
   }
-  
-  return [];
-}
+  // 9. Fallback patterns prop
+  else if (fallbackPatterns && fallbackPatterns.length > 0) {
+    patterns = fallbackPatterns.filter(Boolean);
+  }
+  // 10. Try topDays/peakDays as fallback
+  else {
+    const topDays = artifactAny?.topDays ?? artifactAny?.peakDays ?? [];
+    if (Array.isArray(topDays) && topDays.length > 0) {
+      patterns = topDays
+        .filter((d: any) => d?.date && (d?.count ?? d?.reflections))
+        .slice(0, 5)
+        .map((d: any) => {
+          const c = d.count ?? d.reflections;
+          return `${c} reflection${c === 1 ? '' : 's'} on ${d.date}`;
+        });
+    }
+  }
 
-/**
- * Resolve summary text from artifact
- */
-function resolveSummaryText(artifact: ShareArtifact): string | null {
-  const artifactAny = artifact as any;
-  
-  // Try multiple field paths
-  if (artifactAny.summaryText) {
-    return artifactAny.summaryText;
-  }
-  
-  if (artifactAny.summaryLines && Array.isArray(artifactAny.summaryLines)) {
-    return artifactAny.summaryLines.join('\n');
-  }
-  
-  if (artifactAny.summary) {
-    return artifactAny.summary;
-  }
-  
-  return null;
+  return { summaryLines, patterns };
 }
 
 /**
@@ -140,9 +137,11 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
     y += 40;
   }
 
-  // Summary text (Weekly-specific, always render if available)
-  const summaryText = resolveSummaryText(artifact);
-  if (summaryText) {
+  // Normalize Weekly export data (handles all artifact shapes)
+  const { summaryLines, patterns } = normalizeWeeklyExport(artifact, fallbackPatterns);
+
+  // Render Summary section if available
+  if (summaryLines.length > 0) {
     y += 30;
     ctx.font = 'bold 20px sans-serif';
     ctx.fillStyle = '#ffffff';
@@ -150,44 +149,47 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
     y += 30;
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#cccccc';
-    // Wrap text to fit canvas width (approximately 60 chars per line)
-    const words = summaryText.split(' ');
-    let line = '';
+    // Render each summary line with text wrapping
     const maxWidth = canvas.width - 120; // 60px margin on each side
-    for (const word of words) {
-      const testLine = line + (line ? ' ' : '') + word;
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && line) {
+    for (const summaryLine of summaryLines) {
+      const words = summaryLine.split(' ');
+      let line = '';
+      for (const word of words) {
+        const testLine = line + (line ? ' ' : '') + word;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && line) {
+          ctx.fillText(line, 60, y);
+          y += 25;
+          line = word;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line) {
         ctx.fillText(line, 60, y);
         y += 25;
-        line = word;
-      } else {
-        line = testLine;
       }
-    }
-    if (line) {
-      ctx.fillText(line, 60, y);
-      y += 30;
+      y += 10; // Extra spacing between summary lines
     }
   }
 
-  // Observed patterns - use robust fallback resolver
-  const patternsToRender = resolvePatterns(artifact, fallbackPatterns);
-
-  if (patternsToRender.length > 0) {
+  // Render Observed Patterns section if available
+  if (patterns.length > 0) {
     y += 20;
     ctx.font = 'bold 18px sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.fillText('Observed Patterns', 60, y);
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#cccccc';
-    patternsToRender.slice(0, 5).forEach((pattern) => {
+    patterns.slice(0, 5).forEach((pattern) => {
       y += 30;
       ctx.fillText(`• ${pattern}`, 80, y);
     });
-  } else if (!summaryText) {
-    // Only show "No patterns detected" if summary is also empty
-    console.warn('No patterns to render. Artifact signals:', artifact.signals, 'Fallback:', fallbackPatterns);
+  }
+
+  // Only show "No patterns detected" if both summary and patterns are empty
+  if (summaryLines.length === 0 && patterns.length === 0) {
+    console.warn('No summary or patterns to render. Artifact signals:', artifact.signals, 'Fallback:', fallbackPatterns);
     y += 20;
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#888888';
