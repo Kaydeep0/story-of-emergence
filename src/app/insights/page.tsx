@@ -416,8 +416,6 @@ import { generateWeeklyArtifact } from '../../lib/artifacts/weeklyArtifact';
 import { generateTimelineArtifact } from '../../lib/artifacts/timelineArtifact';
 import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
 import { generateLifetimeArtifact } from '../../lib/artifacts/lifetimeArtifact';
-import { generateLifetimeCaption } from '../../lib/artifacts/lifetimeCaption';
-import { generateProvenanceLine } from '../../lib/artifacts/provenance';
 
 const BASE_MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
   { value: 'weekly', label: 'Weekly' },
