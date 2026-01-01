@@ -377,6 +377,7 @@ export default function YearlyWrapPage() {
             {/* Share Actions */}
             {address && (() => {
               const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+              const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
               
               useEffect(() => {
                 generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch((err) => {
