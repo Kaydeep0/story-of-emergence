@@ -1992,23 +1992,6 @@ export default function InsightsPage() {
               </div>
             )}
 
-            {/* Share Actions - Summary */}
-            {connected && encryptionReady && address && summaryArtifact && (
-              <div className="mb-6 flex gap-2 items-center">
-                <button
-                  onClick={() => setShowSummaryCapsuleDialog(true)}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  Send privately
-                </button>
-              </div>
-            )}
-
             {/* Summary data */}
             {connected && encryptionReady && !summaryLoading && !summaryError && summaryData && (
               <>
