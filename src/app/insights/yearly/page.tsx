@@ -752,6 +752,6 @@ export default function YearlyWrapPage() {
           onClose={() => setShowYearlyCapsuleDialog(false)}
         />
       )}
-    </main>
+    </section>
   );
 }
