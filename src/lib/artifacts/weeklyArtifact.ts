@@ -62,7 +62,12 @@ export async function generateWeeklyArtifact(
     },
 
     signals,
-  };
+    
+    // Weekly-specific fields for export rendering
+    // Store as metadata that can be accessed during export
+    ...(weeklyInsight.summaryText && { summaryText: weeklyInsight.summaryText }),
+    ...(weeklyInsight.distributionLabel && { distributionLabel: weeklyInsight.distributionLabel }),
+  } as ShareArtifact & { summaryText?: string; distributionLabel?: string };
 
   // Runtime guard: ensure contract is valid
   if (!artifact.inventory) {
