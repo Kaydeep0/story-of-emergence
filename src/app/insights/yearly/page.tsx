@@ -56,6 +56,10 @@ export default function YearlyWrapPage() {
   const [includeNumbers, setIncludeNumbers] = useState(false);
   const [privateMode, setPrivateMode] = useState(true);
 
+  // Yearly artifact share state (moved to top level to avoid hooks order violation)
+  const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [showYearlyCapsuleDialog, setShowYearlyCapsuleDialog] = useState(false);
+
   const connected = isConnected && !!address;
 
   useEffect(() => {
@@ -247,6 +251,18 @@ export default function YearlyWrapPage() {
     if (!distributionResult || distributionResult.topDays.length === 0) return undefined;
     return distributionResult.topDays[0]?.date;
   }, [distributionResult]);
+
+  // Generate yearly artifact when reflections and distribution change (moved to top level to avoid hooks order violation)
+  useEffect(() => {
+    if (!address || !reflections || reflections.length === 0 || !distributionResult) {
+      setYearlyArtifact(null);
+      return;
+    }
+    generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch((err) => {
+      console.error('Failed to generate yearly artifact', err);
+      setYearlyArtifact(null);
+    });
+  }, [reflections, distributionResult, address]);
 
 
   // Handle saving highlight
@@ -745,6 +761,16 @@ export default function YearlyWrapPage() {
           </div>
         )}
       </section>
+
+      {/* Share Capsule Dialog */}
+      {address && yearlyArtifact && (
+        <ShareCapsuleDialog
+          artifact={yearlyArtifact}
+          senderWallet={address}
+          isOpen={showYearlyCapsuleDialog}
+          onClose={() => setShowYearlyCapsuleDialog(false)}
+        />
+      )}
     </main>
   );
 }
