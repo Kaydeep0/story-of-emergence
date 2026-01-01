@@ -1129,6 +1129,30 @@ export default function InsightsPage() {
     });
   }, [latest, address]);
 
+  // Generate timeline artifact when timeline reflections change
+  useEffect(() => {
+    if (!timelineReflectionEntries || timelineReflectionEntries.length === 0 || !address) {
+      setTimelineArtifact(null);
+      return;
+    }
+    generateTimelineArtifact(timelineReflectionEntries, address).then(setTimelineArtifact).catch((err) => {
+      console.error('Failed to generate timeline artifact', err);
+      setTimelineArtifact(null);
+    });
+  }, [timelineReflectionEntries, address]);
+
+  // Generate summary artifact when summary reflections change
+  useEffect(() => {
+    if (!summaryReflectionEntries || summaryReflectionEntries.length === 0 || !address) {
+      setSummaryArtifact(null);
+      return;
+    }
+    generateSummaryArtifact(summaryReflectionEntries, address).then(setSummaryArtifact).catch((err) => {
+      console.error('Failed to generate summary artifact', err);
+      setSummaryArtifact(null);
+    });
+  }, [summaryReflectionEntries, address]);
+
   if (!mounted) return null;
 
   // Sanctuary principle:
