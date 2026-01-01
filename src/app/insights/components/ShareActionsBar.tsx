@@ -223,54 +223,144 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
 }
 
 /**
- * Generate canonical caption from artifact with fallback for empty content
- * Uses normalized data extraction to ensure consistent captions
+ * Format date from ISO string to short format (e.g., "Dec 29")
  */
-function generateShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[]): string {
+function formatShortDate(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[date.getMonth()]} ${date.getDate()}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Format date range for caption (e.g., "Dec 29 – Jan 5")
+ */
+function formatDateRangeForCaption(startDate: string | null, endDate: string | null): string {
+  const start = formatShortDate(startDate);
+  const end = formatShortDate(endDate);
+  
+  if (start && end && start !== end) {
+    return `${start} – ${end}`;
+  } else if (start) {
+    return start;
+  } else if (end) {
+    return end;
+  }
+  return '';
+}
+
+/**
+ * Build canonical share caption from artifact
+ * 
+ * Format:
+ * - Lens name (Weekly, Summary, Yearly)
+ * - Time range
+ * - One insight line (summary or first pattern)
+ * - Provenance footer
+ * 
+ * Example:
+ * Weekly Reflection · Dec 29 – Jan 5
+ * 
+ * This week you recorded 348 events across 7 reflections.
+ * Patterns emerged around focus and money.
+ * 
+ * Generated privately from encrypted data.
+ */
+function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[]): string {
+  const lines: string[] = [];
+  
+  // Lens name
+  const lensName = artifact.kind === 'lifetime' ? 'Lifetime Reflection'
+    : artifact.kind === 'weekly' ? 'Weekly Reflection'
+    : artifact.kind === 'yearly' ? 'Yearly Reflection'
+    : 'Reflection';
+  
+  // Time range
+  const dateRange = formatDateRangeForCaption(
+    artifact.inventory.firstReflectionDate,
+    artifact.inventory.lastReflectionDate
+  );
+  
+  // Header line: "Lens name · Date range"
+  if (dateRange) {
+    lines.push(`${lensName} · ${dateRange}`);
+  } else {
+    lines.push(lensName);
+  }
+  
+  lines.push(''); // Blank line
+  
+  // Extract normalized data
   const { summaryLines, patterns } = normalizeWeeklyExport(artifact, fallbackPatterns);
   
-  // If artifact has no meaningful content, provide a minimal fallback
-  if (summaryLines.length === 0 && patterns.length === 0 && artifact.signals.length === 0) {
-    const scopeLabel = artifact.kind === 'lifetime' ? 'Lifetime Reflection' 
-      : artifact.kind === 'weekly' ? 'Weekly Reflection'
-      : 'Yearly Reflection';
-    return `Story of Emergence — ${scopeLabel}\n\nGenerated from encrypted personal reflections.\nShared intentionally.`;
+  // One insight line: prefer summary, fallback to first pattern
+  if (summaryLines.length > 0) {
+    // Use first summary line (or first sentence if it's long)
+    const firstSummary = summaryLines[0];
+    // If it's very long, try to take first sentence
+    const firstSentence = firstSummary.split(/[.!?]/)[0].trim();
+    if (firstSentence.length > 0 && firstSentence.length < firstSummary.length) {
+      lines.push(firstSentence + '.');
+    } else {
+      lines.push(firstSummary);
+    }
+  } else if (patterns.length > 0) {
+    // Use first pattern as insight
+    lines.push(`Patterns emerged around ${patterns[0]}.`);
+  } else if (artifact.signals.length > 0) {
+    // Use first signal label
+    lines.push(`Patterns emerged around ${artifact.signals[0].label}.`);
   }
-
-  // Use the canonical caption generator, which handles standard artifact structure
-  return generateLifetimeCaption(artifact);
+  
+  // If we have additional patterns, add them
+  if (patterns.length > 1) {
+    const additionalPatterns = patterns.slice(1, 3); // Max 2 more
+    if (additionalPatterns.length > 0) {
+      lines.push(`Patterns emerged around ${additionalPatterns.join(', ')}.`);
+    }
+  }
+  
+  lines.push(''); // Blank line
+  
+  // Provenance footer
+  lines.push('Generated privately from encrypted data.');
+  
+  return lines.join('\n');
 }
 
 /**
  * Generate deterministic filename for artifact download
+ * Format: soe-{lens}-{startDate}-{endDate}-{artifactId}.png
  */
 function generateArtifactFilename(artifact: ShareArtifact): string {
   const kind = artifact.kind;
   
-  // Use artifact ID if available (most deterministic)
-  if (artifact.artifactId) {
-    // Use first 8 chars of artifact ID for brevity
-    const shortId = artifact.artifactId.substring(0, 8);
-    return `soe-${kind}-${shortId}.png`;
-  }
-  
-  // Fallback to date range
+  // Extract dates (YYYY-MM-DD format)
   const startDate = artifact.inventory.firstReflectionDate 
     ? artifact.inventory.firstReflectionDate.split('T')[0]
-    : null;
+    : '';
   const endDate = artifact.inventory.lastReflectionDate 
     ? artifact.inventory.lastReflectionDate.split('T')[0]
-    : null;
+    : '';
   
-  if (startDate && endDate) {
-    return `soe-${kind}-${startDate}_to_${endDate}.png`;
-  } else if (startDate) {
-    return `soe-${kind}-${startDate}.png`;
-  } else {
-    // Last resort: current date
-    const now = new Date();
-    return `soe-${kind}-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.png`;
-  }
+  // Artifact ID (use first 8 chars for brevity)
+  const artifactId = artifact.artifactId 
+    ? artifact.artifactId.substring(0, 8)
+    : '';
+  
+  // Build filename parts
+  const parts: string[] = ['soe', kind];
+  
+  if (startDate) parts.push(startDate);
+  if (endDate && endDate !== startDate) parts.push(endDate);
+  if (artifactId) parts.push(artifactId);
+  
+  return `${parts.join('-')}.png`;
 }
 
 /**
@@ -289,7 +379,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     return null;
   }
 
-  const caption = generateShareCaption(artifact, fallbackPatterns);
+  const caption = buildShareCaption(artifact, fallbackPatterns);
   const hasContent = hasShareableContent(artifact, fallbackPatterns);
   const isDisabled = !encryptionReady || !hasContent;
 
@@ -381,51 +471,55 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleLinkedInShare = async () => {
-    // LinkedIn doesn't support text prefill, so copy caption and open LinkedIn
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(caption);
-        setLinkedInCaptionCopied(true);
-        toast('Caption copied');
-        setTimeout(() => setLinkedInCaptionCopied(false), 3000);
-      } else {
-        // Fallback
-        const textarea = document.createElement('textarea');
-        textarea.value = caption;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.left = '-999999px';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        setLinkedInCaptionCopied(true);
-        toast('Caption copied');
-        setTimeout(() => setLinkedInCaptionCopied(false), 3000);
-      }
-    } catch (err) {
-      toast.error('Failed to copy caption');
-      return;
-    }
+  const handleLinkedInShare = () => {
+    // LinkedIn share-offsite intent (text only, no image upload)
+    // Use placeholder URL since we're sharing text content
+    const placeholderUrl = encodeURIComponent('https://storyofemergence.com');
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${placeholderUrl}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
     
-    // Open LinkedIn new post page
-    window.open('https://www.linkedin.com/feed/?shareActive=true', '_blank', 'noopener,noreferrer');
-    toast('Paste caption into LinkedIn post');
+    // Also copy caption to clipboard for easy pasting
+    handleCopyCaption();
+    toast('LinkedIn opened. Caption copied to clipboard.');
   };
 
-  const handleIMessageShare = () => {
-    // Try SMS/iMessage link with body (iOS Safari supports this)
-    const encodedText = encodeURIComponent(caption);
-    const smsUrl = `sms:&body=${encodedText}`;
+  const handleIMessageShare = async () => {
+    // Prefer Web Share API if available (works on iOS Safari, Chrome mobile)
+    if (navigator.share) {
+      try {
+        // Generate image blob for sharing
+        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
+        const filename = generateArtifactFilename(artifact);
+        const file = new File([blob], filename, { type: 'image/png' });
+        
+        const shareData: ShareData = {
+          text: caption,
+        };
+        
+        // Include file if supported
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          shareData.files = [file];
+        }
+        
+        await navigator.share(shareData);
+        // User cancelled or shared successfully - no toast needed
+        return;
+      } catch (err: any) {
+        // AbortError means user cancelled - don't show error
+        if (err.name === 'AbortError') {
+          return;
+        }
+        // Fall through to fallback
+      }
+    }
     
-    // Check if we're on iOS
+    // Fallback: SMS link (iOS) or copy caption
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    
     if (isIOS) {
-      window.location.href = smsUrl;
+      const encodedText = encodeURIComponent(caption);
+      window.location.href = `sms:&body=${encodedText}`;
     } else {
-      // Fallback: copy caption and show instruction
+      // Copy caption and show instruction
       handleCopyCaption();
       toast('Caption copied. Paste into Messages');
     }
