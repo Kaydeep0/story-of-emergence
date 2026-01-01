@@ -2714,6 +2714,24 @@ export default function InsightsPage() {
         }}
       />
 
+      {/* Share Capsule Dialogs */}
+      {address && timelineArtifact && (
+        <ShareCapsuleDialog
+          artifact={timelineArtifact}
+          senderWallet={address}
+          isOpen={showTimelineCapsuleDialog}
+          onClose={() => setShowTimelineCapsuleDialog(false)}
+        />
+      )}
+      {address && summaryArtifact && (
+        <ShareCapsuleDialog
+          artifact={summaryArtifact}
+          senderWallet={address}
+          isOpen={showSummaryCapsuleDialog}
+          onClose={() => setShowSummaryCapsuleDialog(false)}
+        />
+      )}
+
       <DebugInsightStrip />
     </main>
   );
