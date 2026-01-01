@@ -2770,6 +2770,6 @@ export default function InsightsPage() {
       )}
 
       <DebugInsightStrip />
-    </main>
+    </section>
   );
 }
