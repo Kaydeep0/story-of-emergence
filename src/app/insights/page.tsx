@@ -413,7 +413,7 @@ import { generateProvenanceLine } from '../../lib/artifacts/provenance';
 
 const BASE_MODE_OPTIONS: { value: InsightsMode | 'distributions' | 'year-over-year'; label: string; subtext?: string }[] = [
   { value: 'weekly', label: 'Weekly' },
-  { value: 'timeline', label: 'Timeline' },
+  { value: 'timeline', label: 'Lifetime' },
   { value: 'summary', label: 'Summary' },
   { value: 'yearly', label: 'Yearly' },
   { value: 'year-over-year', label: 'Year over Year', subtext: 'Compare two moments in time' },
