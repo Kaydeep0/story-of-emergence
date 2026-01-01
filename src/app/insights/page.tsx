@@ -1357,21 +1357,12 @@ export default function InsightsPage() {
             )}
 
             {/* Share Actions - Timeline */}
-            {connected && encryptionReady && address && timelineArtifact && (
-              <div className="mb-6 flex gap-2 items-center">
-                <button
-                  onClick={() => setShowTimelineCapsuleDialog(true)}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  Send privately
-                </button>
-              </div>
-            )}
+            <ShareActionsBar
+              artifact={timelineArtifact}
+              senderWallet={address}
+              encryptionReady={encryptionReady}
+              onSendPrivately={() => setShowTimelineCapsuleDialog(true)}
+            />
 
             {/* Timeline Spikes Section */}
             {connected && encryptionReady && (
@@ -2006,21 +1997,12 @@ export default function InsightsPage() {
             )}
 
             {/* Share Actions - Summary */}
-            {connected && encryptionReady && address && summaryArtifact && (
-              <div className="mb-6 flex gap-2 items-center">
-                <button
-                  onClick={() => setShowSummaryCapsuleDialog(true)}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  Send privately
-                </button>
-              </div>
-            )}
+            <ShareActionsBar
+              artifact={summaryArtifact}
+              senderWallet={address}
+              encryptionReady={encryptionReady}
+              onSendPrivately={() => setShowSummaryCapsuleDialog(true)}
+            />
 
             {/* Summary data */}
             {connected && encryptionReady && !summaryLoading && !summaryError && summaryData && (
@@ -2285,21 +2267,12 @@ export default function InsightsPage() {
         {mode === 'lifetime' && (
           <div className="mt-8 space-y-6">
             {/* Share Actions - Lifetime */}
-            {connected && encryptionReady && address && lifetimeArtifact && (
-              <div className="mb-6 flex gap-2 items-center">
-                <button
-                  onClick={() => setShowLifetimeCapsuleDialog(true)}
-                  className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
-                  Send privately
-                </button>
-              </div>
-            )}
+            <ShareActionsBar
+              artifact={lifetimeArtifact}
+              senderWallet={address}
+              encryptionReady={encryptionReady}
+              onSendPrivately={() => setShowLifetimeCapsuleDialog(true)}
+            />
 
             {lifetimeLoading && (
               <div className="rounded-2xl border border-white/10 p-6 text-center">
@@ -2401,216 +2374,12 @@ export default function InsightsPage() {
             {connected && encryptionReady && !loading && latest && (
               <>
                 {/* Share Actions */}
-                {address && weeklyArtifact && (() => {
-                  const caption = generateLifetimeCaption(weeklyArtifact);
-                  
-                  const handleCopyCaption = async () => {
-                    if (!weeklyArtifact) return;
-                    
-                    // Guardrail check
-                    if (!weeklyArtifact.artifactId) {
-                      throw new Error('Artifact missing identity: artifactId is required');
-                    }
-                    
-                    try {
-                      if (navigator.clipboard && navigator.clipboard.writeText) {
-                        await navigator.clipboard.writeText(caption);
-                        toast('Caption copied');
-                      } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = caption;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        textarea.style.left = '-999999px';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        toast('Caption copied');
-                      }
-                    } catch (err) {
-                      toast.error('Failed to copy caption');
-                    }
-                  };
-
-                  const handleDownloadImage = async () => {
-                    if (!weeklyArtifact) return;
-                    
-                    // Guardrail check
-                    if (!weeklyArtifact.artifactId) {
-                      throw new Error('Artifact missing identity: artifactId is required');
-                    }
-                    
-                    // Guardrail check
-                    if (!weeklyArtifact.artifactId) {
-                      throw new Error('Artifact missing identity: artifactId is required');
-                    }
-                    
-                    try {
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d');
-                      if (!ctx) throw new Error('Canvas not available');
-                      
-                      canvas.width = 1200;
-                      canvas.height = 800;
-                      ctx.fillStyle = '#000000';
-                      ctx.fillRect(0, 0, canvas.width, canvas.height);
-                      
-                      ctx.fillStyle = '#ffffff';
-                      ctx.font = 'bold 48px sans-serif';
-                      ctx.textAlign = 'left';
-                      ctx.fillText('Story of Emergence — Weekly Reflection', 60, 80);
-                      
-                      ctx.font = '24px sans-serif';
-                      ctx.fillStyle = '#cccccc';
-                      ctx.fillText(`Week of ${formatWeekDate(latest.startDate)}`, 60, 130);
-                      ctx.fillText(`${latest.journalEvents} reflections`, 60, 170);
-                      
-                      if (latest.topGuessedTopics.length > 0) {
-                        let y = 250;
-                        ctx.font = 'bold 18px sans-serif';
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillText('Observed Patterns', 60, y);
-                        ctx.font = '16px sans-serif';
-                        ctx.fillStyle = '#cccccc';
-                        latest.topGuessedTopics.slice(0, 5).forEach((topic, i) => {
-                          y += 30;
-                          ctx.fillText(`• ${topic}`, 80, y);
-                        });
-                      }
-                      
-                      // Provenance line
-                      y = canvas.height - 40;
-                      ctx.font = '14px sans-serif';
-                      ctx.fillStyle = '#666666';
-                      ctx.textAlign = 'center';
-                      const provenanceLine = generateProvenanceLine(weeklyArtifact);
-                      ctx.fillText(provenanceLine, canvas.width / 2, y);
-                      
-                      const blob = await new Promise<Blob>((resolve, reject) => {
-                        canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Failed')), 'image/png');
-                      });
-                      
-                      const url = URL.createObjectURL(blob);
-                      const now = new Date();
-                      const filename = `soe-weekly-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.png`;
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = filename;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                      toast('Image downloaded');
-                    } catch (err) {
-                      toast.error('Failed to generate image');
-                    }
-                  };
-
-                  const handleWebShare = async () => {
-                    if (!weeklyArtifact) return;
-                    
-                    // Guardrail check
-                    if (!weeklyArtifact.artifactId) {
-                      throw new Error('Artifact missing identity: artifactId is required');
-                    }
-                    
-                    if (!navigator.share) {
-                      toast('Share not available on this device');
-                      return;
-                    }
-                    try {
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d');
-                      if (!ctx) throw new Error('Canvas not available');
-                      
-                      canvas.width = 1200;
-                      canvas.height = 800;
-                      ctx.fillStyle = '#000000';
-                      ctx.fillRect(0, 0, canvas.width, canvas.height);
-                      ctx.fillStyle = '#ffffff';
-                      ctx.font = 'bold 48px sans-serif';
-                      ctx.fillText('Story of Emergence — Weekly Reflection', 60, 80);
-                      
-                      const blob = await new Promise<Blob>((resolve, reject) => {
-                        canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Failed')), 'image/png');
-                      });
-                      
-                      const file = new File([blob], `soe-weekly-${new Date().toISOString().split('T')[0]}.png`, { type: 'image/png' });
-                      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        await navigator.share({ title: 'Story of Emergence — Weekly Reflection', text: caption, files: [file] });
-                        toast('Ready to share');
-                      } else {
-                        await navigator.share({ title: 'Story of Emergence — Weekly Reflection', text: caption });
-                        toast('Ready to share');
-                      }
-                    } catch (err: any) {
-                      if (err.name !== 'AbortError') {
-                        toast.error('Failed to share');
-                      }
-                    }
-                  };
-
-                  return (
-                    <>
-                      <div className="mb-6 flex gap-2 items-center">
-                        <button
-                          onClick={handleDownloadImage}
-                          className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                          </svg>
-                          PNG
-                        </button>
-                        <button
-                          onClick={handleCopyCaption}
-                          className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                          </svg>
-                          Caption
-                        </button>
-                        {typeof navigator !== 'undefined' && 'share' in navigator && (
-                          <button
-                            onClick={handleWebShare}
-                            className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="18" cy="5" r="3"></circle>
-                              <circle cx="6" cy="12" r="3"></circle>
-                              <circle cx="18" cy="19" r="3"></circle>
-                              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                            </svg>
-                            Share
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setShowWeeklyCapsuleDialog(true)}
-                          className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                          </svg>
-                          Send privately
-                        </button>
-                      </div>
-                      <ShareCapsuleDialog
-                        artifact={weeklyArtifact}
-                        senderWallet={address}
-                        isOpen={showWeeklyCapsuleDialog}
-                        onClose={() => setShowWeeklyCapsuleDialog(false)}
-                      />
-                    </>
-                  );
-                })()}
+                <ShareActionsBar
+                  artifact={weeklyArtifact}
+                  senderWallet={address}
+                  encryptionReady={encryptionReady}
+                  onSendPrivately={() => setShowWeeklyCapsuleDialog(true)}
+                />
 
                 <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
                   <h2 className="text-lg font-medium">
