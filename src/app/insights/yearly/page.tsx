@@ -328,20 +328,20 @@ export default function YearlyWrapPage() {
   // Show wallet/encryption messaging if not ready
   if (!connected) {
     return (
-      <main className="min-h-screen bg-black text-white">
+      <div>
         <section className="max-w-4xl mx-auto px-4 py-10">
           <h1 className="text-2xl font-semibold text-center mb-2">Yearly Wrap</h1>
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70 mb-3">Connect your wallet to view your yearly wrap.</p>
           </div>
         </section>
-      </main>
+      </div>
     );
   }
 
   if (!encryptionReady) {
     return (
-      <main className="min-h-screen bg-black text-white">
+      <div>
         <section className="max-w-4xl mx-auto px-4 py-10">
           <h1 className="text-2xl font-semibold text-center mb-2">Yearly Wrap</h1>
           <div className="rounded-2xl border border-white/10 p-6 text-center">
@@ -350,7 +350,7 @@ export default function YearlyWrapPage() {
             </p>
           </div>
         </section>
-      </main>
+      </div>
     );
   }
 
