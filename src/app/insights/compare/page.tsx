@@ -69,8 +69,9 @@ export default function ComparePage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [selectedYear1, setSelectedYear1] = useState<number | null>(null);
   const [selectedYear2, setSelectedYear2] = useState<number | null>(null);
-  const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [year1Artifact, setYear1Artifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [year2Artifact, setYear2Artifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [narrative, setNarrative] = useState<YearOverYearNarrative | null>(null);
 
   const connected = isConnected && !!address;
 
@@ -214,89 +215,6 @@ export default function ComparePage() {
     }
   }, [year1Artifact, year2Artifact]);
 
-  // Extract signal arrays for contrast distribution
-  const contrastSignals = useMemo(() => {
-    if (!yearOverYearInsight || !selectedYear1 || !selectedYear2) {
-      return null;
-    }
-
-    // Use theme continuities as signal source
-    // Map strength to simple numeric values: strong=3, moderate=2, weak=1
-    const leftPoints: number[] = [];
-    const rightPoints: number[] = [];
-
-    for (const continuity of yearOverYearInsight.data.themeContinuities) {
-      const strengthValue = continuity.strength === 'strong' ? 3 : continuity.strength === 'moderate' ? 2 : 1;
-      if (continuity.presentInYear1) {
-        leftPoints.push(strengthValue);
-      }
-      if (continuity.presentInYear2) {
-        rightPoints.push(strengthValue);
-      }
-    }
-
-    // Add emergences to right side
-    for (const emergence of yearOverYearInsight.data.themeEmergences) {
-      if (emergence.presentInYear2) {
-        rightPoints.push(2); // Moderate strength for new themes
-      }
-    }
-
-    // Add disappearances to left side
-    for (const disappearance of yearOverYearInsight.data.themeDisappearances) {
-      if (disappearance.wasPresentInYear1) {
-        leftPoints.push(2); // Moderate strength for faded themes
-      }
-    }
-
-    // Only return if both sides have sufficient data
-    if (leftPoints.length >= 3 && rightPoints.length >= 3) {
-      return {
-        leftPoints,
-        rightPoints,
-      };
-    }
-
-    return null;
-  }, [yearOverYearInsight, selectedYear1, selectedYear2]);
-
-  // Get year data for display
-  const year1Data = useMemo(() => {
-    if (!selectedYear1) return null;
-    const yearReflections = groupedByYear.get(selectedYear1) || [];
-    return {
-      year: selectedYear1,
-      reflections: yearReflections,
-      summary: generateYearSummary(selectedYear1, yearReflections),
-      themes: yearOverYearInsight?.data.themeContinuities
-        .filter(t => t.presentInYear1)
-        .map(t => t.theme)
-        .slice(0, 5) || [],
-    };
-  }, [selectedYear1, groupedByYear, yearOverYearInsight]);
-
-  const year2Data = useMemo(() => {
-    if (!selectedYear2) return null;
-    const yearReflections = groupedByYear.get(selectedYear2) || [];
-    return {
-      year: selectedYear2,
-      reflections: yearReflections,
-      summary: generateYearSummary(selectedYear2, yearReflections),
-      themes: yearOverYearInsight?.data.themeContinuities
-        .filter(t => t.presentInYear2)
-        .map(t => t.theme)
-        .slice(0, 5) || [],
-    };
-  }, [selectedYear2, groupedByYear, yearOverYearInsight]);
-
-  // Handle evidence click
-  const handleEvidenceClick = (entryId: string) => {
-    const reflection = reflections.find(r => r.id === entryId);
-    if (reflection) {
-      setSelectedReflection(reflection);
-      setPreviewOpen(true);
-    }
-  };
 
   if (!mounted) {
     return null;
@@ -472,54 +390,6 @@ export default function ComparePage() {
         </div>
       </div>
 
-      {/* Reflection preview drawer */}
-      {selectedReflection && (
-        <div
-          className={`fixed inset-0 bg-black/60 backdrop-blur-md z-[60] transition-opacity duration-[220ms] ease-out ${
-            previewOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-          onClick={() => {
-            setPreviewOpen(false);
-            setSelectedReflection(null);
-          }}
-          aria-hidden={!previewOpen}
-        />
-      )}
-      {selectedReflection && previewOpen && (
-        <div className="fixed inset-y-0 right-0 w-[480px] bg-black border-l border-white/10 z-[70] flex-col shadow-2xl hidden sm:flex">
-          <div className="sticky top-0 bg-black/95 backdrop-blur border-b border-white/10 p-6 flex items-start justify-between gap-2">
-            <div>
-              <h3 className="text-lg font-semibold">Reflection</h3>
-              <p className="text-xs text-white/60 mt-1">
-                {new Date(selectedReflection.createdAt).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setPreviewOpen(false);
-                setSelectedReflection(null);
-              }}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
-              aria-label="Close"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="p-6 overflow-y-auto flex-1">
-            <div className="prose prose-invert max-w-none">
-              <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">
-                {selectedReflection.plaintext}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
