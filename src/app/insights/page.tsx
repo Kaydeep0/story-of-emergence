@@ -2771,7 +2771,6 @@ export default function InsightsPage() {
       )}
 
       <DebugInsightStrip />
-      </section>
     </>
   );
 }
