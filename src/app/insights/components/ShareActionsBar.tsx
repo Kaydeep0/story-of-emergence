@@ -24,6 +24,79 @@ export interface ShareActionsBarProps {
 }
 
 /**
+ * Resolve patterns from artifact using multiple fallback strategies
+ */
+function resolvePatterns(artifact: ShareArtifact, fallbackPatterns?: string[]): string[] {
+  // Try multiple field paths
+  const artifactAny = artifact as any;
+  
+  // Priority order:
+  // 1. artifact.signals (standard contract)
+  if (artifact.signals && artifact.signals.length > 0) {
+    return artifact.signals.map(s => s.label);
+  }
+  
+  // 2. artifact.signals.topGuessedTopics (if signals is an object)
+  if (artifactAny.signals?.topGuessedTopics && Array.isArray(artifactAny.signals.topGuessedTopics)) {
+    return artifactAny.signals.topGuessedTopics;
+  }
+  
+  // 3. artifact.signals.topics
+  if (artifactAny.signals?.topics && Array.isArray(artifactAny.signals.topics)) {
+    return artifactAny.signals.topics;
+  }
+  
+  // 4. artifact.topGuessedTopics (direct)
+  if (artifactAny.topGuessedTopics && Array.isArray(artifactAny.topGuessedTopics)) {
+    return artifactAny.topGuessedTopics;
+  }
+  
+  // 5. artifact.topGuessedTopic (singular)
+  if (artifactAny.topGuessedTopic) {
+    return Array.isArray(artifactAny.topGuessedTopic) ? artifactAny.topGuessedTopic : [artifactAny.topGuessedTopic];
+  }
+  
+  // 6. artifact.topics
+  if (artifactAny.topics && Array.isArray(artifactAny.topics)) {
+    return artifactAny.topics;
+  }
+  
+  // 7. artifact.patterns
+  if (artifactAny.patterns && Array.isArray(artifactAny.patterns)) {
+    return artifactAny.patterns;
+  }
+  
+  // 8. Fallback patterns prop
+  if (fallbackPatterns && fallbackPatterns.length > 0) {
+    return fallbackPatterns;
+  }
+  
+  return [];
+}
+
+/**
+ * Resolve summary text from artifact
+ */
+function resolveSummaryText(artifact: ShareArtifact): string | null {
+  const artifactAny = artifact as any;
+  
+  // Try multiple field paths
+  if (artifactAny.summaryText) {
+    return artifactAny.summaryText;
+  }
+  
+  if (artifactAny.summaryLines && Array.isArray(artifactAny.summaryLines)) {
+    return artifactAny.summaryLines.join('\n');
+  }
+  
+  if (artifactAny.summary) {
+    return artifactAny.summary;
+  }
+  
+  return null;
+}
+
+/**
  * Generate PNG from artifact
  */
 async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: string[]): Promise<Blob> {
@@ -41,7 +114,7 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
   if (!ctx) throw new Error('Canvas not available');
 
   canvas.width = 1200;
-  canvas.height = 800;
+  canvas.height = 1000; // Increased height to accommodate summary
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -67,10 +140,39 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
     y += 40;
   }
 
-  // Observed patterns - use signals if available, otherwise fallback to patterns array
-  const patternsToRender = artifact.signals && artifact.signals.length > 0
-    ? artifact.signals.map(s => s.label)
-    : (fallbackPatterns && fallbackPatterns.length > 0 ? fallbackPatterns : []);
+  // Summary text (Weekly-specific, always render if available)
+  const summaryText = resolveSummaryText(artifact);
+  if (summaryText) {
+    y += 30;
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('Summary', 60, y);
+    y += 30;
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#cccccc';
+    // Wrap text to fit canvas width (approximately 60 chars per line)
+    const words = summaryText.split(' ');
+    let line = '';
+    const maxWidth = canvas.width - 120; // 60px margin on each side
+    for (const word of words) {
+      const testLine = line + (line ? ' ' : '') + word;
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && line) {
+        ctx.fillText(line, 60, y);
+        y += 25;
+        line = word;
+      } else {
+        line = testLine;
+      }
+    }
+    if (line) {
+      ctx.fillText(line, 60, y);
+      y += 30;
+    }
+  }
+
+  // Observed patterns - use robust fallback resolver
+  const patternsToRender = resolvePatterns(artifact, fallbackPatterns);
 
   if (patternsToRender.length > 0) {
     y += 20;
@@ -83,8 +185,8 @@ async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: s
       y += 30;
       ctx.fillText(`• ${pattern}`, 80, y);
     });
-  } else {
-    // Debug: log when patterns are missing
+  } else if (!summaryText) {
+    // Only show "No patterns detected" if summary is also empty
     console.warn('No patterns to render. Artifact signals:', artifact.signals, 'Fallback:', fallbackPatterns);
     y += 20;
     ctx.font = '16px sans-serif';
