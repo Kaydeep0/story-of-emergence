@@ -35,6 +35,7 @@ import { MirrorSection } from './components/MirrorSection';
 import { generateYearlyArtifact } from '../../../lib/artifacts/yearlyArtifact';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
+import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 
 // Yearly Wrap v1 - Locked
 const YEARLY_WRAP_VERSION = 'v1' as const;
@@ -560,8 +561,38 @@ export default function YearlyWrapPage() {
                       Share
                     </button>
                   )}
+                  <button
+                    onClick={() => setShowCapsuleDialog(true)}
+                    className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Send privately
+                  </button>
                 </div>
               );
+            })()}
+            
+            {/* Share Capsule Dialog */}
+            {address && distributionResult && (() => {
+              const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+              const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
+              
+              useEffect(() => {
+                generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch(() => setYearlyArtifact(null));
+              }, [reflections, distributionResult, address]);
+              
+              return yearlyArtifact ? (
+                <ShareCapsuleDialog
+                  artifact={yearlyArtifact}
+                  senderWallet={address}
+                  isOpen={showCapsuleDialog}
+                  onClose={() => setShowCapsuleDialog(false)}
+                />
+              ) : null;
             })()}
 
             {/* Hidden export card for share */}
