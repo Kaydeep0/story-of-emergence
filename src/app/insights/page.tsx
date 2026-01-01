@@ -1189,7 +1189,8 @@ export default function InsightsPage() {
   // Prefer silence, spacing, and restraint over density.
 
   return (
-    <section className="max-w-2xl mx-auto px-4 py-12">
+    <>
+      <section className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-2xl font-normal text-center mb-3">Insights</h1>
         <p className="text-center text-sm text-white/50 mb-8">
           Different ways to view your encrypted activity.
@@ -2770,6 +2771,7 @@ export default function InsightsPage() {
       )}
 
       <DebugInsightStrip />
-    </section>
+      </section>
+    </>
   );
 }
