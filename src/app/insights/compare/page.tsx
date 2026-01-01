@@ -13,9 +13,11 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeAllInsights } from '../../lib/insights/computeAllInsights';
 import type { ReflectionEntry } from '../../lib/insights/types';
-import { ContrastDistribution } from '../components/ContrastDistribution';
+import { generateYearlyArtifact } from '../../../lib/artifacts/yearlyArtifact';
+import { generateYearOverYearNarrative } from '../../../lib/narratives/yearOverYearNarrative';
+import type { YearOverYearNarrative } from '../../../lib/narratives/yearOverYearNarrative';
+import { computeDistributionLayer } from '../../lib/insights/distributionLayer';
 
 /**
  * Group reflections by year
@@ -153,19 +155,64 @@ export default function ComparePage() {
     }
   }, [availableYears, selectedYear1, selectedYear2]);
 
-  // Compute year-over-year insights
-  const yearOverYearInsight = useMemo(() => {
-    if (!selectedYear1 || !selectedYear2 || reflections.length === 0) {
-      return null;
+  // Generate yearly artifacts for selected years
+  useEffect(() => {
+    if (!selectedYear1 || !address || reflections.length === 0) {
+      setYear1Artifact(null);
+      return;
     }
 
-    const result = computeAllInsights(reflections, {
-      fromYear: selectedYear1,
-      toYear: selectedYear2,
-    });
+    const year1Reflections = groupedByYear.get(selectedYear1) || [];
+    if (year1Reflections.length === 0) {
+      setYear1Artifact(null);
+      return;
+    }
 
-    return result.yearOverYear;
-  }, [reflections, selectedYear1, selectedYear2]);
+    const distributionResult = computeDistributionLayer(year1Reflections, { windowDays: 365 });
+    generateYearlyArtifact(year1Reflections, distributionResult, address)
+      .then(setYear1Artifact)
+      .catch((err) => {
+        console.error('Failed to generate year 1 artifact', err);
+        setYear1Artifact(null);
+      });
+  }, [selectedYear1, reflections, groupedByYear, address]);
+
+  useEffect(() => {
+    if (!selectedYear2 || !address || reflections.length === 0) {
+      setYear2Artifact(null);
+      return;
+    }
+
+    const year2Reflections = groupedByYear.get(selectedYear2) || [];
+    if (year2Reflections.length === 0) {
+      setYear2Artifact(null);
+      return;
+    }
+
+    const distributionResult = computeDistributionLayer(year2Reflections, { windowDays: 365 });
+    generateYearlyArtifact(year2Reflections, distributionResult, address)
+      .then(setYear2Artifact)
+      .catch((err) => {
+        console.error('Failed to generate year 2 artifact', err);
+        setYear2Artifact(null);
+      });
+  }, [selectedYear2, reflections, groupedByYear, address]);
+
+  // Generate narrative from artifacts
+  useEffect(() => {
+    if (!year1Artifact || !year2Artifact) {
+      setNarrative(null);
+      return;
+    }
+
+    try {
+      const narrativeDelta = generateYearOverYearNarrative(year1Artifact, year2Artifact);
+      setNarrative(narrativeDelta);
+    } catch (err) {
+      console.error('Failed to generate narrative', err);
+      setNarrative(null);
+    }
+  }, [year1Artifact, year2Artifact]);
 
   // Extract signal arrays for contrast distribution
   const contrastSignals = useMemo(() => {
@@ -363,182 +410,59 @@ export default function ComparePage() {
             </div>
           </div>
 
-          {/* Comparison content */}
-          {selectedYear1 && selectedYear2 && yearOverYearInsight ? (
-            <div className="space-y-8">
-              {/* Year summaries */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {year1Data && (
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-light text-white/80">
-                      {year1Data.year}
-                    </h2>
-                    <p className="text-white/60 leading-relaxed text-sm">
-                      {year1Data.summary}
-                    </p>
-                    {year1Data.themes.length > 0 && (
-                      <div className="pt-4 border-t border-white/5">
-                        <p className="text-xs text-white/40 mb-2">Themes</p>
-                        <div className="flex flex-wrap gap-2">
-                          {year1Data.themes.map((theme) => (
-                            <span
-                              key={theme}
-                              className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
-                            >
-                              {theme}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {year2Data && (
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-light text-white/80">
-                      {year2Data.year}
-                    </h2>
-                    <p className="text-white/60 leading-relaxed text-sm">
-                      {year2Data.summary}
-                    </p>
-                    {year2Data.themes.length > 0 && (
-                      <div className="pt-4 border-t border-white/5">
-                        <p className="text-xs text-white/40 mb-2">Themes</p>
-                        <div className="flex flex-wrap gap-2">
-                          {year2Data.themes.map((theme) => (
-                            <span
-                              key={theme}
-                              className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
-                            >
-                              {theme}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+          {/* Narrative card */}
+          {selectedYear1 && selectedYear2 && narrative ? (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-8 space-y-6">
+              <div>
+                <h2 className="text-xl font-light text-white/90 mb-2">
+                  {narrative.headline}
+                </h2>
+                <p className="text-white/70 leading-relaxed">
+                  {narrative.dominantShift}
+                </p>
               </div>
 
-              {/* Contrast section */}
-              <div className="pt-8 border-t border-white/10 space-y-6">
-                <h3 className="text-lg font-light text-white/80">Contrast</h3>
-                
-                {/* Continuities */}
-                {yearOverYearInsight.data.themeContinuities.length > 0 && (
-                  <div>
-                    <p className="text-sm text-white/60 mb-3">Continued themes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {yearOverYearInsight.data.themeContinuities.map((continuity) => (
-                        <span
-                          key={continuity.theme}
-                          className="text-xs text-white/50 px-2 py-1 rounded bg-white/5 capitalize"
-                        >
-                          {continuity.theme}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Emergences */}
-                {yearOverYearInsight.data.themeEmergences.length > 0 && (
-                  <div>
-                    <p className="text-sm text-white/60 mb-3">New themes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {yearOverYearInsight.data.themeEmergences.map((emergence) => (
-                        <span
-                          key={emergence.theme}
-                          className="text-xs text-emerald-400/70 px-2 py-1 rounded bg-emerald-500/10 capitalize"
-                        >
-                          {emergence.theme}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Disappearances */}
-                {yearOverYearInsight.data.themeDisappearances.length > 0 && (
-                  <div>
-                    <p className="text-sm text-white/60 mb-3">Faded themes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {yearOverYearInsight.data.themeDisappearances.map((disappearance) => (
-                        <span
-                          key={disappearance.theme}
-                          className="text-xs text-white/40 px-2 py-1 rounded bg-white/5 capitalize line-through"
-                        >
-                          {disappearance.theme}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Language shifts */}
-                {yearOverYearInsight.data.languageShifts.length > 0 && (
-                  <div>
-                    <p className="text-sm text-white/60 mb-3">Language shifts</p>
-                    <div className="space-y-2">
-                      {yearOverYearInsight.data.languageShifts.map((shift, idx) => (
-                        <p key={idx} className="text-sm text-white/60 italic">
-                          {shift.descriptor}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Notable absences */}
-                {yearOverYearInsight.data.notableAbsences.length > 0 && (
-                  <div>
-                    <p className="text-sm text-white/60 mb-3">Notable absences</p>
-                    <div className="space-y-2">
-                      {yearOverYearInsight.data.notableAbsences.map((absence, idx) => (
-                        <p key={idx} className="text-sm text-white/60">
-                          {absence.what} was present in {absence.previouslySeenIn} but absent in {absence.nowAbsentIn}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Contrast distribution visual */}
-              {contrastSignals && (
-                <div className="pt-8 border-t border-white/10">
-                  <ContrastDistribution
-                    leftLabel={String(selectedYear1)}
-                    rightLabel={String(selectedYear2)}
-                    leftPoints={contrastSignals.leftPoints}
-                    rightPoints={contrastSignals.rightPoints}
-                  />
-                </div>
-              )}
-
-              {/* Evidence */}
-              {yearOverYearInsight.evidence.length > 0 && (
-                <div className="pt-8 border-t border-white/10">
-                  <p className="text-sm text-white/60 mb-3">Evidence</p>
+              {narrative.themesIntroduced.length > 0 && (
+                <div className="pt-4 border-t border-white/10">
+                  <p className="text-sm text-white/60 mb-3">Themes introduced</p>
                   <div className="flex flex-wrap gap-2">
-                    {yearOverYearInsight.evidence.map((ev) => (
-                      <button
-                        key={ev.entryId}
-                        onClick={() => handleEvidenceClick(ev.entryId)}
-                        className="text-xs text-white/60 hover:text-white/80 px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
-                        title={ev.preview}
+                    {narrative.themesIntroduced.map((theme, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs text-emerald-400/70 px-2 py-1 rounded bg-emerald-500/10"
                       >
-                        {ev.preview?.slice(0, 30) || 'View reflection'}...
-                      </button>
+                        {theme}
+                      </span>
                     ))}
                   </div>
                 </div>
               )}
+
+              {narrative.themesFaded.length > 0 && (
+                <div className="pt-4 border-t border-white/10">
+                  <p className="text-sm text-white/60 mb-3">Themes faded</p>
+                  <div className="flex flex-wrap gap-2">
+                    {narrative.themesFaded.map((theme, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs text-white/40 px-2 py-1 rounded bg-white/5 line-through"
+                      >
+                        {theme}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-white/10">
+                <p className="text-xs text-white/40">
+                  Intensity: {narrative.intensityChange === 'up' ? 'increased' : narrative.intensityChange === 'down' ? 'decreased' : 'remained consistent'}
+                </p>
+              </div>
             </div>
           ) : selectedYear1 && selectedYear2 ? (
             <div className="text-white/60">
-              <p>Computing comparison...</p>
+              <p>Generating narrative...</p>
             </div>
           ) : (
             <div className="text-white/60">
