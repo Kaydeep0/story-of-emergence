@@ -408,6 +408,7 @@ import { FEATURE_LIFETIME_INVENTORY } from '../../lib/featureFlags';
 import { generateWeeklyArtifact } from '../../lib/artifacts/weeklyArtifact';
 import { generateTimelineArtifact } from '../../lib/artifacts/timelineArtifact';
 import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
+import { generateLifetimeArtifact } from '../../lib/artifacts/lifetimeArtifact';
 import { generateLifetimeCaption } from '../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../lib/artifacts/provenance';
 
@@ -500,6 +501,7 @@ export default function InsightsPage() {
   // Lifetime view state
   const [lifetimeLoading, setLifetimeLoading] = useState(false);
   const [lifetimeError, setLifetimeError] = useState<string | null>(null);
+  const [lifetimeReflectionEntries, setLifetimeReflectionEntries] = useState<ReflectionEntry[]>([]);
   const [lifetimeStats, setLifetimeStats] = useState<{
     windowLabel: string;
     totalEntries: number;
@@ -532,6 +534,10 @@ export default function InsightsPage() {
   // Summary artifact share state
   const [summaryArtifact, setSummaryArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
   const [showSummaryCapsuleDialog, setShowSummaryCapsuleDialog] = useState(false);
+
+  // Lifetime artifact share state
+  const [lifetimeArtifact, setLifetimeArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [showLifetimeCapsuleDialog, setShowLifetimeCapsuleDialog] = useState(false);
 
 
   // Helper to check if a spike card is expanded
@@ -1152,6 +1158,18 @@ export default function InsightsPage() {
       setSummaryArtifact(null);
     });
   }, [summaryReflectionEntries, address]);
+
+  // Generate lifetime artifact when lifetime reflections change
+  useEffect(() => {
+    if (!lifetimeReflectionEntries || lifetimeReflectionEntries.length === 0 || !address) {
+      setLifetimeArtifact(null);
+      return;
+    }
+    generateLifetimeArtifact(lifetimeReflectionEntries, address).then(setLifetimeArtifact).catch((err) => {
+      console.error('Failed to generate lifetime artifact', err);
+      setLifetimeArtifact(null);
+    });
+  }, [lifetimeReflectionEntries, address]);
 
   if (!mounted) return null;
 
