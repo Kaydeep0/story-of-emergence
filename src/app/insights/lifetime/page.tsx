@@ -414,28 +414,43 @@ export default function LifetimePage() {
 
         {/* Share Actions (hidden behind feature flag) */}
         {FEATURE_LIFETIME_INVENTORY && (
-          <div className="mb-6 p-4 border border-white/10 bg-white/5 rounded-lg">
-            <h2 className="text-sm text-white/70 mb-3">Share artifact</h2>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopyCaption}
-                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
-              >
-                Copy caption
-              </button>
-              <button
-                onClick={handleDownloadImage}
-                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
-              >
-                Download image
-              </button>
+          <div className="mb-6 flex gap-2 items-center">
+            <button
+              onClick={handleDownloadImage}
+              className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              PNG
+            </button>
+            <button
+              onClick={handleCopyCaption}
+              className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Caption
+            </button>
+            {typeof navigator !== 'undefined' && 'share' in navigator && (
               <button
                 onClick={handleWebShare}
-                className="px-4 py-2 text-sm text-white/60 border border-white/10 rounded hover:bg-white/5 transition-colors"
+                className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5"
               >
-                Web share
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"></circle>
+                  <circle cx="6" cy="12" r="3"></circle>
+                  <circle cx="18" cy="19" r="3"></circle>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                Share
               </button>
-            </div>
+            )}
           </div>
         )}
 
