@@ -1103,10 +1103,22 @@ export default function InsightsPage() {
     return null;
   }
 
-  if (!mounted) return null;
-
-  // Derive latest insight if available
+  // Derive latest insight if available (before early return)
   const latest = insights.length > 0 ? insights[0] : null;
+
+  // Generate weekly artifact when latest insight changes (moved to top level to avoid hooks order violation)
+  useEffect(() => {
+    if (!latest || !address) {
+      setWeeklyArtifact(null);
+      return;
+    }
+    generateWeeklyArtifact(latest, address).then(setWeeklyArtifact).catch((err) => {
+      console.error('Failed to generate weekly artifact', err);
+      setWeeklyArtifact(null);
+    });
+  }, [latest, address]);
+
+  if (!mounted) return null;
 
   // Sanctuary principle:
   // This UI should reduce cognitive load over time.
