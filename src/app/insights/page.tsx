@@ -846,6 +846,10 @@ export default function InsightsPage() {
           items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
         );
 
+        if (!cancelled) {
+          setLifetimeReflectionEntries(reflectionEntries);
+        }
+
         const window = lifetimeWindow(reflectionEntries);
 
         // Convert reflections to pseudo events for the window engine
@@ -2730,6 +2734,14 @@ export default function InsightsPage() {
           senderWallet={address}
           isOpen={showSummaryCapsuleDialog}
           onClose={() => setShowSummaryCapsuleDialog(false)}
+        />
+      )}
+      {address && lifetimeArtifact && (
+        <ShareCapsuleDialog
+          artifact={lifetimeArtifact}
+          senderWallet={address}
+          isOpen={showLifetimeCapsuleDialog}
+          onClose={() => setShowLifetimeCapsuleDialog(false)}
         />
       )}
 
