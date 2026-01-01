@@ -2482,18 +2482,18 @@ export default function InsightsPage() {
                   );
                 })()}
                 
-                {/* Share Capsule Dialog */}
+                {/* Share Capsule Dialog - Weekly */}
                 {address && latest && (() => {
-                  const [weeklyArtifact, setWeeklyArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+                  const [weeklyArtifactForDialog, setWeeklyArtifactForDialog] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
                   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
                   
                   useEffect(() => {
-                    generateWeeklyArtifact(latest, address).then(setWeeklyArtifact).catch(() => setWeeklyArtifact(null));
+                    generateWeeklyArtifact(latest, address).then(setWeeklyArtifactForDialog).catch(() => setWeeklyArtifactForDialog(null));
                   }, [latest, address]);
                   
-                  return weeklyArtifact ? (
+                  return weeklyArtifactForDialog ? (
                     <ShareCapsuleDialog
-                      artifact={weeklyArtifact}
+                      artifact={weeklyArtifactForDialog}
                       senderWallet={address}
                       isOpen={showCapsuleDialog}
                       onClose={() => setShowCapsuleDialog(false)}
