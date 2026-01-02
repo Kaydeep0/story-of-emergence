@@ -19,7 +19,7 @@ export const LENSES: Record<LensKey, Lens> = {
   weekly: {
     key: 'weekly',
     label: 'Weekly',
-    route: '/insights',
+    route: '/insights/weekly',
     description: 'Your encrypted activity this week',
     status: 'available',
   },

@@ -20,8 +20,9 @@ export function InsightsTabs() {
     if (pathname === '/insights/distributions') return 'distributions';
     if (pathname === '/insights/yoy' || pathname === '/insights/compare' || pathname.startsWith('/insights/year-over-year')) return 'yoy';
     if (pathname === '/insights/lifetime') return 'lifetime';
-    // Default: /insights and /insights/weekly both highlight Weekly
-    if (pathname === '/insights' || pathname.startsWith('/insights/weekly')) return 'weekly';
+    // Weekly route
+    if (pathname === '/insights/weekly') return 'weekly';
+    // /insights redirects to summary, so don't highlight weekly there
     return null;
   };
 

@@ -74,14 +74,18 @@ export function normalizeInsightCard(input: LegacyInsightCard | InsightCardBase 
     return 'medium'; // Default fallback
   };
 
-  // Extract headline (prefer headline, fallback to title)
-  const headline = input.headline || input.title || 'Insight';
+  // Extract headline (prefer headline, fallback to title) - force string
+  const headline = String(input.headline || input.title || 'Insight');
   
-  // Extract summary (prefer summary, fallback to explanation)
-  const summary = input.summary || input.explanation || '';
+  // Extract summary (prefer summary, fallback to explanation) - force string
+  const summary = String(input.summary || input.explanation || '');
   
-  // Extract ID (must be string)
-  const id = typeof input.id === 'string' ? input.id : JSON.stringify(input.id ?? {});
+  // Extract ID (must be string) - ensure it's always a stable string
+  const id = typeof input.id === 'string' && input.id.length > 0 
+    ? input.id 
+    : typeof input.id === 'object' && input.id !== null
+    ? JSON.stringify(input.id)
+    : `insight-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
   return {
     id,
