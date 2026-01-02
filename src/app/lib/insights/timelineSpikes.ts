@@ -211,8 +211,13 @@ export function computeTimelineSpikes(entries: ReflectionEntry[]): TimelineSpike
 export function itemToReflectionEntry(
   item: {
     id: string;
-    createdAt: Date;
-    deletedAt: Date | null;
+    createdAt?: Date | string;
+    created_at?: Date | string;
+    inserted_at?: Date | string;
+    timestamp?: Date | string;
+    date?: Date | string;
+    deletedAt?: Date | string | null;
+    deleted_at?: Date | string | null;
     plaintext: unknown;
   },
   getSourceIdFor?: (reflectionId: string) => string | undefined
@@ -254,10 +259,38 @@ export function itemToReflectionEntry(
     text = JSON.stringify(item.plaintext);
   }
   
+  // Normalize createdAt to ISO string - check multiple possible field names
+  const created =
+    item.createdAt ??
+    (item as any).created_at ??
+    (item as any).inserted_at ??
+    (item as any).timestamp ??
+    (item as any).date;
+  
+  let createdAt: string;
+  if (created) {
+    const date = typeof created === 'string' ? new Date(created) : created;
+    createdAt = date instanceof Date && !isNaN(date.getTime()) 
+      ? date.toISOString() 
+      : new Date().toISOString();
+  } else {
+    createdAt = new Date().toISOString();
+  }
+  
+  // Normalize deletedAt to ISO string or null
+  const deleted = item.deletedAt ?? (item as any).deleted_at;
+  const deletedAt: string | null = deleted
+    ? (typeof deleted === 'string' 
+        ? deleted 
+        : deleted instanceof Date 
+        ? deleted.toISOString() 
+        : null)
+    : null;
+  
   return {
     id: item.id,
-    createdAt: item.createdAt.toISOString(),
-    deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
+    createdAt,
+    deletedAt,
     sourceId: sourceId || undefined,
     plaintext: text,
   };

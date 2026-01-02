@@ -120,6 +120,7 @@ export default function WeeklyPage() {
 
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
+      console.log("weekly cards", cards.length, cards.map(c => c.headline ?? c.title ?? c.kind));
       return cards.map(normalizeInsightCard);
     } catch (err) {
       console.error('Failed to compute weekly insights:', err);
