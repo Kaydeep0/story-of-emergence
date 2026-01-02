@@ -359,9 +359,9 @@ export default function TimelinePage() {
                               Entries on this day
                             </p>
                             <ul className="space-y-1.5">
-                              {visibleEntries.map((ev) => (
+                              {visibleEntries.map((ev, evIndex) => (
                                 <li
-                                  key={ev.entryId}
+                                  key={String(ev.entryId) || `evidence-${dateKey}-${evIndex}`}
                                   className="flex items-center gap-2 text-xs"
                                 >
                                   <span className="text-white/40 min-w-[60px]">
@@ -415,9 +415,9 @@ export default function TimelinePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {clusterInsights.map((cluster) => (
+                  {clusterInsights.map((cluster, clusterIndex) => (
                     <div
-                      key={String(cluster.id) || `cluster-${clusterInsights.indexOf(cluster)}`}
+                      key={String(cluster.id) || `cluster-${clusterIndex}`}
                       className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3 cursor-pointer hover:bg-violet-500/10 transition-colors"
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button')) return;
