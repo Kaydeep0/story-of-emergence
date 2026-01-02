@@ -147,18 +147,25 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
 
 /**
  * Confidence badge component
+ * Defensive: handles undefined/null confidence gracefully
  */
-function ConfidenceBadge({ confidence }: { confidence: InsightCard['confidence'] }) {
-  const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+function ConfidenceBadge({
+  confidence,
+}: {
+  confidence?: InsightCard['confidence'] | string | null;
+}) {
+  const value = (confidence ?? 'medium').toString();
+  const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Medium';
+
   const colorClass =
-    confidence === 'high'
+    value === 'high'
       ? 'bg-gray-800 text-white'
-      : confidence === 'medium'
+      : value === 'low'
       ? 'bg-gray-200 text-gray-800'
-      : 'bg-gray-100 text-gray-600';
+      : 'bg-gray-500 text-white';
 
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${colorClass}`}>
       {label}
     </span>
   );
