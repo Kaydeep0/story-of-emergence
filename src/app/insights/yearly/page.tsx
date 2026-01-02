@@ -22,7 +22,6 @@ import { computeDistributionLayer, computeWindowDistribution, computeActiveDays,
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
-import { YearlyWrapShareCard } from '../../components/share/YearlyWrapShareCard';
 import { extractKeywords, computeWordShift, getMoments, MeaningCard, Glossary } from './components/YearlyMeaning';
 import { IdentityLine } from '../../components/yearly/IdentityLine';
 import { YearShapeGlyph } from '../../components/yearly/YearShapeGlyph';
@@ -32,9 +31,12 @@ import { determineArchetype } from '../../lib/yearlyArchetype';
 import { SharePackBuilder } from './components/SharePackBuilder';
 import { UnderlyingRhythmCard } from './components/UnderlyingRhythmCard';
 import { MirrorSection } from './components/MirrorSection';
-import { generateYearlyArtifact } from '../../../lib/artifacts/yearlyArtifact';
-import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
+import { buildEmergenceMap } from '../../lib/philosophy/emergenceMap';
+import { EmergenceMapViz } from '../../components/philosophy/EmergenceMapViz';
 import { ShareActionsBar } from '../components/ShareActionsBar';
+import { buildMeaningCapsule } from '../../lib/share/meaningCapsule';
+import { buildPublicSharePayload } from '../../lib/share/publicSharePayload';
+import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
 
 // Yearly Wrap v1 - Locked
 const YEARLY_WRAP_VERSION = 'v1' as const;
@@ -55,9 +57,7 @@ export default function YearlyWrapPage() {
   const [includeNumbers, setIncludeNumbers] = useState(false);
   const [privateMode, setPrivateMode] = useState(true);
 
-  // Yearly artifact share state (moved to top level to avoid hooks order violation)
-  const [yearlyArtifact, setYearlyArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
-  const [showYearlyCapsuleDialog, setShowYearlyCapsuleDialog] = useState(false);
+  // Removed yearlyArtifact state - sharing is handled by SharePackBuilder
 
   const connected = isConnected && !!address;
 
@@ -251,18 +251,76 @@ export default function YearlyWrapPage() {
     return distributionResult.topDays[0]?.date;
   }, [distributionResult]);
 
-  // Generate yearly artifact when reflections and distribution change (moved to top level to avoid hooks order violation)
-  useEffect(() => {
-    if (!address || !reflections || reflections.length === 0 || !distributionResult) {
-      setYearlyArtifact(null);
-      return;
+  // Compute spikeCount for EmergenceMap (observer layer computation)
+  const spikeCount = useMemo(() => {
+    if (!distributionResult || !distributionResult.dailyCounts || distributionResult.dailyCounts.length === 0) {
+      return 0;
     }
-    generateYearlyArtifact(reflections, distributionResult, address).then(setYearlyArtifact).catch((err) => {
-      console.error('Failed to generate yearly artifact', err);
-      setYearlyArtifact(null);
-    });
-  }, [reflections, distributionResult, address]);
+    
+    const dailyCounts = distributionResult.dailyCounts;
+    const nonZeroCounts = dailyCounts.filter(c => c > 0);
+    
+    if (nonZeroCounts.length === 0) {
+      return 0;
+    }
+    
+    // Compute median
+    const sortedNonZero = [...nonZeroCounts].sort((a, b) => a - b);
+    const median = sortedNonZero.length % 2 === 0
+      ? (sortedNonZero[sortedNonZero.length / 2 - 1] + sortedNonZero[sortedNonZero.length / 2]) / 2
+      : sortedNonZero[Math.floor(sortedNonZero.length / 2)];
+    
+    const effectiveMedian = median > 0 ? median : 1;
+    const spikeThreshold = Math.max(3, effectiveMedian * 2);
+    
+    // Count spike days: ≥3 entries AND ≥2× median
+    return dailyCounts.filter(count => count >= spikeThreshold && count >= 3).length;
+  }, [distributionResult]);
 
+  // Build EmergenceMap from existing insight data
+  const emergenceMap = useMemo(() => {
+    if (!distributionResult || !windowDistribution) return null;
+    
+    // Map windowDistribution.classification to EmergenceMapInput format
+    const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+      windowDistribution.classification === 'normal' ? 'normal'
+      : windowDistribution.classification === 'lognormal' ? 'lognormal'
+      : windowDistribution.classification === 'powerlaw' ? 'powerlaw'
+      : 'mixed';
+    
+    return buildEmergenceMap({
+      distributionLabel,
+      concentration: distributionResult.stats.top10PercentDaysShare,
+      spikeCount,
+    });
+  }, [distributionResult, windowDistribution, spikeCount]);
+
+  // Build PublicSharePayload for public share link
+  const publicSharePayload = useMemo<PublicSharePayload | null>(() => {
+    if (!identitySentence || !emergenceMap) return null;
+    
+    try {
+      // Build MeaningCapsule from yearly insights
+      const capsule = buildMeaningCapsule({
+        insightSentence: identitySentence,
+        horizon: 'yearly',
+        emergenceMap: {
+          regime: emergenceMap.regime,
+          position: emergenceMap.position,
+        },
+      });
+      
+      // Build PublicSharePayload
+      return buildPublicSharePayload(capsule, {
+        shareFormat: 'image',
+        contextHint: 'observational',
+        origin: 'yearly',
+      });
+    } catch (error) {
+      console.error('Failed to build public share payload:', error);
+      return null;
+    }
+  }, [identitySentence, emergenceMap]);
 
   // Handle saving highlight
   const handleSaveHighlight = async () => {
@@ -355,7 +413,6 @@ export default function YearlyWrapPage() {
 
   return (
     <section className="max-w-4xl mx-auto px-4 py-10">
-        <h1 className="text-2xl font-semibold text-center mb-6">Yearly Wrap</h1>
 
         {/* Loading State */}
         {loading && (
@@ -378,46 +435,18 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Yearly Wrap Content - 5 Narrative Beats: Identity → Behavior → Pattern → Memory → Implication */}
+        {/* Yearly Wrap Content - Organized for clarity and completeness */}
         {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && windowDistribution && (
           <div className="space-y-8">
-            {/* Year in review header context */}
-            <div className="pb-4">
-              <p className="text-sm text-white/60 italic">
+            {/* Header: Year and context */}
+            <div className="space-y-2">
+              <h1 className="text-3xl sm:text-4xl font-semibold text-center">Yearly Wrap</h1>
+              <p className="text-sm text-white/60 text-center italic max-w-2xl mx-auto">
                 A reflection of how this year concentrated your attention, effort, and emotion.
               </p>
             </div>
 
-            {/* Share Actions */}
-            <ShareActionsBar
-              artifact={yearlyArtifact}
-              senderWallet={address}
-              encryptionReady={encryptionReady}
-              onSendPrivately={() => setShowYearlyCapsuleDialog(true)}
-            />
-
-            {/* Hidden export card for share */}
-            <div 
-              style={{ 
-                position: 'absolute', 
-                left: '-9999px', 
-                top: 0,
-                visibility: 'hidden',
-              }}
-            >
-              <YearlyWrapShareCard
-                id="yearly-wrap-export-card"
-                mode="export"
-                year={new Date().getFullYear()}
-                classificationLabel={formatClassification(windowDistribution.classification)}
-                totalEntries={distributionResult.totalEntries}
-                activeDays={computeActiveDays(distributionResult.dailyCounts)}
-                spikeRatio={distributionResult.stats.spikeRatio}
-                top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-              />
-            </div>
-
-            {/* 1️⃣ IDENTITY: Year, Badge (smaller), Sentence (larger) */}
+            {/* 1️⃣ IDENTITY: One-sentence summary with year */}
             <IdentityLine
               totalEntries={distributionResult.totalEntries}
               activeDays={computeActiveDays(distributionResult.dailyCounts)}
@@ -427,7 +456,73 @@ export default function YearlyWrapPage() {
               onSentenceChange={setIdentitySentence}
             />
 
-            {/* 3️⃣ BEHAVIOR: The shape of your year (moved immediately after Identity) */}
+            {/* Share Actions Bar - Public share link */}
+            {publicSharePayload && (
+              <ShareActionsBar
+                artifact={null}
+                senderWallet={address}
+                encryptionReady={encryptionReady}
+                publicSharePayload={publicSharePayload}
+              />
+            )}
+
+            {/* Archetype - Prominently displayed if present */}
+            {archetype && (
+              <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
+                <div className="text-xs text-white/50 mb-2 uppercase tracking-wide">Your Archetype</div>
+                <h2 className="text-xl sm:text-2xl font-semibold text-white/90 mb-2">{archetype.name}</h2>
+                <p className="text-sm sm:text-base text-white/70 leading-relaxed italic mb-2">{archetype.tagline}</p>
+                <p className="text-sm sm:text-base text-white/70 leading-relaxed">{archetype.explanation}</p>
+              </div>
+            )}
+
+            {/* Emergence Map Visualization - Determinism → Emergence spectrum */}
+            {emergenceMap && (
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-6 sm:p-8">
+                <div className="text-xs text-white/50 mb-4 uppercase tracking-wide">Your Position</div>
+                <EmergenceMapViz map={emergenceMap} />
+                <p className="text-xs text-white/50 mt-4 text-center">
+                  Your activity moves along a spectrum from routine patterns to emergent concentration over time.
+                </p>
+                
+                {/* Emergence Interpretation Panel - Philosophy-aligned orientation */}
+                <div className="mt-6 pt-6 border-t border-white/10 space-y-4">
+                  <div>
+                    <h4 className="text-xs text-white/60 mb-1.5 font-medium">What this shows</h4>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      This map reflects how your reflection patterns have distributed themselves over time, from consistent routines to concentrated moments of intensity.
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs text-white/60 mb-1.5 font-medium">How to read it</h4>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      The position marker indicates where your activity sits on a spectrum between predictable patterns and emergent concentration. The four zones represent different organizational structures.
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-xs text-white/60 mb-1.5 font-medium">What it is not</h4>
+                    <p className="text-xs text-white/50 leading-relaxed">
+                      This is not a score, a goal, or a recommendation. It is an observation of how your attention has moved, not an instruction for how it should move.
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Continuity Anchor - Acknowledges time passing without concluding */}
+                <p className="text-xs text-white/40 mt-6 pt-4 text-center italic border-t border-white/5">
+                  These patterns continue to unfold as time passes.
+                </p>
+              </div>
+            )}
+
+            {/* 2️⃣ DISTRIBUTION: Pattern label and key numbers */}
+            <UnderlyingRhythmCard
+              distributionResult={distributionResult}
+              windowDistribution={windowDistribution}
+              mostCommonDayCount={mostCommonDayCount}
+              formatClassification={formatClassification}
+            />
+
+            {/* 3️⃣ BEHAVIOR: Visual representation of your year */}
             {distributionResult.dailyCounts.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
                 <p className="text-sm text-white/70 mb-4 italic">This is how your attention actually moved.</p>
@@ -439,16 +534,33 @@ export default function YearlyWrapPage() {
               </div>
             )}
 
-            {/* Divider before pattern analysis */}
-            <div className="border-t border-white/10" />
-
-            {/* 2️⃣ PATTERN: Your underlying rhythm (collapsible) */}
-            <UnderlyingRhythmCard
-              distributionResult={distributionResult}
-              windowDistribution={windowDistribution}
-              mostCommonDayCount={mostCommonDayCount}
-              formatClassification={formatClassification}
+            {/* 4️⃣ KEY MOMENTS: Three moments that shaped your year */}
+            <ThreeMoments
+              entries={reflections}
+              topSpikeDate={topSpikeDate}
+              formatDate={formatDate}
             />
+
+            {/* 5️⃣ MIRROR INSIGHT: Recurring themes and reflection */}
+            <MirrorSection
+              mirrorInsights={mirrorInsights}
+              formatDate={formatDate}
+              entries={reflections}
+              topSpikeDates={distributionResult ? getTopSpikeDates(distributionResult, 3) : []}
+            />
+
+            {/* Mirror Insight - Narrative reflection */}
+            {narrativeInsight && (
+              <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
+                <h3 className="text-lg font-semibold mb-3">A year, observed</h3>
+                <p className="text-sm sm:text-base text-white/80 leading-relaxed mb-4">
+                  {narrativeInsight.explanation}
+                </p>
+                <p className="text-xs text-white/50 italic">
+                  This wasn&apos;t a highlight reel. It was a record of attention, taken as it actually moved. Nothing here was optimized—only noticed.
+                </p>
+              </div>
+            )}
 
             {/* Why this mattered - Emotional hinge */}
             <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
@@ -458,7 +570,7 @@ export default function YearlyWrapPage() {
               </p>
             </div>
 
-            {/* Share Pack Builder - Secondary, collapsible */}
+            {/* Share Pack Builder - Create shareable artifact */}
             <SharePackBuilder
               year={new Date().getFullYear()}
               identitySentence={identitySentence || 'My year in reflection.'}
@@ -487,63 +599,8 @@ export default function YearlyWrapPage() {
               encryptionReady={encryptionReady}
             />
 
-            {/* 4️⃣ MEMORY: Mirror section (Recurring words + Three moments, word shift hidden by default) */}
-            <MirrorSection
-              mirrorInsights={mirrorInsights}
-              formatDate={formatDate}
-              entries={reflections}
-              topSpikeDates={distributionResult ? getTopSpikeDates(distributionResult, 3) : []}
-            />
-
-            {/* Growth Story - Keep but less prominent */}
+            {/* Growth Story - Additional context */}
             {reflections.length >= 10 && <GrowthStory entries={reflections} />}
-
-            {/* Three Moments - Keep */}
-            <ThreeMoments
-              entries={reflections}
-              topSpikeDate={topSpikeDate}
-              formatDate={formatDate}
-            />
-
-            {/* Narrative Insight Card - Keep */}
-            {narrativeInsight && (
-              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-orange-200">{narrativeInsight.title}</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                  </div>
-                </div>
-                <p className="text-sm text-white/70">{narrativeInsight.explanation}</p>
-                <p className="text-xs text-white/40">Computed locally</p>
-              </div>
-            )}
-
-
-            {/* 5️⃣ IMPLICATION: Future rhythm (Last section, emphasized) */}
-            {archetype && (
-              <div className="rounded-2xl border-2 border-white/20 bg-white/10 p-8 sm:p-10">
-                <h3 className="text-xl sm:text-2xl font-semibold mb-4">If you keep this rhythm…</h3>
-                <p className="text-base sm:text-lg text-white/90 leading-relaxed">
-                  {archetype.name.includes('Deep Diver')
-                    ? 'Reflection patterns show periods of activity and pause.'
-                    : archetype.name.includes('Steady Builder')
-                    ? 'Consistent activity observed. Patterns continue over time.'
-                    : archetype.name.includes('Sprinter')
-                    ? 'Activity spikes observed. Patterns vary in frequency.'
-                    : 'Activity patterns vary over time.'}
-                </p>
-              </div>
-            )}
-
-            {/* Closing Reflection - Final section */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
-              <h3 className="text-lg font-semibold mb-3">A year, observed</h3>
-              <p className="text-sm sm:text-base text-white/75 leading-relaxed">
-                This wasn&apos;t a highlight reel. It was a record of attention, taken as it actually moved. Nothing here was optimized—only noticed.
-              </p>
-            </div>
 
             {/* Footer note */}
             <div className="pt-6 border-t border-white/10">
@@ -554,15 +611,6 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Share Capsule Dialog */}
-        {address && yearlyArtifact && (
-          <ShareCapsuleDialog
-            artifact={yearlyArtifact}
-            senderWallet={address}
-            isOpen={showYearlyCapsuleDialog}
-            onClose={() => setShowYearlyCapsuleDialog(false)}
-          />
-        )}
       </section>
   );
 }

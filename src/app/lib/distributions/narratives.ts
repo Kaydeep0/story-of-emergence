@@ -56,11 +56,20 @@ export function generateNarrative(
 /**
  * Generate narrative text based on scope and insight shape
  * Pure function, deterministic templates
+ * Always returns an object with headline and summary, even for unknown cases
  */
 function generateNarrativeText(
   scope: TimeScope,
   insight: DistributionInsight
 ): { headline: string; summary: string } {
+  // Guard: if insight is missing or invalid, return safe default
+  if (!insight || !insight.shape) {
+    return {
+      headline: 'Distribution insight',
+      summary: 'Not enough data yet to generate a narrative for this view.',
+    };
+  }
+
   switch (scope) {
     case 'week': {
       switch (insight.shape) {
@@ -136,6 +145,13 @@ function generateNarrativeText(
           };
       }
     }
+
+    default:
+      // Fallback for any unrecognized scope
+      return {
+        headline: 'Distribution insight',
+        summary: 'Not enough data yet to generate a narrative for this view.',
+      };
   }
 }
 

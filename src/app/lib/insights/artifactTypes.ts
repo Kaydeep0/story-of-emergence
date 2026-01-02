@@ -3,34 +3,28 @@
 // Used by Weekly, Yearly, Lifetime, and Year over Year
 
 import type { InsightCard } from './types';
-import type { PatternNarrative } from '../../patternMemory/patternNarratives';
+import type { PatternNarrative } from '../patternMemory/patternNarratives';
 
 /**
  * Time horizon for insight computation
  */
-export type InsightHorizon = 'weekly' | 'yearly' | 'lifetime' | 'yoy';
+export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy';
 
 /**
  * Canonical insight artifact model
  * All computed insights follow this structure regardless of horizon
  */
 export type InsightArtifact = {
-  id: string;
   horizon: InsightHorizon;
   window: {
-    startISO: string;
-    endISO: string;
+    kind: 'week' | 'month' | 'year' | 'custom';
+    start: string; // ISO string
+    end: string; // ISO string
     timezone?: string;
   };
-  createdAtISO: string;
+  createdAt: string; // ISO string
   cards: InsightCard[];
-  meta: {
-    wallet?: string;
-    entriesCount?: number;
-    eventsCount?: number;
-    version: number;
-  };
-  /** Phase 5.4: Optional pattern narratives attached to artifact (not used by UI yet) */
+  /** Phase 5.4: Optional pattern narratives attached to artifact */
   narratives?: PatternNarrative[];
 };
 

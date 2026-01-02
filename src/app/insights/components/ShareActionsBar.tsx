@@ -9,10 +9,13 @@
  * Phase 3.4: Adds privacy context, confirmation modal, and audit logging.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
+import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
+import { buildPublicShareUrl } from '../../lib/share/encodePublicSharePayload';
+import { ShareToWalletDialog } from './ShareToWalletDialog';
 
 /**
  * Canonical privacy label string
@@ -32,6 +35,8 @@ export interface ShareActionsBarProps {
   onSendPrivately?: () => void; // Optional callback for external dialog handling
   // Optional: fallback data for when artifact signals are empty but UI has content
   fallbackPatterns?: string[]; // For Weekly: latest.topGuessedTopics
+  // Optional: PublicSharePayload for generating public share URL
+  publicSharePayload?: PublicSharePayload | null;
 }
 
 /**
@@ -111,7 +116,7 @@ function normalizeWeeklyExport(artifact: ShareArtifact, fallbackPatterns?: strin
 /**
  * Generate PNG from artifact
  */
-async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: string[]): Promise<Blob> {
+export async function generateArtifactPNG(artifact: ShareArtifact, fallbackPatterns?: string[]): Promise<Blob> {
   if (!artifact.artifactId) {
     throw new Error('Artifact missing identity: artifactId is required');
   }
@@ -281,7 +286,7 @@ function formatDateRangeForCaption(startDate: string | null, endDate: string | n
  * 
  * Generated privately from encrypted data.
  */
-function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[]): string {
+export function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[]): string {
   const lines: string[] = [];
   
   // Lens name
@@ -352,7 +357,7 @@ function buildShareCaption(artifact: ShareArtifact, fallbackPatterns?: string[])
  * - Lifetime: soe-lifetime-YYYY-MM-DD.png (generation date)
  * - Summary: soe-summary-YYYY-MM-DD.png (generation date)
  */
-function generateArtifactFilename(artifact: ShareArtifact): string {
+export function generateArtifactFilename(artifact: ShareArtifact): string {
   const kind = artifact.kind;
   
   // Extract dates (YYYY-MM-DD format)
@@ -520,24 +525,51 @@ function ShareConfirmationModal({
   );
 }
 
-export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns }: ShareActionsBarProps) {
+export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns, publicSharePayload }: ShareActionsBarProps) {
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
+  const [showWalletDialog, setShowWalletDialog] = useState(false);
   const [linkedInCaptionCopied, setLinkedInCaptionCopied] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close share menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(event.target as Node)) {
+        setShowShareMenu(false);
+      }
+    }
+
+    if (showShareMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showShareMenu]);
 
   // Phase 3.4: Buttons must be visible but disabled when vault is not ready
-  // Only return null if artifact is missing (no data to share at all)
-  if (!artifact) {
+  // Only return null if both artifact and publicSharePayload are missing (no data to share at all)
+  // Also check if onSendPrivately is provided (for Weekly view)
+  const hasPrivateShare = artifact !== null || onSendPrivately !== undefined;
+  const hasPublicShare = publicSharePayload !== null && publicSharePayload !== undefined;
+  
+  if (!hasPrivateShare && !hasPublicShare) {
     return null;
   }
 
-  const caption = buildShareCaption(artifact, fallbackPatterns);
-  const hasContent = hasShareableContent(artifact, fallbackPatterns);
+  // Handle both artifact-based and publicSharePayload-based sharing
+  const caption = artifact ? buildShareCaption(artifact, fallbackPatterns) : '';
+  const hasContent = artifact 
+    ? hasShareableContent(artifact, fallbackPatterns) 
+    : (publicSharePayload !== null && publicSharePayload !== undefined);
   const shareConfirmed = hasShareConfirmed();
   
   // Phase 3.4: Disable sharing when vault is not ready
   // Conditions: wallet disconnected, encryption key missing, or zero entries
+  // For publicSharePayload, only require encryptionReady (payload is already built)
   const isDisabled = !senderWallet || !encryptionReady || !hasContent;
   
   // Phase 3.4: Specific tooltip messages for each disabled condition
@@ -670,13 +702,17 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   };
 
   const handleSendPrivately = () => {
-    // Phase 3.4: "Send privately" is NOT an external share, does NOT require confirmation
+    // "Send privately" always opens ShareCapsuleDialog (never system share sheet)
     // It uses encrypted capsules, so it's safe and doesn't need the warning modal
+    
+    // If onSendPrivately callback exists, use it (for Weekly, Summary, etc. that manage their own dialogs)
     if (onSendPrivately) {
       onSendPrivately();
-    } else {
-      setShowCapsuleDialog(true);
+      return;
     }
+    
+    // Otherwise, open internal dialog directly
+    setShowCapsuleDialog(true);
   };
 
   const handleXShare = () => {
@@ -774,6 +810,45 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
     executeWithConfirmation(doShare, 'imessage', true);
   };
 
+  const handleCopyLink = async () => {
+    if (!publicSharePayload) {
+      toast.error('Share link not available');
+      return;
+    }
+
+    const doCopy = async () => {
+      try {
+        const url = buildPublicShareUrl(publicSharePayload);
+        if (!url) {
+          toast.error('Failed to generate share link');
+          return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = url;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          textarea.style.left = '-999999px';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        toast('Link copied');
+      } catch (err) {
+        console.error('Failed to copy link:', err);
+        toast.error('Failed to copy link');
+      }
+    };
+
+    // Copy link is external share, requires confirmation
+    executeWithConfirmation(doCopy, 'copy_link', true);
+  };
+
   // Phase 3.4: Get specific tooltip for disabled state
   const disabledTooltip = getDisabledTooltip();
 
@@ -782,121 +857,170 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       <div className="mb-6 space-y-3">
         {/* Primary actions row */}
         <div className="flex flex-wrap gap-2 items-center">
-          <button
-            onClick={isDisabled ? undefined : handleCopyCaption}
-            disabled={isDisabled}
-            className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={disabledTooltip || 'Copy caption to clipboard'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            Caption
-          </button>
-          <button
-            onClick={isDisabled ? undefined : handleDownloadImage}
-            disabled={isDisabled}
-            className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={disabledTooltip || 'Download PNG image'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            PNG
-          </button>
-          {typeof navigator !== 'undefined' && 'share' in navigator ? (
+          {artifact && (
+            <>
+              <button
+                onClick={isDisabled ? undefined : handleCopyCaption}
+                disabled={isDisabled}
+                className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={disabledTooltip || 'Copy caption to clipboard'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Caption
+              </button>
+              <button
+                onClick={isDisabled ? undefined : handleDownloadImage}
+                disabled={isDisabled}
+                className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={disabledTooltip || 'Download PNG image'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                PNG
+              </button>
+            </>
+          )}
+          {/* Share button with menu - only show if we have public share or artifact */}
+          {(hasPublicShare || artifact) && (
+            <div className="relative" ref={shareMenuRef}>
+              <button
+                onClick={isDisabled ? undefined : () => setShowShareMenu(!showShareMenu)}
+                disabled={isDisabled}
+                className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={disabledTooltip || 'Share options'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"></circle>
+                  <circle cx="6" cy="12" r="3"></circle>
+                  <circle cx="18" cy="19" r="3"></circle>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                Share
+              </button>
+              
+              {/* Share menu dropdown */}
+              {showShareMenu && !isDisabled && (
+                <div className="absolute top-full left-0 mt-1 bg-black border border-white/20 rounded-lg shadow-lg z-50 min-w-[160px]">
+                  {publicSharePayload && (
+                    <button
+                      onClick={() => {
+                        handleCopyLink();
+                        setShowShareMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                      Copy link
+                    </button>
+                  )}
+                  {artifact && typeof navigator !== 'undefined' && 'share' in navigator && (
+                    <button
+                      onClick={() => {
+                        handleWebShare();
+                        setShowShareMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                      </svg>
+                      Native share
+                    </button>
+                  )}
+                  {artifact && (
+                    <>
+                      {publicSharePayload || (typeof navigator !== 'undefined' && 'share' in navigator) ? (
+                        <div className="border-t border-white/10 my-1"></div>
+                      ) : null}
+                      <button
+                        onClick={() => {
+                          setShowWalletDialog(true);
+                          setShowShareMenu(false);
+                        }}
+                        className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                        Share to wallet
+                      </button>
+                      <div className="border-t border-white/10 my-1"></div>
+                      <button
+                        onClick={() => {
+                          handleXShare();
+                          setShowShareMenu(false);
+                        }}
+                        className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        X (Twitter)
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleLinkedInShare();
+                          setShowShareMenu(false);
+                        }}
+                        className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                        LinkedIn
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleIMessageShare();
+                          setShowShareMenu(false);
+                        }}
+                        className="w-full px-3 py-2 text-xs text-white/70 hover:text-white hover:bg-white/10 flex items-center gap-2 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        iMessage
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {hasPrivateShare && (
             <button
-              onClick={isDisabled ? undefined : handleWebShare}
+              onClick={isDisabled ? undefined : handleSendPrivately}
               disabled={isDisabled}
               className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={disabledTooltip || 'Share via native share dialog'}
+              title={disabledTooltip || 'Send privately to one recipient'}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
-              Share
-            </button>
-          ) : (
-            <button
-              disabled
-              className="px-3 py-1.5 text-xs text-white/20 flex items-center gap-1.5 cursor-not-allowed"
-              title="Web share not supported"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-              </svg>
-              Share
+              Send privately
             </button>
           )}
-          <button
-            onClick={isDisabled ? undefined : handleSendPrivately}
-            disabled={isDisabled}
-            className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={disabledTooltip || 'Send privately to one recipient'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            Send privately
-          </button>
         </div>
 
-        {/* Platform helper links */}
-        {hasContent && encryptionReady && (
-          <div className="flex flex-wrap gap-2 items-center pt-1 border-t border-white/5">
-            <span className="text-xs text-white/40 mr-1">Share to:</span>
-            <button
-              onClick={handleXShare}
-              className="px-2 py-1 text-xs text-white/50 hover:text-white/70 transition-colors flex items-center gap-1"
-              title="Open X (Twitter) with caption pre-filled"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-              </svg>
-              X
-            </button>
-            <button
-              onClick={handleLinkedInShare}
-              className="px-2 py-1 text-xs text-white/50 hover:text-white/70 transition-colors flex items-center gap-1"
-              title={linkedInCaptionCopied ? 'Caption copied! Open LinkedIn and paste' : 'Copy caption and open LinkedIn'}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-              </svg>
-              {linkedInCaptionCopied ? 'Copied' : 'LinkedIn'}
-            </button>
-            <button
-              onClick={handleIMessageShare}
-              className="px-2 py-1 text-xs text-white/50 hover:text-white/70 transition-colors flex items-center gap-1"
-              title="Share via iMessage (iOS) or copy caption"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-              iMessage
-            </button>
-          </div>
-        )}
-
-        {/* Phase 3.4: Helper text for disabled states */}
-        {disabledTooltip && (
-          <p className="text-xs text-white/40 mt-2">{disabledTooltip}</p>
-        )}
-        
-        {/* Phase 3.4: Privacy context label (inline near share buttons) */}
+        {/* Phase 3.4: Privacy context label (single location) */}
         {hasContent && encryptionReady && senderWallet && (
           <p className="text-xs text-white/40 mt-2">{PRIVACY_LABEL}</p>
         )}
@@ -918,12 +1042,24 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
         }}
       />
 
-      {showCapsuleDialog && artifact && senderWallet && (
+      {/* ShareCapsuleDialog - only show if using internal dialog (not external callback) */}
+      {showCapsuleDialog && artifact && senderWallet && !onSendPrivately && (
         <ShareCapsuleDialog
           artifact={artifact}
           senderWallet={senderWallet}
           isOpen={showCapsuleDialog}
           onClose={() => setShowCapsuleDialog(false)}
+          fallbackPatterns={fallbackPatterns}
+        />
+      )}
+
+      {/* ShareToWalletDialog - for wallet-based sharing */}
+      {showWalletDialog && artifact && senderWallet && (
+        <ShareToWalletDialog
+          artifact={artifact}
+          senderWallet={senderWallet}
+          isOpen={showWalletDialog}
+          onClose={() => setShowWalletDialog(false)}
         />
       )}
     </>

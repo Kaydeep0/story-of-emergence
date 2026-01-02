@@ -16,8 +16,11 @@ import { toast } from 'sonner';
 import type { ReflectionEntry } from '../../../lib/insights/types';
 import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
-import { buildSharePack, type SharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
-import { renderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
+// Phase 3.2: Use canonical SharePack contract and renderer
+import { buildYearlySharePack, type SharePack as CanonicalSharePack, type YearlyInsightData } from '../../../lib/share/sharePack';
+import { renderSharePack, type SharePackFrame } from '../../../lib/share/renderSharePack';
+import { buildSharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
+import { renderSharePack as legacyRenderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
 import { ShareActions } from './ShareActions';
 import { sanitizeFilename } from '../../../lib/share/sanitizeShareMetadata';
 
@@ -174,8 +177,9 @@ export function SharePackBuilder({
   });
   const [generatedSelection, setGeneratedSelection] = useState<SharePackSelection | null>(null);
   const [generatedPack, setGeneratedPack] = useState<SharePack | null>(null);
+  const [generatedCanonicalPack, setGeneratedCanonicalPack] = useState<CanonicalSharePack | null>(null);
   const [platform, setPlatform] = useState<Platform>('instagram');
-  const [frame, setFrame] = useState<ShareFrame>('ig_square');
+  const [frame, setFrame] = useState<ShareFrame>('ig_square'); // Legacy frame type for UI compatibility
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTexts, setGeneratedTexts] = useState<{ caption: string; tiktokOverlay?: string[] } | null>(null);
   const [shareComplete, setShareComplete] = useState(false);
@@ -189,15 +193,15 @@ export function SharePackBuilder({
   const containerRef = useRef<HTMLDivElement>(null);
   const lastGeneratedPackKeyRef = useRef<string | null>(null);
 
-  // Generate PNG blob immediately after pack is generated and rendered
+  // Phase 3.2: Generate PNG blob immediately after canonical pack is generated and rendered
   useEffect(() => {
-    // Only generate if we have a pack, texts, and not already generating
-    if (!generatedPack || !generatedTexts || isGeneratingBlob) {
+    // Only generate if we have a canonical pack, texts, and not already generating
+    if (!generatedCanonicalPack || !generatedTexts || isGeneratingBlob) {
       return;
     }
 
     // Create a unique key for this pack generation (platform + year + pack year)
-    const packKey = `${platform}-${year}-${generatedPack.year}`;
+    const packKey = `${platform}-${year}-${generatedCanonicalPack.year}`;
     
     // Skip if we already generated for this exact pack
     if (shareComplete && lastPngBlob && lastGeneratedPackKeyRef.current === packKey) {
@@ -260,7 +264,7 @@ export function SharePackBuilder({
     };
 
     generateBlobAsync();
-  }, [generatedPack, generatedTexts, platform, year, isGeneratingBlob, shareComplete, lastPngBlob]);
+  }, [generatedCanonicalPack, generatedTexts, platform, year, isGeneratingBlob, shareComplete, lastPngBlob, frame]);
 
   // Compute contextual fact for a moment based on entries and distribution
   const computeMomentContext = (
@@ -347,12 +351,82 @@ export function SharePackBuilder({
     }));
   };
 
-  // Map Platform to SharePackPlatform
-  const mapPlatform = (p: Platform): SharePackPlatform => {
-    return p as SharePackPlatform; // They have the same values
+  // Phase 3.2: Compute spikeCount from distributionResult (observer layer computation)
+  const computeSpikeCount = (): number => {
+    if (!distributionResult || !distributionResult.dailyCounts || distributionResult.dailyCounts.length === 0) {
+      return 0;
+    }
+    
+    const dailyCounts = distributionResult.dailyCounts;
+    const nonZeroCounts = dailyCounts.filter(c => c > 0);
+    
+    if (nonZeroCounts.length === 0) {
+      return 0;
+    }
+    
+    // Compute median
+    const sortedNonZero = [...nonZeroCounts].sort((a, b) => a - b);
+    const median = sortedNonZero.length % 2 === 0
+      ? (sortedNonZero[sortedNonZero.length / 2 - 1] + sortedNonZero[sortedNonZero.length / 2]) / 2
+      : sortedNonZero[Math.floor(sortedNonZero.length / 2)];
+    
+    const effectiveMedian = median > 0 ? median : 1;
+    const spikeThreshold = Math.max(3, effectiveMedian * 2);
+    
+    // Count spike days: ≥3 entries AND ≥2× median
+    return dailyCounts.filter(count => count >= spikeThreshold && count >= 3).length;
   };
 
-  // Build SharePack from current selection
+  // Phase 3.2: Map frame type to canonical SharePackFrame
+  const mapFrameToCanonical = (f: ShareFrame): SharePackFrame => {
+    if (f === 'ig_square') return 'square';
+    if (f === 'ig_story') return 'story';
+    if (f === 'linkedin') return 'landscape';
+    return 'square'; // default
+  };
+
+  // Phase 3.2: Build canonical SharePack from current selection
+  const buildCanonicalSharePack = (sel: SharePackSelection): CanonicalSharePack | null => {
+    // Only build if we have required data
+    if (!numbers || !distributionResult) {
+      return null;
+    }
+
+    // Compute spikeCount in observer layer (not in contract)
+    const spikeCount = computeSpikeCount();
+
+    // Get distribution label from windowDistribution or default to 'none'
+    let distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 'none';
+    if (windowDistribution) {
+      if (windowDistribution.classification === 'normal') distributionLabel = 'normal';
+      else if (windowDistribution.classification === 'lognormal') distributionLabel = 'lognormal';
+      else if (windowDistribution.classification === 'powerlaw') distributionLabel = 'powerlaw';
+      else distributionLabel = 'mixed';
+    }
+
+    // Build YearlyInsightData based on selection
+    const insightData: YearlyInsightData = {
+      year,
+      oneSentenceSummary: sel.yearSentence ? identitySentence : '',
+      archetype: sel.archetype ? archetype : null,
+      distributionLabel,
+      entryCount: numbers.totalEntries,
+      activeDays: numbers.activeDays,
+      concentrationShareTop10PercentDays: distributionResult.stats.top10PercentDaysShare,
+      spikeCount,
+      keyMoments: sel.topMoments && moments ? moments.map(m => ({ date: m.date })) : [],
+      mirrorInsight: sel.wholesomeMirror ? mirrorInsight : null,
+      generatedAt: new Date().toISOString(), // For determinism, could be passed in
+    };
+
+    return buildYearlySharePack(insightData);
+  };
+
+  // Legacy buildSharePack kept for backward compatibility (caption generation, etc.)
+  const mapPlatform = (p: Platform): SharePackPlatform => {
+    return p as SharePackPlatform;
+  };
+
   const buildCurrentSharePack = (sel: SharePackSelection): SharePack => {
     return buildSharePack({
       year,
@@ -381,7 +455,11 @@ export function SharePackBuilder({
     const wasFirstGeneration = !lastPngBlob;
     setIsFirstGeneration(wasFirstGeneration);
 
-    // Build SharePack
+    // Phase 3.2: Build canonical SharePack
+    const canonicalPack = buildCanonicalSharePack(selection);
+    setGeneratedCanonicalPack(canonicalPack);
+    
+    // Legacy SharePack kept for caption generation
     const pack = buildCurrentSharePack(selection);
     setGeneratedPack(pack);
     
@@ -623,7 +701,12 @@ export function SharePackBuilder({
   const hasPersonalContent = selection.topMoments || selection.wholesomeMirror || selection.yearSentence;
   const privacyBadge = hasPersonalContent ? 'May include personal text' : 'Privacy safe';
 
-  // Build SharePack for preview (live updates as selection changes)
+  // Phase 3.2: Build canonical SharePack for preview (live updates as selection changes)
+  const previewCanonicalPack = useMemo(() => {
+    return buildCanonicalSharePack(selection);
+  }, [selection, year, identitySentence, archetype, yearShape, moments, numbers, mirrorInsight, entries, distributionResult, windowDistribution]);
+
+  // Legacy previewPack kept for caption generation
   const previewPack = useMemo(() => {
     return buildCurrentSharePack(selection);
   }, [selection, year, identitySentence, archetype, yearShape, moments, numbers, mirrorInsight, entries, distributionResult, windowDistribution, platform]);
@@ -973,8 +1056,12 @@ export function SharePackBuilder({
                           transformOrigin: 'top left',
                           position: 'relative',
                         }}>
-                          {/* renderSharePack at full export dimensions - always mounted */}
-                          {renderSharePack(previewPack, frame)}
+                          {/* Phase 3.2: Use canonical renderSharePack for preview */}
+                          {previewCanonicalPack ? (
+                            renderSharePack(previewCanonicalPack, { frame: mapFrameToCanonical(frame) })
+                          ) : (
+                            <div className="text-white/60 text-sm p-8">No data available</div>
+                          )}
                         </div>
                         {/* Loading overlay - shown during blob generation */}
                         {isGeneratingBlob && (
@@ -1104,15 +1191,15 @@ export function SharePackBuilder({
             ) : null}
           </div>
 
-          {/* Hidden export card - rendered in isolation at 1x scale for crisp export */}
-          {/* Uses generatedPack to ensure export matches what was generated */}
+          {/* Phase 3.2: Hidden export card - rendered in isolation at 1x scale for crisp export */}
+          {/* Uses canonical SharePack to ensure export matches preview exactly */}
           {/* Uses same renderSharePack function as preview */}
-          {generatedPack && (
+          {generatedCanonicalPack && (
             <div
               id="yearly-share-export-card"
               style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
             >
-              {renderSharePack(generatedPack, frame)}
+              {renderSharePack(generatedCanonicalPack, { frame: mapFrameToCanonical(frame) })}
             </div>
           )}
         </div>

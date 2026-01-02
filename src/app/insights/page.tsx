@@ -90,6 +90,8 @@ import { ShareCapsuleDialog } from '../components/ShareCapsuleDialog';
 import { ShareActionsBar } from './components/ShareActionsBar';
 import { InsightTimeline } from './components/InsightTimeline';
 import { WeeklyInsightCard } from './components/WeeklyInsightCard';
+import { InsightsTabs } from './components/InsightsTabs';
+import { LENSES } from './lib/lensContract';
 
 
 /**
@@ -1210,18 +1212,18 @@ export default function InsightsPage() {
   // This UI should reduce cognitive load over time.
   // Prefer silence, spacing, and restraint over density.
 
+  const lens = LENSES.weekly;
+
   return (
     <>
       <section className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-2xl font-normal text-center mb-3">Insights</h1>
-        <p className="text-center text-sm text-white/50 mb-8">
-          Different ways to view your encrypted activity.
-        </p>
+        <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
+        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
-        {/* Observer mode: Health strip suppressed - counts and metrics are not emphasized in read-only narrative views */}
+        <InsightsTabs />
 
-        {/* Mode switcher */}
-        <div className="flex justify-center mb-10">
+        {/* Legacy mode switcher - hidden, kept for backward compatibility */}
+        <div className="flex justify-center mb-10 hidden">
           <div className="inline-flex rounded-xl p-1 bg-white/3">
             {MODE_OPTIONS.map((opt) => {
               // Defensive routing: yearly -> /insights/yearly (exclusive, no fallthrough)
@@ -2493,6 +2495,15 @@ export default function InsightsPage() {
       />
 
       {/* Share Capsule Dialogs */}
+      {address && weeklyArtifact && (
+        <ShareCapsuleDialog
+          artifact={weeklyArtifact}
+          senderWallet={address}
+          isOpen={showWeeklyCapsuleDialog}
+          onClose={() => setShowWeeklyCapsuleDialog(false)}
+          fallbackPatterns={latest?.topGuessedTopics}
+        />
+      )}
       {address && timelineArtifact && (
         <ShareCapsuleDialog
           artifact={timelineArtifact}

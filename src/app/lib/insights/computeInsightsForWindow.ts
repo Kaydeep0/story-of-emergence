@@ -47,20 +47,61 @@ export function computeInsightsForWindow(args: {
       entriesCount,
       eventsCount,
     });
+  } else if (horizon === 'summary') {
+    // Summary horizon: Use simplified artifact from summary insights
+    // For now, create a minimal artifact structure
+    // TODO: Create computeSummaryArtifact function similar to computeWeeklyArtifact
+    artifact = {
+      horizon: 'summary',
+      window: {
+        kind: 'custom',
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+      },
+      createdAt: new Date().toISOString(),
+      cards: [], // Summary cards are computed separately via computeSummaryInsights
+    };
+  } else if (horizon === 'timeline') {
+    // Timeline horizon: Use simplified artifact from timeline insights
+    // For now, create a minimal artifact structure
+    // TODO: Create computeTimelineArtifact function similar to computeWeeklyArtifact
+    artifact = {
+      horizon: 'timeline',
+      window: {
+        kind: 'custom',
+        start: windowStart.toISOString(),
+        end: windowEnd.toISOString(),
+      },
+      createdAt: new Date().toISOString(),
+      cards: [], // Timeline cards are computed separately via computeTimelineInsights
+    };
   } else {
-    // Other horizons (yearly, lifetime, yoy) will be implemented in future phases
-    throw new Error(`Horizon ${horizon} not yet implemented in engine`);
+    // Yearly, lifetime, yoy: Not supported through engine yet (use separate pages)
+    throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
   }
   
   // Phase 5.4-5.5: Attach narratives to artifact (single integration point)
   // Extract patterns, generate snapshots, analyze deltas, generate narratives, select, attach
+  // Task F: Expand Pattern Narratives beyond Weekly
   try {
     const currentPatterns = extractPatternsFromArtifact(artifact);
-    const currentSnapshots = snapshotPatterns(previousSnapshots, currentPatterns.patterns, 'week');
+    
+    // Determine window kind based on horizon
+    let windowKind: 'week' | 'month' | 'year' = 'week';
+    if (horizon === 'summary') {
+      windowKind = 'week'; // Summary uses weekly windows
+    } else if (horizon === 'timeline') {
+      windowKind = 'month'; // Timeline uses monthly windows
+    }
+    
+    const currentSnapshots = snapshotPatterns(previousSnapshots, currentPatterns.patterns, windowKind);
     const deltas = analyzePatternDeltas(previousSnapshots, currentSnapshots);
     const narratives = generatePatternNarratives(deltas);
+    
     // Phase 5.5: Select most important narratives before attaching
-    const selectedNarratives = selectNarratives(narratives);
+    // For summary and timeline, use simplified selection (fewer narratives)
+    const maxNarratives = horizon === 'weekly' ? 3 : 2;
+    const selectedNarratives = selectNarratives(narratives, { maxNarratives });
     artifact = attachNarrativesToArtifact(artifact, selectedNarratives);
   } catch {
     // If narrative generation fails, silently skip attach (guardrail)

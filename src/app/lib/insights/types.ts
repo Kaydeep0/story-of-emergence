@@ -179,6 +179,10 @@ export type YearOverYearCard = InsightCard & {
   derived: true; // Marked as derived insight
 };
 
+// Re-export TopicDriftBucket and ContrastPair for convenience
+export type { TopicDriftBucket } from './topicDrift';
+export type { ContrastPair } from './contrastPairs';
+
 /**
  * A snapshot of a highlighted insight card
  * Stored in localStorage for persistence
