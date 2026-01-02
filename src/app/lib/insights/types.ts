@@ -1,6 +1,8 @@
 // src/app/lib/insights/types.ts
 // Shared types for the client-side insight engine
 
+import type { InsightPatternSet } from './patternModel';
+
 /**
  * A decrypted reflection entry available in memory
  * This represents entries that have already been decrypted client-side
@@ -48,6 +50,7 @@ export type InsightCard = {
   explanation: string;
   evidence: InsightEvidence[];
   computedAt: string; // ISO timestamp when this insight was generated
+  patternSet?: InsightPatternSet; // Phase 4.1: Canonical pattern set (optional, backward compatible)
 };
 
 /**

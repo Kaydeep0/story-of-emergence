@@ -56,6 +56,8 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { rpcListInternalEvents } from '../lib/internalEvents';
 import { computeWeeklyInsights, computeInsightsForWindow, WeeklyInsight } from '../lib/weeklyInsights';
+import { computeInsightsForWindow as computeInsightsForWindowEngine } from '../lib/insights/computeInsightsForWindow';
+import type { InsightArtifact } from '../lib/insights/artifactTypes';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
@@ -71,6 +73,7 @@ import type { TopicDriftBucket } from '../lib/insights/topicDrift';
 import type { ReflectionEntry } from '../lib/insights/types';
 import { InsightDrawer, normalizeInsight, type NormalizedInsight } from './components/InsightDrawer';
 import { SummaryStatsSkeleton, InsightCardSkeleton, TimelineSectionSkeleton, SummaryStatsGridSkeleton } from './components/InsightsSkeleton';
+import { NarrativeBlock } from './components/NarrativeBlock';
 import DebugInsightStrip from '../components/DebugInsightStrip';
 import { listExternalEntries } from '../lib/useSources';
 import { InsightsSourceCard } from '../components/InsightsSourceCard';
@@ -88,6 +91,7 @@ import { InsightPanel } from './components/InsightPanel';
 import { ShareCapsuleDialog } from '../components/ShareCapsuleDialog';
 import { ShareActionsBar } from './components/ShareActionsBar';
 import { InsightTimeline } from './components/InsightTimeline';
+import { WeeklyInsightCard } from './components/WeeklyInsightCard';
 
 
 /**
@@ -486,6 +490,8 @@ export default function InsightsPage() {
   const [summaryReflectionsLoading, setSummaryReflectionsLoading] = useState(false);
   const [summaryReflectionsError, setSummaryReflectionsError] = useState<string | null>(null);
   const [summaryReflectionEntries, setSummaryReflectionEntries] = useState<ReflectionEntry[]>([]);
+  // Phase 6.4: Summary insight artifacts with narratives (for future engine integration)
+  const [summaryInsightArtifacts, setSummaryInsightArtifacts] = useState<Map<string, InsightArtifact>>(new Map());
   const [sources, setSources] = useState<SourceEntryLite[]>([]);
   const [sourceInsights, setSourceInsights] = useState<UnifiedSourceInsights | null>(null);
 
@@ -531,6 +537,7 @@ export default function InsightsPage() {
 
   // Weekly artifact share state (moved to top level to avoid hooks order violation)
   const [weeklyArtifact, setWeeklyArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [weeklyInsightArtifact, setWeeklyInsightArtifact] = useState<InsightArtifact | null>(null);
   const [showWeeklyCapsuleDialog, setShowWeeklyCapsuleDialog] = useState(false);
 
   // Timeline artifact share state
@@ -631,6 +638,26 @@ export default function InsightsPage() {
 
       const weekly = computeWeeklyInsights(items);
       setInsights(weekly);
+      
+      // Phase 6.1: Generate InsightArtifact with narratives for latest week
+      if (weekly.length > 0 && address) {
+        const latestWeek = weekly[0];
+        try {
+          const artifact = computeInsightsForWindowEngine({
+            horizon: 'weekly',
+            events: items,
+            windowStart: latestWeek.startDate,
+            windowEnd: latestWeek.endDate,
+            wallet: address,
+          });
+          setWeeklyInsightArtifact(artifact);
+        } catch {
+          // Silently fail - narratives are optional
+          setWeeklyInsightArtifact(null);
+        }
+      } else {
+        setWeeklyInsightArtifact(null);
+      }
     } catch (e: any) {
       console.error('Failed to load insights', e);
       const msg = e?.message ?? 'Could not load insights';
@@ -1137,6 +1164,7 @@ export default function InsightsPage() {
   useEffect(() => {
     if (!latest || !address) {
       setWeeklyArtifact(null);
+      setWeeklyInsightArtifact(null);
       return;
     }
     generateWeeklyArtifact(latest, address).then((artifact) => {
@@ -1146,6 +1174,7 @@ export default function InsightsPage() {
       setWeeklyArtifact(null);
     });
   }, [latest, address]);
+
 
   // Generate timeline artifact when timeline reflections change
   useEffect(() => {
@@ -2202,6 +2231,15 @@ export default function InsightsPage() {
                               )}
                             </div>
                           )}
+
+                          {/* Phase 6.4: Render pattern narratives if available (from artifact) */}
+                          {(() => {
+                            const artifact = summaryInsightArtifacts.get(insight.id);
+                            const narratives = artifact?.narratives ?? [];
+                            return narratives.length > 0 ? (
+                              <NarrativeBlock narratives={narratives} maxNarratives={2} />
+                            ) : null;
+                          })()}
                           </div>
                         );
                       })}
@@ -2383,70 +2421,17 @@ export default function InsightsPage() {
                   fallbackPatterns={latest.topGuessedTopics}
                 />
 
-                <div className="rounded-2xl border border-white/10 p-6 mb-8 space-y-4">
-                  <h2 className="text-lg font-medium">
-                    Week of {formatWeekDate(latest.startDate)}
-                  </h2>
-
-                  <div className="space-y-3 text-sm text-white/70">
-                    {latest.journalEvents === 0 ? (
-                      <p>Sparse reflective activity observed this week.</p>
-                    ) : latest.topGuessedTopics.length === 0 ? (
-                      <p>Reflections during this period span multiple themes without a dominant focus.</p>
-                    ) : latest.topGuessedTopics.length === 1 ? (
-                      <p>Reflections appear concentrated around a single theme.</p>
-                    ) : latest.topGuessedTopics.length <= 3 ? (
-                      <p>Reflections during this period span multiple themes.</p>
-                    ) : (
-                      <p>Reflections during this period span multiple themes.</p>
-                    )}
-                    {latest.distributionLabel && (
-                      <p>
-                        {latest.distributionLabel === 'normal' || latest.distributionLabel === 'lognormal'
-                          ? 'Activity appears distributed across time.'
-                          : latest.distributionLabel === 'powerlaw'
-                          ? 'Activity clustered around a small number of reflections.'
-                          : 'Activity appears distributed across time.'}
-                      </p>
-                    )}
-                  </div>
-
-                  {latest.topGuessedTopics.length > 0 && (
-                    <div>
-                      <div className="text-xs text-white/50 mb-2">Observed Patterns</div>
-                      <div className="flex flex-wrap gap-2">
-                        {latest.topGuessedTopics.map((topic) => (
-                          <span
-                            key={topic}
-                            className="rounded-full bg-white/10 px-3 py-1 text-xs"
-                          >
-                            {topic}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {latest.summaryText && (() => {
-                    // Soft guardrail check for banned language
-                    assertInsightTone(latest.summaryText, 'weekly.summaryText');
-                    return null;
-                  })()}
-                  {latest.summaryText && (
-                    <div>
-                      <div className="text-xs text-white/50 mb-2">Summary</div>
-                      <p className="text-sm text-white/70 leading-relaxed">
-                        {latest.summaryText}
-                      </p>
-                      {latest.distributionLabel && (
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
-                          <span className="font-medium text-white/80">Pattern</span>
-                          <span>{latest.distributionLabel}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Phase 6.1a: Use WeeklyInsightCard component with safe narrative rendering */}
+                {latest.summaryText && (() => {
+                  // Soft guardrail check for banned language
+                  assertInsightTone(latest.summaryText, 'weekly.summaryText');
+                  return null;
+                })()}
+                <WeeklyInsightCard
+                  insight={latest}
+                  artifact={weeklyInsightArtifact}
+                  formatWeekDate={formatWeekDate}
+                />
 
                 {/* Previous weeks */}
                 {insights.length > 1 && (

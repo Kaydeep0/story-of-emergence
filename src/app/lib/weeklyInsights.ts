@@ -4,6 +4,13 @@ import type { InternalEvent } from "./types";
 import type { UnifiedInternalEvent } from "../../lib/internalEvents";
 import type { TimeWindow } from "./insights/timeWindows";
 import { fitHeuristics } from "./insights/distributions";
+import { computeInsightsForWindow as computeInsightsForWindowEngine } from "./insights/computeInsightsForWindow";
+
+/**
+ * @deprecated Use computeInsightsForWindow from insight engine instead.
+ * This function is now a thin wrapper for backward compatibility.
+ * Will be removed in Phase 4.1+.
+ */
 
 export type WeeklyInsight = {
   weekId: string;         // e.g. "2025-12-01" for the Monday of that week
@@ -46,6 +53,10 @@ function formatDateKey(d: Date): string {
 /**
  * Compute simple weekly insights from a list of internal events.
  * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
+ * 
+ * @deprecated This function is now a wrapper that routes through the insight engine.
+ * It maintains backward compatibility by converting InsightArtifact back to WeeklyInsight format.
+ * New code should use computeInsightsForWindow from the insight engine directly.
  */
 export function computeWeeklyInsights(
   events: InternalEvent[] | UnifiedInternalEvent[]
@@ -143,6 +154,16 @@ export function computeWeeklyInsights(
   const insights: WeeklyInsight[] = [];
 
   for (const [weekId, bucket] of buckets.entries()) {
+    // Use engine to compute artifact for this week (Phase 4.0.1)
+    const artifact = computeInsightsForWindowEngine({
+      horizon: 'weekly',
+      events: bucket.events,
+      windowStart: bucket.startDate,
+      windowEnd: bucket.endDate,
+    });
+
+    // Extract data from artifact to build WeeklyInsight (backward compatibility)
+    // Preserve existing logic for topics and distribution
     const avgJournalLength =
       bucket.journalEvents > 0
         ? bucket.totalJournalLength / bucket.journalEvents
@@ -154,12 +175,20 @@ export function computeWeeklyInsights(
       .slice(0, 3)
       .map(([topic]) => topic);
 
-    const summaryText = buildSummaryText({
-      totalEvents: bucket.totalEvents,
-      journalEvents: bucket.journalEvents,
-      avgJournalLength,
-      topTopics,
-    });
+    // Extract summary from artifact cards (prefer always_on_summary if available)
+    let summaryText = '';
+    const alwaysOnCard = artifact.cards.find(c => c.kind === 'always_on_summary') as any;
+    if (alwaysOnCard?.data?.summaryType === 'writing_change' && alwaysOnCard.explanation) {
+      summaryText = alwaysOnCard.explanation;
+    } else {
+      // Fallback to building summary from data
+      summaryText = buildSummaryText({
+        totalEvents: bucket.totalEvents,
+        journalEvents: bucket.journalEvents,
+        avgJournalLength,
+        topTopics,
+      });
+    }
 
     const distribution = fitHeuristics(
       bucket.events.map((ev) => {
@@ -190,10 +219,13 @@ export function computeWeeklyInsights(
 }
 
 /**
- * Compute insights for an arbitrary time window
- * Extends weekly insights to work with any time window
+ * @deprecated — delegates to Insight Engine (Phase 4.0)
+ * Legacy helper for computing window stats.
+ * This function is kept for backward compatibility but will be removed in future phases.
+ * 
+ * For new code, use computeInsightsForWindow from the insight engine directly.
  */
-export function computeInsightsForWindow(
+function computeWeeklyInsightsLegacy(
   events: InternalEvent[] | UnifiedInternalEvent[],
   window: TimeWindow
 ): {
@@ -423,5 +455,37 @@ function buildSummaryText(params: {
   }
 
   return parts.join(" ");
+}
+
+/**
+ * @deprecated — Thin wrapper for backward compatibility (Phase 4.2)
+ * 
+ * This wrapper maintains backward compatibility for legacy callers that expect
+ * the stats format. It delegates to the legacy implementation.
+ * 
+ * For new code, import computeInsightsForWindow directly from:
+ * src/app/lib/insights/computeInsightsForWindow
+ */
+export function computeInsightsForWindow(
+  events: InternalEvent[] | UnifiedInternalEvent[],
+  window: TimeWindow
+): {
+  totalEntries: number;
+  totalEvents: number;
+  dominantTopics: string[];
+  largestTopicDrift: {
+    topic: string;
+    trend: 'rising' | 'stable' | 'fading';
+    change: number;
+  } | null;
+  mostRepeatedPhrases: Array<{ phrase: string; count: number }>;
+  peakMonths: Array<{ month: string; count: number }>;
+  distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed';
+  skew: number;
+  concentrationShareTop10PercentDays: number;
+} {
+  // Delegate to legacy implementation for backward compatibility
+  // TODO: Phase 4.3+ - migrate callers to use engine InsightArtifact directly
+  return computeWeeklyInsightsLegacy(events, window);
 }
 

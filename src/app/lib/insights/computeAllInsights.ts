@@ -74,3 +74,7 @@ export function computeAllInsights(
   };
 }
 
+// Re-export canonical engine entry point for convenience
+// Canonical implementation is in computeInsightsForWindow.ts
+export { computeInsightsForWindow } from './computeInsightsForWindow';
+

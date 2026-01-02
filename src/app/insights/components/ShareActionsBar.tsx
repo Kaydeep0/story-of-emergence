@@ -430,23 +430,38 @@ function setShareConfirmed(): void {
 
 /**
  * Fire-and-forget audit logging for share actions
+ * Phase 3.4: Logs share_attempt event with metadata (artifactType, platform, timestamp)
  * Non-blocking: sharing proceeds even if logging fails
+ * Never logs content, captions, or decrypted text
  */
-function logShareAction(action: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage', artifact: ShareArtifact): void {
+function logShareAttempt(
+  platform: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage',
+  artifact: ShareArtifact
+): void {
   // Fire-and-forget: don't block sharing if logging fails
   try {
-    // In a real implementation, this would send to an analytics endpoint
-    // For now, we just log to console in development
+    const artifactType = artifact.kind === 'weekly' ? 'weekly'
+      : artifact.kind === 'yearly' ? 'yearly'
+      : artifact.kind === 'lifetime' ? 'lifetime'
+      : 'summary';
+    
+    const metadata = {
+      event: 'share_attempt',
+      artifactType,
+      platform,
+      timestamp: new Date().toISOString(),
+    };
+
+    // In development, log to console for verification
     if (process.env.NODE_ENV === 'development') {
-      console.log('[Share Audit]', {
-        action,
-        artifactKind: artifact.kind,
-        artifactId: artifact.artifactId,
-        timestamp: new Date().toISOString(),
-      });
+      console.log('[Share Audit]', metadata);
     }
+    
     // Future: send to analytics endpoint
-    // fetch('/api/analytics/share', { method: 'POST', body: JSON.stringify({...}) }).catch(() => {});
+    // fetch('/api/analytics/share', { 
+    //   method: 'POST', 
+    //   body: JSON.stringify(metadata) 
+    // }).catch(() => {});
   } catch {
     // Silent fail - audit logging never blocks sharing
   }
@@ -454,6 +469,7 @@ function logShareAction(action: 'caption' | 'download' | 'web_share' | 'x' | 'li
 
 /**
  * Share Confirmation Modal Component
+ * Phase 3.4: Exact copy as specified in requirements
  */
 function ShareConfirmationModal({
   isOpen,
@@ -480,12 +496,10 @@ function ShareConfirmationModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onCancel}>
       <div className="bg-black border border-white/20 rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-white mb-3">Share insight?</h3>
-        <p className="text-sm text-white/70 mb-4">
-          This will share a summary of your reflections, not the raw entries. The shared content includes patterns and insights derived from your encrypted data.
-        </p>
-        <p className="text-xs text-white/50 mb-6">
-          {PRIVACY_LABEL}
+        <h3 className="text-lg font-semibold text-white mb-3">You&apos;re about to share a reflection</h3>
+        <p className="text-sm text-white/70 mb-6">
+          This artifact is generated from your private, encrypted journal.
+          Once shared, it is outside the vault.
         </p>
         <div className="flex gap-3 justify-end">
           <button
@@ -498,7 +512,7 @@ function ShareConfirmationModal({
             onClick={onConfirm}
             className="px-4 py-2 text-sm bg-white text-black hover:bg-white/90 transition-colors rounded"
           >
-            Share
+            Continue
           </button>
         </div>
       </div>
@@ -512,27 +526,52 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
-  if (!artifact || !senderWallet) {
+  // Phase 3.4: Buttons must be visible but disabled when vault is not ready
+  // Only return null if artifact is missing (no data to share at all)
+  if (!artifact) {
     return null;
   }
 
   const caption = buildShareCaption(artifact, fallbackPatterns);
   const hasContent = hasShareableContent(artifact, fallbackPatterns);
   const shareConfirmed = hasShareConfirmed();
-  const isDisabled = !encryptionReady || !hasContent;
+  
+  // Phase 3.4: Disable sharing when vault is not ready
+  // Conditions: wallet disconnected, encryption key missing, or zero entries
+  const isDisabled = !senderWallet || !encryptionReady || !hasContent;
+  
+  // Phase 3.4: Specific tooltip messages for each disabled condition
+  const getDisabledTooltip = (): string | undefined => {
+    if (!senderWallet) {
+      return 'Connect wallet to share';
+    }
+    if (!encryptionReady) {
+      return 'Unlock your vault to export';
+    }
+    if (!hasContent) {
+      return 'Add reflections to generate content';
+    }
+    return undefined;
+  };
 
   // Check if confirmation is needed before executing share action
-  const executeWithConfirmation = (action: () => void, logAction: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage') => {
-    if (shareConfirmed) {
-      // Already confirmed this session, execute immediately
-      logShareAction(logAction, artifact);
+  // Phase 3.4: Only external shares require confirmation (not "Send privately")
+  const executeWithConfirmation = (
+    action: () => void, 
+    logAction: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage',
+    requiresConfirmation: boolean = true
+  ) => {
+    // Always log attempt (even if cancelled)
+    logShareAttempt(logAction, artifact);
+    
+    if (!requiresConfirmation || shareConfirmed) {
+      // Already confirmed this session or doesn't require confirmation, execute immediately
       action();
     } else {
       // Need confirmation first
       setPendingAction(() => {
         return () => {
           setShareConfirmed();
-          logShareAction(logAction, artifact);
           action();
         };
       });
@@ -564,7 +603,8 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doCopy, 'caption');
+    // Phase 3.4: Copy caption is external share, requires confirmation
+    executeWithConfirmation(doCopy, 'caption', true);
   };
 
   const handleDownloadImage = async () => {
@@ -588,7 +628,8 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doDownload, 'download');
+    // Phase 3.4: PNG download is external share, requires confirmation
+    executeWithConfirmation(doDownload, 'download', true);
   };
 
   const handleWebShare = async () => {
@@ -624,10 +665,13 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doShare, 'web_share');
+    // Phase 3.4: Web share is external share, requires confirmation
+    executeWithConfirmation(doShare, 'web_share', true);
   };
 
   const handleSendPrivately = () => {
+    // Phase 3.4: "Send privately" is NOT an external share, does NOT require confirmation
+    // It uses encrypted capsules, so it's safe and doesn't need the warning modal
     if (onSendPrivately) {
       onSendPrivately();
     } else {
@@ -660,7 +704,8 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doShare, 'x');
+    // Phase 3.4: X share is external share, requires confirmation
+    executeWithConfirmation(doShare, 'x', true);
   };
 
   const handleLinkedInShare = async () => {
@@ -697,7 +742,8 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doShare, 'linkedin');
+    // Phase 3.4: LinkedIn share is external share, requires confirmation
+    executeWithConfirmation(doShare, 'linkedin', true);
   };
 
   const handleIMessageShare = async () => {
@@ -724,15 +770,12 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       }
     };
     
-    executeWithConfirmation(doShare, 'imessage');
+    // Phase 3.4: iMessage share is external share, requires confirmation
+    executeWithConfirmation(doShare, 'imessage', true);
   };
 
-  // Helper text for empty artifacts
-  const helperText = !hasContent 
-    ? 'Add reflections to generate shareable content'
-    : !encryptionReady
-    ? 'Unlock your vault to export'
-    : null;
+  // Phase 3.4: Get specific tooltip for disabled state
+  const disabledTooltip = getDisabledTooltip();
 
   return (
     <>
@@ -743,7 +786,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             onClick={isDisabled ? undefined : handleCopyCaption}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={helperText || 'Copy caption to clipboard'}
+            title={disabledTooltip || 'Copy caption to clipboard'}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -755,7 +798,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             onClick={isDisabled ? undefined : handleDownloadImage}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={helperText || 'Download PNG image'}
+            title={disabledTooltip || 'Download PNG image'}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -769,7 +812,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
               onClick={isDisabled ? undefined : handleWebShare}
               disabled={isDisabled}
               className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={helperText || 'Share via native share dialog'}
+              title={disabledTooltip || 'Share via native share dialog'}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3"></circle>
@@ -800,7 +843,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
             onClick={isDisabled ? undefined : handleSendPrivately}
             disabled={isDisabled}
             className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={helperText || 'Send privately to one recipient'}
+            title={disabledTooltip || 'Send privately to one recipient'}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -848,13 +891,13 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
           </div>
         )}
 
-        {/* Helper text for empty artifacts */}
-        {helperText && (
-          <p className="text-xs text-white/40 mt-2">{helperText}</p>
+        {/* Phase 3.4: Helper text for disabled states */}
+        {disabledTooltip && (
+          <p className="text-xs text-white/40 mt-2">{disabledTooltip}</p>
         )}
         
-        {/* Privacy context label */}
-        {hasContent && encryptionReady && (
+        {/* Phase 3.4: Privacy context label (inline near share buttons) */}
+        {hasContent && encryptionReady && senderWallet && (
           <p className="text-xs text-white/40 mt-2">{PRIVACY_LABEL}</p>
         )}
       </div>
