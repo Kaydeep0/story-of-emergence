@@ -548,7 +548,7 @@ export default function TimelinePage() {
 
                     return (
                       <div
-                        key={String(bucket.topic) || `topic-${topicDrift.indexOf(bucket)}`}
+                        key={String(bucket.topic) || `topic-${bucketIndex}`}
                         className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3 cursor-pointer hover:bg-teal-500/10 transition-colors"
                         onClick={(e) => {
                           if ((e.target as HTMLElement).closest('button')) return;
