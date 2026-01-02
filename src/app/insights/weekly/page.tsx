@@ -83,21 +83,31 @@ export default function WeeklyPage() {
     };
   }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute weekly insights
+  // Compute weekly insights (rolling 7-day window)
   const weeklyCards = useMemo(() => {
     if (reflections.length === 0) return [];
 
     try {
-      // Get current week window
-      const weekWindow = getWindowStartEnd('week');
+      // Filter to last 7 days (rolling window, not calendar week)
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      start.setHours(0, 0, 0, 0); // Snap to start of day
+
+      const recent = reflections.filter((r) => {
+        const t = new Date(r.createdAt).getTime();
+        return t >= start.getTime() && t <= now.getTime();
+      });
+
+      // Debug logging
+      console.log("weekly rolling window", start.toISOString(), now.toISOString());
+      console.log("weekly reflections total", reflections.length);
+      console.log("weekly reflections last7", recent.length);
       
-      // Debug: Check reflection timestamps and window boundaries
-      console.log("weekly reflections count", reflections.length);
-      console.log("weekly sample dates", reflections.slice(0, 5).map(r => r.createdAt ?? (r as any).created_at ?? (r as any).timestamp ?? (r as any).date));
-      console.log("weekly window", weekWindow.start.toISOString(), weekWindow.end.toISOString());
-      
-      // Convert reflections to events format expected by engine
-      const events = reflections.map((r) => ({
+      if (recent.length === 0) return [];
+
+      // Convert filtered reflections to events format expected by engine
+      const events = recent.map((r) => ({
         eventAt: new Date(r.createdAt),
         kind: 'written' as const,
         sourceKind: r.sourceKind ?? 'journal' as const,
@@ -107,14 +117,14 @@ export default function WeeklyPage() {
         topics: [], // Will be extracted by engine if needed
       }));
 
-      // Compute weekly artifact
+      // Compute weekly artifact with rolling 7-day window
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
-        windowStart: weekWindow.start,
-        windowEnd: weekWindow.end,
+        windowStart: start,
+        windowEnd: now,
         wallet: address ?? undefined,
-        entriesCount: reflections.length,
+        entriesCount: recent.length,
         eventsCount: events.length,
       });
 
@@ -135,7 +145,7 @@ export default function WeeklyPage() {
     <div className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
-        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
+        <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity from the last 7 days</p>
 
         <InsightsTabs />
 
