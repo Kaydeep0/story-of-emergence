@@ -208,6 +208,17 @@ export function computeTimelineSpikes(entries: ReflectionEntry[]): TimelineSpike
  * Helper to convert Item (from entries.ts) to ReflectionEntry format
  * This bridges the existing data structures with the insight engine
  */
+/**
+ * Coerce a value to a valid Date object
+ * Returns Date(0) for invalid/missing values
+ */
+function coerceDate(value: any): Date {
+  if (!value) return new Date(0);
+  if (value instanceof Date) return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
 export function itemToReflectionEntry(
   item: {
     id: string;
@@ -216,6 +227,7 @@ export function itemToReflectionEntry(
     inserted_at?: Date | string;
     timestamp?: Date | string;
     date?: Date | string;
+    created?: Date | string;
     deletedAt?: Date | string | null;
     deleted_at?: Date | string | null;
     plaintext: unknown;
@@ -259,38 +271,25 @@ export function itemToReflectionEntry(
     text = JSON.stringify(item.plaintext);
   }
   
-  // Normalize createdAt to ISO string - check multiple possible field names
-  const created =
+  // Normalize createdAt to Date object - check multiple possible field names
+  const raw =
     item.createdAt ??
-    (item as any).created_at ??
-    (item as any).inserted_at ??
-    (item as any).timestamp ??
-    (item as any).date;
+    item.created_at ??
+    item.inserted_at ??
+    item.timestamp ??
+    item.date ??
+    item.created;
   
-  let createdAt: string;
-  if (created) {
-    const date = typeof created === 'string' ? new Date(created) : created;
-    createdAt = date instanceof Date && !isNaN(date.getTime()) 
-      ? date.toISOString() 
-      : new Date().toISOString();
-  } else {
-    createdAt = new Date().toISOString();
-  }
+  const createdAtDate = coerceDate(raw);
   
-  // Normalize deletedAt to ISO string or null
-  const deleted = item.deletedAt ?? (item as any).deleted_at;
-  const deletedAt: string | null = deleted
-    ? (typeof deleted === 'string' 
-        ? deleted 
-        : deleted instanceof Date 
-        ? deleted.toISOString() 
-        : null)
-    : null;
+  // Normalize deletedAt to Date object or null
+  const deletedRaw = item.deletedAt ?? item.deleted_at;
+  const deletedAtDate = deletedRaw ? coerceDate(deletedRaw) : null;
   
   return {
-    id: item.id,
-    createdAt,
-    deletedAt,
+    id: String(item.id ?? (item as any).entry_id ?? crypto.randomUUID()),
+    createdAt: createdAtDate.toISOString(), // Keep as ISO string for compatibility with existing code
+    deletedAt: deletedAtDate ? deletedAtDate.toISOString() : null,
     sourceId: sourceId || undefined,
     plaintext: text,
   };
