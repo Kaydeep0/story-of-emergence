@@ -323,7 +323,7 @@ export default function TimelinePage() {
 
                     return (
                       <div
-                        key={spike.id}
+                        key={String(spike.id) || `spike-${dateKey}-${spikeInsights.indexOf(spike)}`}
                         className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-3 cursor-pointer hover:bg-amber-500/10 transition-colors"
                         onClick={(e) => {
                           if ((e.target as HTMLElement).closest('button')) return;
@@ -417,7 +417,7 @@ export default function TimelinePage() {
                 <div className="space-y-4">
                   {clusterInsights.map((cluster) => (
                     <div
-                      key={cluster.id}
+                      key={String(cluster.id) || `cluster-${clusterInsights.indexOf(cluster)}`}
                       className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3 cursor-pointer hover:bg-violet-500/10 transition-colors"
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('button')) return;
@@ -548,7 +548,7 @@ export default function TimelinePage() {
 
                     return (
                       <div
-                        key={bucket.topic}
+                        key={String(bucket.topic) || `topic-${topicDrift.indexOf(bucket)}`}
                         className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3 cursor-pointer hover:bg-teal-500/10 transition-colors"
                         onClick={(e) => {
                           if ((e.target as HTMLElement).closest('button')) return;

@@ -18,6 +18,7 @@ import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption'
 import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
+import { InsightsTabs } from '../components/InsightsTabs';
 import type {
   ReflectionMeta,
   DeterministicCandidate,
@@ -32,12 +33,32 @@ function safeDate(value: unknown): Date | null {
 }
 
 export default function LifetimePage() {
-  // Route gate: return null immediately if feature flag is false
-  // This prevents any hooks or data fetching from running
-  if (!FEATURE_LIFETIME_INVENTORY) {
-    return null;
-  }
   const { address, isConnected } = useAccount();
+  
+  // Route gate: show safe placeholder if feature flag is false
+  // This prevents crashes while keeping the route accessible
+  if (!FEATURE_LIFETIME_INVENTORY) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <section className="max-w-2xl mx-auto px-4 py-12">
+          <h1 className="text-2xl font-normal text-center mb-3">Lifetime</h1>
+          <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity across all time</p>
+          <InsightsTabs />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+            <p className="text-sm text-white/60 mb-4">
+              Lifetime lens is under construction.
+            </p>
+            <a
+              href="/insights/summary"
+              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              Back to Summary
+            </a>
+          </div>
+        </section>
+      </div>
+    );
+  }
   const wallet = address || '';
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
