@@ -103,7 +103,7 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                             <p className="text-sm text-gray-600 leading-relaxed">{insight.summary}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 shrink-0">
-                            <ConfidenceBadge confidence={insight.confidence} />
+                            <ConfidenceBadge confidence={insight.confidence ?? 'medium'} />
                           </div>
                         </div>
                       </div>
