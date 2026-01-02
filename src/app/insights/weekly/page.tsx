@@ -91,6 +91,11 @@ export default function WeeklyPage() {
       // Get current week window
       const weekWindow = getWindowStartEnd('week');
       
+      // Debug: Check reflection timestamps and window boundaries
+      console.log("weekly reflections count", reflections.length);
+      console.log("weekly sample dates", reflections.slice(0, 5).map(r => r.createdAt ?? (r as any).created_at ?? (r as any).timestamp ?? (r as any).date));
+      console.log("weekly window", weekWindow.start.toISOString(), weekWindow.end.toISOString());
+      
       // Convert reflections to events format expected by engine
       const events = reflections.map((r) => ({
         eventAt: new Date(r.createdAt),
