@@ -86,8 +86,8 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
                   <p className="text-sm text-gray-600 leading-relaxed">{insight.summary}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                  <ConfidenceBadge confidence={insight.confidence ?? 'medium'} />
-                  <ScopeLabel scope={(insight as any).scope ?? 'unknown'} />
+                  <ConfidenceBadge confidence={insight.confidence} />
+                  <ScopeLabel scope={insight.scope} />
                 </div>
               </div>
             </div>
@@ -121,20 +121,15 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
 
 /**
  * Confidence badge component
- * Defensive: handles undefined/null confidence gracefully
+ * Input is guaranteed to be normalized by normalizeInsightCard
  */
-function ConfidenceBadge({
-  confidence,
-}: {
-  confidence?: InsightCard['confidence'] | string | null;
-}) {
-  const value = (confidence ?? 'medium').toString();
-  const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Medium';
+function ConfidenceBadge({ confidence }: { confidence: InsightCard['confidence'] }) {
+  const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
 
   const colorClass =
-    value === 'high'
+    confidence === 'high'
       ? 'bg-gray-800 text-white'
-      : value === 'low'
+      : confidence === 'low'
       ? 'bg-gray-200 text-gray-800'
       : 'bg-gray-500 text-white';
 
@@ -147,23 +142,10 @@ function ConfidenceBadge({
 
 /**
  * Scope label component
- * Defensive: handles non-string scope values gracefully
+ * Input is guaranteed to be normalized by normalizeInsightCard
  */
-function ScopeLabel({
-  scope,
-}: {
-  scope?: InsightCard['scope'] | string | { label?: string; scope?: string } | null;
-}) {
-  const raw =
-    typeof scope === 'string'
-      ? scope
-      : scope && typeof scope === 'object'
-      ? scope.label ?? scope.scope ?? ''
-      : '';
-
-  const value = (raw || 'unknown').toString();
-  const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Unknown';
-
+function ScopeLabel({ scope }: { scope: InsightCard['scope'] }) {
+  const label = scope.charAt(0).toUpperCase() + scope.slice(1);
   return <span className="text-xs text-gray-500 font-medium">{label}</span>;
 }
 
