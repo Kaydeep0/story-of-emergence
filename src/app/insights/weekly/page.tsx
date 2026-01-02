@@ -19,10 +19,8 @@ import type { ReflectionEntry } from '../../lib/insights/types';
 import { InsightsTabs } from '../components/InsightsTabs';
 import { LENSES } from '../lib/lensContract';
 import { InsightCardSkeleton } from '../components/InsightsSkeleton';
-import { ShareActionsBar } from '../components/ShareActionsBar';
 import { InsightPanel } from '../components/InsightPanel';
 import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
-import { generateWeeklyArtifact } from '../../../lib/artifacts/weeklyArtifact';
 import Link from 'next/link';
 
 export default function WeeklyPage() {
