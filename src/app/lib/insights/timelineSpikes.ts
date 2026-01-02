@@ -271,10 +271,12 @@ export function itemToReflectionEntry(
     text = JSON.stringify(item.plaintext);
   }
   
-  // Normalize createdAt to Date object - check multiple possible field names
+  // Normalize createdAt to Date object
+  // rpcFetchEntries returns Item with createdAt: Date, so prioritize that
+  // Fallback to other field names for compatibility
   const raw =
-    item.createdAt ??
-    item.created_at ??
+    item.createdAt ?? // Date object from rpcFetchEntries
+    item.created_at ?? // ISO string fallback
     item.inserted_at ??
     item.timestamp ??
     item.date ??

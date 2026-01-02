@@ -95,14 +95,29 @@ export default function WeeklyPage() {
       start.setHours(0, 0, 0, 0); // Snap to start of day
 
       const last7 = reflections.filter((r) => {
+        // createdAt is ISO string from ReflectionEntry
         const createdAt = new Date(r.createdAt);
-        return createdAt instanceof Date && !isNaN(createdAt.getTime()) && createdAt >= start;
+        const isValid = createdAt instanceof Date && !isNaN(createdAt.getTime());
+        const inWindow = isValid && createdAt >= start;
+        return inWindow;
       });
 
       // Debug logging
-      console.log("weekly last7", last7.length, "start", start.toISOString());
-      console.log("sample", last7.slice(0, 3).map((r) => r.createdAt));
       console.log("weekly reflections total", reflections.length);
+      console.log("weekly last7", last7.length, "start", start.toISOString());
+      console.log("sample dates", last7.slice(0, 3).map((r) => ({
+        createdAt: r.createdAt,
+        parsed: new Date(r.createdAt).toISOString(),
+        isValid: !isNaN(new Date(r.createdAt).getTime()),
+      })));
+      if (reflections.length > 0 && last7.length === 0) {
+        console.log("⚠️ Filter dropped all reflections - checking first few:", reflections.slice(0, 3).map((r) => ({
+          createdAt: r.createdAt,
+          parsed: new Date(r.createdAt).toISOString(),
+          isValid: !isNaN(new Date(r.createdAt).getTime()),
+          beforeStart: new Date(r.createdAt) < start,
+        })));
+      }
       
       if (last7.length === 0) return [];
 
