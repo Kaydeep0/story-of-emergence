@@ -1,12 +1,11 @@
 // src/app/lib/insights/computeAllInsights.ts
 // Unified insight computation function
-// Computes all insights including optional year-over-year insights
+// Phase 4.0: Routes through canonical engine
 
 import type { ReflectionEntry, InsightCard } from './types';
-import { computeTimelineSpikes, type TimelineSpikeCard } from './timelineSpikes';
-import { computeAlwaysOnSummary, type AlwaysOnSummaryCard } from './alwaysOnSummary';
-import { computeLinkClusters, type LinkClusterCard } from './linkClusters';
+import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard } from './types';
 import { computeYearOverYearCard, type YearOverYearCard } from './computeYearOverYear';
+import { computeTimelineInsights, computeSummaryInsights } from '../insightEngine';
 
 /**
  * Options for insight computation
@@ -29,6 +28,7 @@ export interface InsightComputationResult {
 
 /**
  * Compute all insights from reflections
+ * Phase 4.0: Routes through canonical engine
  * Pure function - deterministic, no side effects
  * 
  * @param reflections - All decrypted reflection entries
@@ -39,12 +39,11 @@ export function computeAllInsights(
   reflections: ReflectionEntry[],
   options: InsightComputationOptions = {}
 ): InsightComputationResult {
-  // Compute standard insights
-  const timelineSpikes = computeTimelineSpikes(reflections);
-  const alwaysOnSummary = computeAlwaysOnSummary(reflections);
-  const linkClusters = computeLinkClusters(reflections);
+  // Phase 4.0: Compute insights through canonical engine
+  const timelineResult = computeTimelineInsights(reflections);
+  const summaryResult = computeSummaryInsights(reflections);
   
-  // Compute year-over-year if both years provided
+  // Compute year-over-year if both years provided (not yet in engine)
   let yearOverYear: YearOverYearCard | null = null;
   if (options.fromYear !== undefined && options.toYear !== undefined) {
     yearOverYear = computeYearOverYearCard(
@@ -56,9 +55,9 @@ export function computeAllInsights(
   
   // Combine all insights
   const allInsights: InsightCard[] = [
-    ...timelineSpikes,
-    ...alwaysOnSummary,
-    ...linkClusters,
+    ...timelineResult.spikes,
+    ...summaryResult.alwaysOnSummary,
+    ...timelineResult.clusters,
   ];
   
   if (yearOverYear) {
@@ -66,9 +65,9 @@ export function computeAllInsights(
   }
   
   return {
-    timelineSpikes,
-    alwaysOnSummary,
-    linkClusters,
+    timelineSpikes: timelineResult.spikes,
+    alwaysOnSummary: summaryResult.alwaysOnSummary,
+    linkClusters: timelineResult.clusters,
     yearOverYear,
     allInsights,
   };

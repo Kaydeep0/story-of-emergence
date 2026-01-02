@@ -61,11 +61,9 @@ import type { InsightArtifact } from '../lib/insights/artifactTypes';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { useLogEvent } from '../lib/useLogEvent';
 import { rpcFetchEntries } from '../lib/entries';
-import { computeTimelineSpikes, itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
-import { computeAlwaysOnSummary } from '../lib/insights/alwaysOnSummary';
-import { computeLinkClusters } from '../lib/insights/linkClusters';
-import { computeTopicDrift } from '../lib/insights/topicDrift';
-import { computeContrastPairs } from '../lib/insights/contrastPairs';
+// Phase 4.0: All insight computation routes through canonical engine
+import { computeTimelineInsights, computeSummaryInsights } from '../lib/insightEngine';
+import { itemToReflectionEntry, attachDemoSourceLinks } from '../lib/insights/timelineSpikes';
 import { computeUnifiedSourceInsights, type UnifiedSourceInsights, type SourceEntryLite } from '../lib/insights/fromSources';
 import type { ContrastPair } from '../lib/insights/contrastPairs';
 import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard, InsightCard } from '../lib/insights/types';
@@ -817,15 +815,12 @@ export default function InsightsPage() {
           items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
         );
 
-        // Compute always-on summary insights (pure function, no network calls)
-        const insights = computeAlwaysOnSummary(reflectionEntries);
-
-        // Compute topic drift for "Top topics this month" section
-        const drift = computeTopicDrift(reflectionEntries);
+        // Phase 4.0: Compute summary insights through canonical engine
+        const summaryResult = computeSummaryInsights(reflectionEntries);
 
         if (!cancelled) {
-          setSummaryInsights(insights);
-          setTopicDrift(drift);
+          setSummaryInsights(summaryResult.alwaysOnSummary);
+          setTopicDrift(summaryResult.topicDrift);
           setSummaryReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
@@ -966,17 +961,14 @@ export default function InsightsPage() {
           items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
         );
 
-        // Compute all insights (pure functions, no network calls)
-        const spikes = computeTimelineSpikes(reflectionEntries);
-        const clusters = computeLinkClusters(reflectionEntries);
-        const drift = computeTopicDrift(reflectionEntries);
-        const contrasts = computeContrastPairs(drift);
+        // Phase 4.0: Compute timeline insights through canonical engine
+        const timelineResult = computeTimelineInsights(reflectionEntries);
 
         if (!cancelled) {
-          setSpikeInsights(spikes);
-          setClusterInsights(clusters);
-          setTopicDrift(drift);
-          setContrastPairs(contrasts);
+          setSpikeInsights(timelineResult.spikes);
+          setClusterInsights(timelineResult.clusters);
+          setTopicDrift(timelineResult.topicDrift);
+          setContrastPairs(timelineResult.contrastPairs);
           setTimelineReflectionEntries(reflectionEntries);
         }
       } catch (err: any) {
