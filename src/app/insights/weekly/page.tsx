@@ -181,7 +181,7 @@ export default function WeeklyPage() {
             {weeklyCards.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
-                  No weekly insights yet. Write a few reflections this week and they&apos;ll appear here.
+                  No reflections in the last 7 days. Write a reflection today and it will appear here.
                 </p>
                 <Link
                   href="/insights/summary"
