@@ -313,7 +313,7 @@ export default function TimelinePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {spikeInsights.map((spike) => {
+                  {spikeInsights.map((spike, spikeIndex) => {
                     const dateKey = spike.data.date;
                     const expanded = isExpanded(dateKey);
                     const visibleCount = expanded ? spike.evidence.length : 5;
@@ -323,7 +323,7 @@ export default function TimelinePage() {
 
                     return (
                       <div
-                        key={String(spike.id) || `spike-${dateKey}-${spikeInsights.indexOf(spike)}`}
+                        key={String(spike.id) || `spike-${dateKey}-${spikeIndex}`}
                         className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-3 cursor-pointer hover:bg-amber-500/10 transition-colors"
                         onClick={(e) => {
                           if ((e.target as HTMLElement).closest('button')) return;
