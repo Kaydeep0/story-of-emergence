@@ -241,9 +241,9 @@ export default function YearOverYearPage() {
 
                   {yoyCard.evidence.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {yoyCard.evidence.slice(0, 4).map((ev) => (
+                      {yoyCard.evidence.slice(0, 4).map((ev, evIndex) => (
                         <span
-                          key={ev.entryId}
+                          key={String(ev.entryId) || `evidence-${evIndex}`}
                           className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded"
                         >
                           {new Date(ev.timestamp).toLocaleDateString(undefined, {
