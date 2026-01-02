@@ -3,7 +3,10 @@
 import { useMemo, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { traceObserverView } from '@/app/lib/observer';
-import type { InsightCard, InsightDeltaCard } from '@/app/lib/insights/viewModels';
+import type { InsightCardBase } from '@/app/lib/insights/normalizeCard';
+import type { InsightDeltaCard } from '@/app/lib/insights/viewModels';
+
+type InsightCard = InsightCardBase;
 
 type Props = {
   insights: InsightCard[];

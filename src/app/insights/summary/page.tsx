@@ -31,6 +31,7 @@ import { InsightsSourceCard } from '../../components/InsightsSourceCard';
 import { InsightPanel } from '../components/InsightPanel';
 import { InsightTimeline } from '../components/InsightTimeline';
 import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
+import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
 
 export default function SummaryPage() {
   const { address, isConnected } = useAccount();
@@ -171,7 +172,8 @@ export default function SummaryPage() {
     if (monthNarrative) cards.push(fromNarrative(monthNarrative, 'month'));
     if (yearNarrative) cards.push(fromNarrative(yearNarrative, 'year'));
 
-    return cards;
+    // Normalize all cards to canonical shape before rendering
+    return cards.map(normalizeInsightCard);
   }, [reflections]);
 
   // Generate summary artifact
