@@ -92,8 +92,11 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
             {/* Deltas for this scope */}
             {scopeDeltas.length > 0 && (
               <div className="ml-4 space-y-2 border-l-2 border-gray-100 pl-4">
-                {scopeDeltas.map((delta) => (
-                  <div key={delta.id} className="flex items-start gap-2 text-sm">
+                {scopeDeltas.map((delta, deltaIndex) => {
+                  const deltaStableId = typeof delta.id === 'string' ? delta.id : JSON.stringify(delta.id ?? {});
+                  const deltaKey = `${delta.scope}:${deltaStableId}:${deltaIndex}`;
+                  return (
+                  <div key={deltaKey} className="flex items-start gap-2 text-sm">
                     <span className="text-gray-500 mt-0.5 shrink-0">
                       <DirectionIcon direction={delta.direction} />
                     </span>
@@ -102,7 +105,8 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
                       <p className="text-gray-600 mt-0.5">{delta.summary}</p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
