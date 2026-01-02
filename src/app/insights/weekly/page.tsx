@@ -1,18 +1,131 @@
 'use client';
 
 /**
- * Weekly lens - Coming next
+ * Weekly lens - Last 7 days insights
  * 
  * Weekly insights for the last 7 days. Focus, momentum, spikes.
- * This lens will complement Summary with a tighter time window.
+ * Uses the insight engine with horizon: 'weekly' to compute cards.
  */
 
-import Link from 'next/link';
+import { useEffect, useState, useMemo } from 'react';
+import { useAccount } from 'wagmi';
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
+import { rpcFetchEntries } from '../../lib/entries';
+import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
+import { useReflectionLinks } from '../../lib/reflectionLinks';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
+import { getWindowStartEnd } from '../../lib/insights/timeWindows';
+import type { ReflectionEntry } from '../../lib/insights/types';
 import { InsightsTabs } from '../components/InsightsTabs';
 import { LENSES } from '../lib/lensContract';
+import { InsightCardSkeleton } from '../components/InsightsSkeleton';
+import { ShareActionsBar } from '../components/ShareActionsBar';
+import { InsightPanel } from '../components/InsightPanel';
+import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
+import { generateWeeklyArtifact } from '../../../lib/artifacts/weeklyArtifact';
+import Link from 'next/link';
 
 export default function WeeklyPage() {
+  const { address, isConnected } = useAccount();
+  const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
+  const { getSourceIdFor } = useReflectionLinks(address);
+  const [mounted, setMounted] = useState(false);
+  const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const lens = LENSES.weekly;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Load reflections
+  useEffect(() => {
+    if (!mounted || !isConnected || !address || !encryptionReady || !sessionKey) {
+      setReflections([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadReflections() {
+      try {
+        setLoading(true);
+        setError(null);
+        const { items } = await rpcFetchEntries(address, sessionKey, {
+          includeDeleted: false,
+          limit: 1000,
+          offset: 0,
+        });
+
+        if (cancelled) return;
+
+        const reflectionEntries = attachDemoSourceLinks(
+          items.map((item) => itemToReflectionEntry(item, getSourceIdFor))
+        );
+
+        setReflections(reflectionEntries);
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Failed to load reflections:', err);
+          setError(err.message ?? 'Failed to load reflections');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadReflections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
+
+  // Compute weekly insights
+  const weeklyCards = useMemo(() => {
+    if (reflections.length === 0) return [];
+
+    try {
+      // Get current week window
+      const weekWindow = getWindowStartEnd('week');
+      
+      // Convert reflections to events format expected by engine
+      const events = reflections.map((r) => ({
+        eventAt: new Date(r.createdAt),
+        kind: 'written' as const,
+        sourceKind: r.sourceKind ?? 'journal' as const,
+        sourceId: r.sourceId ?? null,
+        plaintext: r.plaintext,
+        length: r.plaintext.length,
+        topics: [], // Will be extracted by engine if needed
+      }));
+
+      // Compute weekly artifact
+      const artifact = computeInsightsForWindow({
+        horizon: 'weekly',
+        events,
+        windowStart: weekWindow.start,
+        windowEnd: weekWindow.end,
+        wallet: address ?? undefined,
+        entriesCount: reflections.length,
+        eventsCount: events.length,
+      });
+
+      // Extract cards and normalize
+      const cards = artifact.cards ?? [];
+      return cards.map(normalizeInsightCard);
+    } catch (err) {
+      console.error('Failed to compute weekly insights:', err);
+      return [];
+    }
+  }, [reflections, address]);
+
+
+  if (!mounted) return null;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -22,21 +135,52 @@ export default function WeeklyPage() {
 
         <InsightsTabs />
 
-        <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-          <p className="text-sm text-white/70">
-            Weekly lens is coming next. Summary is stable, Timeline is stable,
-            Yearly is stable. Weekly is the next compute pass.
-          </p>
+        {loading && (
+          <div className="mt-8 space-y-4">
+            <InsightCardSkeleton />
+          </div>
+        )}
 
-          <div className="mt-4">
+        {error && (
+          <div className="mt-8 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
+            <p className="text-sm text-rose-400">{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && reflections.length === 0 && (
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+            <p className="text-sm text-white/60 mb-4">
+              No reflections yet. Start writing reflections to see your weekly insights.
+            </p>
             <Link
               href="/insights/summary"
-              className="inline-flex items-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:bg-white/90 transition-colors"
+              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
             >
               Back to Summary
             </Link>
           </div>
-        </div>
+        )}
+
+        {!loading && !error && reflections.length > 0 && (
+          <div className="space-y-6">
+            {/* Weekly Cards */}
+            {weeklyCards.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                <p className="text-sm text-white/60 mb-4">
+                  No weekly insights yet. Write a few reflections this week and they&apos;ll appear here.
+                </p>
+                <Link
+                  href="/insights/summary"
+                  className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Back to Summary
+                </Link>
+              </div>
+            ) : (
+              <InsightPanel insights={weeklyCards} />
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
