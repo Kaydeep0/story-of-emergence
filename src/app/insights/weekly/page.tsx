@@ -89,40 +89,74 @@ export default function WeeklyPage() {
 
     try {
       // Filter to last 7 days (rolling window, not calendar week)
-      const now = new Date();
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      start.setHours(0, 0, 0, 0); // Snap to start of day
+      // Use defensive timestamp extraction to handle different field names
+      const now = Date.now();
+      const start = now - 7 * 24 * 60 * 60 * 1000;
+
+      const getTs = (r: any) => {
+        const raw =
+          r?.createdAt ??
+          r?.created_at ??
+          r?.inserted_at ??
+          r?.timestamp ??
+          r?.date ??
+          r?.created;
+
+        if (!raw) return NaN;
+
+        const d = raw instanceof Date ? raw : new Date(raw);
+        const t = d.getTime();
+        return Number.isFinite(t) ? t : NaN;
+      };
+
+      let invalid = 0;
 
       const recent = reflections.filter((r) => {
-        const t = new Date(r.createdAt).getTime();
-        return t >= start.getTime() && t <= now.getTime();
+        const t = getTs(r);
+        if (!Number.isFinite(t)) {
+          invalid++;
+          return false;
+        }
+        return t >= start && t <= now;
       });
 
       // Debug logging
-      console.log("weekly rolling window", start.toISOString(), now.toISOString());
       console.log("weekly reflections total", reflections.length);
+      console.log("weekly invalid timestamps", invalid);
+      console.log("weekly window", new Date(start).toISOString(), new Date(now).toISOString());
+      console.log(
+        "weekly sample raw dates",
+        reflections.slice(0, 10).map((r) => ({
+          createdAt: (r as any).createdAt,
+          created_at: (r as any).created_at,
+          inserted_at: (r as any).inserted_at,
+          ts: getTs(r),
+        }))
+      );
       console.log("weekly reflections last7", recent.length);
       
       if (recent.length === 0) return [];
 
       // Convert filtered reflections to events format expected by engine
-      const events = recent.map((r) => ({
-        eventAt: new Date(r.createdAt),
-        kind: 'written' as const,
-        sourceKind: r.sourceKind ?? 'journal' as const,
-        sourceId: r.sourceId ?? null,
-        plaintext: r.plaintext,
-        length: r.plaintext.length,
-        topics: [], // Will be extracted by engine if needed
-      }));
+      const events = recent.map((r) => {
+        const ts = getTs(r);
+        return {
+          eventAt: new Date(ts),
+          kind: 'written' as const,
+          sourceKind: r.sourceKind ?? 'journal' as const,
+          sourceId: r.sourceId ?? null,
+          plaintext: r.plaintext,
+          length: r.plaintext.length,
+          topics: [], // Will be extracted by engine if needed
+        };
+      });
 
       // Compute weekly artifact with rolling 7-day window
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
-        windowStart: start,
-        windowEnd: now,
+        windowStart: new Date(start),
+        windowEnd: new Date(now),
         wallet: address ?? undefined,
         entriesCount: recent.length,
         eventsCount: events.length,
