@@ -86,9 +86,12 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                 {group.insights.map((insight, insightIndex) => {
                   // Render deltas after the last insight in the group
                   const isLastInsight = insightIndex === group.insights.length - 1;
+                  // Ensure stable unique key
+                  const stableId = typeof insight.id === 'string' ? insight.id : JSON.stringify(insight.id ?? {});
+                  const uniqueKey = `${group.scope}:${stableId}:${insightIndex}`;
                   
                   return (
-                    <div key={insight.id} className="space-y-3">
+                    <div key={uniqueKey} className="space-y-3">
                       {/* Insight card */}
                       <div className="border-l-2 border-gray-200 pl-4 py-2">
                         <div className="flex items-start justify-between gap-4 mb-2">

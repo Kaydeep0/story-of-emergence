@@ -65,10 +65,13 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
 
   return (
     <div className="space-y-6">
-      {sortedInsights.map((insight) => {
+      {sortedInsights.map((insight, index) => {
         const scopeDeltas = deltasByScope.get(insight.scope) || [];
+        // Ensure stable unique key: coerce id to string, fallback to scope+index
+        const stableId = typeof insight.id === 'string' ? insight.id : JSON.stringify(insight.id ?? {});
+        const uniqueKey = `${insight.scope}:${stableId}:${index}`;
         return (
-          <div key={insight.id} className="space-y-3">
+          <div key={uniqueKey} className="space-y-3">
             {/* Insight Card */}
             <div className="border border-gray-200 rounded p-4 bg-white">
               <div className="flex items-start justify-between gap-4 mb-2">
