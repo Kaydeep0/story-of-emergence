@@ -84,7 +84,7 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <ConfidenceBadge confidence={insight.confidence ?? 'medium'} />
-                  <ScopeLabel scope={insight.scope} />
+                  <ScopeLabel scope={(insight as any).scope ?? 'unknown'} />
                 </div>
               </div>
             </div>
@@ -144,12 +144,24 @@ function ConfidenceBadge({
 
 /**
  * Scope label component
+ * Defensive: handles non-string scope values gracefully
  */
-function ScopeLabel({ scope }: { scope: InsightCard['scope'] }) {
-  const label = scope.charAt(0).toUpperCase() + scope.slice(1);
-  return (
-    <span className="text-xs text-gray-500 font-medium">{label}</span>
-  );
+function ScopeLabel({
+  scope,
+}: {
+  scope?: InsightCard['scope'] | string | { label?: string; scope?: string } | null;
+}) {
+  const raw =
+    typeof scope === 'string'
+      ? scope
+      : scope && typeof scope === 'object'
+      ? scope.label ?? scope.scope ?? ''
+      : '';
+
+  const value = (raw || 'unknown').toString();
+  const label = value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Unknown';
+
+  return <span className="text-xs text-gray-500 font-medium">{label}</span>;
 }
 
 /**
