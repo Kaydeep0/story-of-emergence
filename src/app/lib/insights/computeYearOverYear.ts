@@ -35,9 +35,20 @@ export function computeYearOverYearCard(
 
   const aCount = yearAEntries.length;
   const bCount = yearBEntries.length;
+  
+  // Guard: ensure both years have entries
+  if (aCount === 0 || bCount === 0) {
+    throw new Error('Cannot compare years with zero entries');
+  }
+  
   const delta = bCount - aCount;
   const percentChange = aCount > 0 ? Math.round((delta / aCount) * 100) : 0;
   const direction = delta === 0 ? 'unchanged' : delta > 0 ? 'increased' : 'decreased';
+  
+  // Guard: ensure direction matches delta sign
+  if ((delta > 0 && direction !== 'increased') || (delta < 0 && direction !== 'decreased')) {
+    throw new Error('Direction mismatch: delta and direction must align');
+  }
 
   // Build evidence from sample entries
   const evidence: InsightEvidence[] = [

@@ -135,13 +135,20 @@ export default function YearOverYearPage() {
         return year === year2;
       });
 
+      // Guard: both years must have entries
       if (year1Reflections.length === 0 || year2Reflections.length === 0) {
         setYoyCard(null);
         return;
       }
 
       const card = computeYearOverYearCard(reflections, { fromYear: year1, toYear: year2 });
-      setYoyCard(card);
+      
+      // Guard: ensure card has valid data and never shows inverted values
+      if (card && card.evidence && card.evidence.length > 0) {
+        setYoyCard(card);
+      } else {
+        setYoyCard(null);
+      }
     } catch (err) {
       console.error('Failed to compute year-over-year insights:', err);
       setYoyCard(null);
@@ -272,7 +279,21 @@ export default function YearOverYearPage() {
             ) : year1 !== null && year2 !== null ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
                 <p className="text-sm text-white/60">
-                  Computing comparison between {year1} and {year2}...
+                  {(() => {
+                    const year1Reflections = reflections.filter(r => {
+                      const year = new Date(r.createdAt).getFullYear();
+                      return year === year1;
+                    });
+                    const year2Reflections = reflections.filter(r => {
+                      const year = new Date(r.createdAt).getFullYear();
+                      return year === year2;
+                    });
+                    
+                    if (year1Reflections.length === 0 || year2Reflections.length === 0) {
+                      return `Not enough data yet to compare these years.`;
+                    }
+                    return `Computing comparison between ${year1} and ${year2}...`;
+                  })()}
                 </p>
               </div>
             ) : null}

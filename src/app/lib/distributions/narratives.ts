@@ -62,11 +62,16 @@ function generateNarrativeText(
   scope: TimeScope,
   insight: DistributionInsight
 ): { headline: string; summary: string } {
-  // Guard: if insight is missing or invalid, return safe default
+  // Guard: if insight is missing or invalid, return time-specific default
   if (!insight || !insight.shape) {
+    const timeSpecificMessages: Record<TimeScope, string> = {
+      week: 'Not enough weekly data yet. Add a few more days of writing.',
+      month: 'Not enough monthly data yet. Keep writing through the month.',
+      year: 'Not enough yearly data yet. We will reveal your pattern as time accumulates.',
+    };
     return {
       headline: 'Distribution insight',
-      summary: 'Not enough data yet to generate a narrative for this view.',
+      summary: timeSpecificMessages[scope] || 'Not enough data yet to generate a narrative for this view.',
     };
   }
 
@@ -148,9 +153,14 @@ function generateNarrativeText(
 
     default:
       // Fallback for any unrecognized scope
+      const timeSpecificMessages: Record<TimeScope, string> = {
+        week: 'Not enough weekly data yet. Add a few more days of writing.',
+        month: 'Not enough monthly data yet. Keep writing through the month.',
+        year: 'Not enough yearly data yet. We will reveal your pattern as time accumulates.',
+      };
       return {
         headline: 'Distribution insight',
-        summary: 'Not enough data yet to generate a narrative for this view.',
+        summary: timeSpecificMessages[scope] || 'Not enough data yet to generate a narrative for this view.',
       };
   }
 }

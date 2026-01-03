@@ -245,6 +245,15 @@ export default function DistributionsPage() {
           </div>
         )}
 
+        {/* Minimum Entries Guard - only show if no distribution content */}
+        {!loading && !error && reflections.length > 0 && reflections.length < 7 && !distributionResult && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+            <p className="text-sm text-white/60">
+              Not enough data yet for a stable distribution profile. Keep writing for a few more days.
+            </p>
+          </div>
+        )}
+
         {/* Distribution Stats */}
         {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
           <div className="mb-8 space-y-4">
