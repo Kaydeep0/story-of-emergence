@@ -6,6 +6,7 @@ import type { InsightArtifact, InsightHorizon } from './artifactTypes';
 import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { computeWeeklyArtifact } from './computeWeeklyArtifact';
+import { computeSummaryArtifact } from './computeSummaryArtifact';
 import { extractPatternsFromArtifact } from './patterns/extractPatterns';
 import { snapshotPatterns } from '../patternMemory/patternSnapshot';
 import { analyzePatternDeltas } from '../patternMemory/patternDelta';
@@ -48,19 +49,15 @@ export function computeInsightsForWindow(args: {
       eventsCount,
     });
   } else if (horizon === 'summary') {
-    // Summary horizon: Use simplified artifact from summary insights
-    // For now, create a minimal artifact structure
-    // TODO: Create computeSummaryArtifact function similar to computeWeeklyArtifact
-    artifact = {
-      horizon: 'summary',
-      window: {
-        kind: 'custom',
-        start: windowStart.toISOString(),
-        end: windowEnd.toISOString(),
-      },
-      createdAt: new Date().toISOString(),
-      cards: [], // Summary cards are computed separately via computeSummaryInsights
-    };
+    artifact = computeSummaryArtifact({
+      events,
+      windowStart,
+      windowEnd,
+      timezone,
+      wallet,
+      entriesCount,
+      eventsCount,
+    });
   } else if (horizon === 'timeline') {
     // Timeline horizon: Use simplified artifact from timeline insights
     // For now, create a minimal artifact structure
