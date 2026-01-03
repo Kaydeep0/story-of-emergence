@@ -524,7 +524,7 @@ export default function TimelinePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {topicDrift.map((bucket) => {
+                  {topicDrift.map((bucket, idx) => {
                     const trendStyles = {
                       rising: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
                       stable: 'bg-white/10 text-white/60 border-white/20',
@@ -549,7 +549,7 @@ export default function TimelinePage() {
 
                     return (
                       <div
-                        key={String(bucket.topic) || `topic-${bucketIndex}`}
+                        key={String(bucket.topic) || `topic-${idx}`}
                         className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-5 space-y-3 cursor-pointer hover:bg-teal-500/10 transition-colors"
                         onClick={(e) => {
                           if ((e.target as HTMLElement).closest('button')) return;

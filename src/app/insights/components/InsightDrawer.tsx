@@ -3,9 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
-import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
+import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry, TimelineSpikeCard, LinkClusterCard } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
+import type { YearOverYearCard } from '../../lib/insights/computeYearOverYear';
 import type { SourceEntryLite } from '../../lib/insights/fromSources';
 import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../lib/reflectionSources';
 import { listExternalSources, type ExternalSourceDecrypted } from '../../lib/externalSources';
@@ -140,20 +141,89 @@ function normalizeContrastPair(pair: ContrastPair, index: number): NormalizedIns
 /**
  * Union type for all possible insight sources
  */
-export type InsightSource = AlwaysOnSummaryCard | TopicDriftBucket | ContrastPair;
+export type InsightSource = AlwaysOnSummaryCard | TopicDriftBucket | ContrastPair | TimelineSpikeCard | LinkClusterCard | YearOverYearCard | InsightCard;
+
+/**
+ * Helper to normalize Timeline Spike Cards
+ */
+function normalizeTimelineSpike(spike: TimelineSpikeCard): NormalizedInsight {
+  return {
+    id: spike.id,
+    title: spike.title,
+    type: 'Spike',
+    summary: spike.explanation,
+    whyThisMatters: 'Activity spikes show periods of intense reflection. These moments often capture important transitions or significant events.',
+    evidence: spike.evidence,
+  };
+}
+
+/**
+ * Helper to normalize Link Cluster Cards
+ */
+function normalizeLinkCluster(cluster: LinkClusterCard): NormalizedInsight {
+  return {
+    id: cluster.id,
+    title: cluster.title,
+    type: 'Pattern',
+    summary: cluster.explanation,
+    whyThisMatters: 'Link clusters reveal recurring themes and connections across your reflections. These patterns show how ideas relate and evolve.',
+    evidence: cluster.evidence,
+  };
+}
+
+/**
+ * Helper to normalize Year Over Year Cards
+ */
+function normalizeYearOverYear(yoy: YearOverYearCard): NormalizedInsight {
+  return {
+    id: yoy.id,
+    title: yoy.title,
+    type: 'Trend',
+    summary: yoy.explanation,
+    whyThisMatters: 'Year-over-year comparisons reveal long-term trends in your reflection patterns. These insights show how your thinking evolves over time.',
+    evidence: yoy.evidence,
+  };
+}
+
+/**
+ * Helper to normalize generic InsightCard
+ */
+function normalizeGenericCard(card: InsightCard): NormalizedInsight {
+  return {
+    id: card.id,
+    title: card.title,
+    type: 'Pattern',
+    summary: card.explanation,
+    whyThisMatters: 'This insight reveals patterns in your reflection activity.',
+    evidence: card.evidence || [],
+  };
+}
 
 /**
  * Normalize any insight source to the common format
  */
 export function normalizeInsight(source: InsightSource, index?: number): NormalizedInsight {
   if ('kind' in source && source.kind === 'always_on_summary') {
-    return normalizeAlwaysOnSummary(source);
+    return normalizeAlwaysOnSummary(source as AlwaysOnSummaryCard);
+  }
+  if ('kind' in source && source.kind === 'timeline_spike') {
+    return normalizeTimelineSpike(source as TimelineSpikeCard);
+  }
+  if ('kind' in source && source.kind === 'link_cluster') {
+    return normalizeLinkCluster(source as LinkClusterCard);
+  }
+  if ('kind' in source && source.kind === 'year_over_year') {
+    return normalizeYearOverYear(source as YearOverYearCard);
   }
   if ('trend' in source && 'topic' in source) {
     return normalizeTopicDrift(source as TopicDriftBucket);
   }
   if ('topicA' in source && 'topicB' in source) {
     return normalizeContrastPair(source as ContrastPair, index ?? 0);
+  }
+  // Fallback for generic InsightCard
+  if ('title' in source && 'explanation' in source) {
+    return normalizeGenericCard(source as InsightCard);
   }
   throw new Error('Unknown insight source type');
 }
