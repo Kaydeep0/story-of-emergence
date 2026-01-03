@@ -83,46 +83,14 @@ export default function WeeklyPage() {
     };
   }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute weekly insights (rolling 7-day window)
+  // Compute weekly insights - engine handles windowing
   const weeklyCards = useMemo(() => {
     if (reflections.length === 0) return [];
 
     try {
-      // Filter to last 7 days (rolling window, not calendar week)
-      // createdAt is already normalized to ISO string by itemToReflectionEntry
-      const now = Date.now();
-      const start = new Date(now - 7 * 24 * 60 * 60 * 1000);
-      start.setHours(0, 0, 0, 0); // Snap to start of day
-
-      const last7 = reflections.filter((r) => {
-        // createdAt is ISO string from ReflectionEntry
-        const createdAt = new Date(r.createdAt);
-        const isValid = createdAt instanceof Date && !isNaN(createdAt.getTime());
-        const inWindow = isValid && createdAt >= start;
-        return inWindow;
-      });
-
-      // Debug logging
-      console.log("weekly reflections total", reflections.length);
-      console.log("weekly last7", last7.length, "start", start.toISOString());
-      console.log("sample dates", last7.slice(0, 3).map((r) => ({
-        createdAt: r.createdAt,
-        parsed: new Date(r.createdAt).toISOString(),
-        isValid: !isNaN(new Date(r.createdAt).getTime()),
-      })));
-      if (reflections.length > 0 && last7.length === 0) {
-        console.log("⚠️ Filter dropped all reflections - checking first few:", reflections.slice(0, 3).map((r) => ({
-          createdAt: r.createdAt,
-          parsed: new Date(r.createdAt).toISOString(),
-          isValid: !isNaN(new Date(r.createdAt).getTime()),
-          beforeStart: new Date(r.createdAt) < start,
-        })));
-      }
-      
-      if (last7.length === 0) return [];
-
-      // Convert filtered reflections to events format expected by engine
-      const events = last7.map((r) => ({
+      // Convert all reflections to events format expected by engine
+      // Engine will handle weekly windowing internally
+      const events = reflections.map((r) => ({
         eventAt: new Date(r.createdAt),
         kind: 'written' as const,
         sourceKind: r.sourceKind ?? 'journal' as const,
@@ -132,20 +100,22 @@ export default function WeeklyPage() {
         topics: [], // Will be extracted by engine if needed
       }));
 
-      // Compute weekly artifact with rolling 7-day window
+      // Get current week window for engine
+      const weekWindow = getWindowStartEnd('week');
+
+      // Compute weekly artifact - engine handles windowing
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
-        windowStart: start,
-        windowEnd: new Date(now),
+        windowStart: weekWindow.start,
+        windowEnd: weekWindow.end,
         wallet: address ?? undefined,
-        entriesCount: last7.length,
+        entriesCount: reflections.length,
         eventsCount: events.length,
       });
 
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
-      console.log("weekly cards", cards.length, cards.map(c => c.headline ?? c.title ?? c.kind));
       return cards.map(normalizeInsightCard);
     } catch (err) {
       console.error('Failed to compute weekly insights:', err);
@@ -160,7 +130,7 @@ export default function WeeklyPage() {
     <div className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-12">
         <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
-        <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity from the last 7 days</p>
+        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
         <InsightsTabs />
 
@@ -196,7 +166,7 @@ export default function WeeklyPage() {
             {weeklyCards.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
-                  No reflections in the last 7 days. Write a reflection today and it will appear here.
+                  No weekly insights yet. Keep writing reflections and they&apos;ll appear here.
                 </p>
                 <Link
                   href="/insights/summary"
