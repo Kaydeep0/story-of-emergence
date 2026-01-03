@@ -69,36 +69,105 @@ Remaining:
 ---
 
 ### Phase 4.0 — Canonical Insight Architecture (ENGINE CONSOLIDATION)
-Status: COMPLETE AND VERIFIED
+Status: PARTIALLY COMPLETE
 
-- Canonical orchestration path exists
-- Insight engine is stable
-- Views no longer depend on fragile ad-hoc compute paths
+**Completed:**
+- Canonical orchestration path exists (`computeInsightsForWindow`)
+- Insight engine is stable and functional
+- Weekly lens routes through canonical engine ✅
 - Hooks ordering issues resolved (LifetimePage fixed)
 - No rules-of-hooks violations
 - TypeScript clean
 - `npm run dev`, `build`, and `start` all pass
-- Node 20 pinned via `.nvmrc`
+- Node 20 pinned via `.nvmrc` and `package.json` engines
 - Next.js upgraded to 16.1.1
 - Lockfile refreshed under Node 20
+- Documentation discipline established (SCOPE.md, STATUS.md, NEXT.md, CURSOR_RULES.md)
 
-Outcome: This is now an engine, not a collection of pages.
+**Remaining:**
+- Summary, Timeline, Yearly, Lifetime, YoY, Distributions still use direct compute functions
+- Only Weekly lens fully routes through canonical engine
+- Engine has stubs for Summary/Timeline (empty cards, computed separately)
+- Yearly/Lifetime/YoY throw errors if called through engine
+
+Outcome: Engine exists and works, but most views still bypass it. Migration needed.
 
 ---
 
 ## What is IN PROGRESS
-- Phase 3 sharing polish (preview = export)
 - Phase 4 view parity verification (routing all views through engine)
+- Phase 3 sharing polish (preview = export)
+
+---
+
+## Today's Accomplishments (January 2, 2026)
+
+**Environment & Build:**
+- ✅ Node 20 pinned via `.nvmrc` and `package.json` engines field
+- ✅ Next.js upgraded to 16.1.1 with Turbopack
+- ✅ Lockfile refreshed under Node 20 (removed pnpm-lock.yaml, using npm)
+- ✅ Removed deprecated eslint config from `next.config.ts`
+- ✅ `npm run dev` passes
+- ✅ `npm run build` passes (verified)
+- ✅ `npm run typecheck` passes
+
+**Code Quality:**
+- ✅ Fixed React rules-of-hooks violations in LifetimePage (moved all hooks to top)
+- ✅ No remaining hook order errors
+- ✅ TypeScript clean (no type errors)
+
+**Documentation:**
+- ✅ Created `docs/STATUS.md` - Project status snapshot
+- ✅ Created `docs/SCOPE.md` - Complete scope inventory
+- ✅ Created `docs/NEXT.md` - Prioritized next tasks
+- ✅ Created `docs/CURSOR_RULES.md` - Behavior rules for AI assistance
+
+**Verified Working Commands:**
+```bash
+# Verify Node version
+node -v  # Should show v20.x.x
+
+# Verify build
+npm run typecheck  # Should pass with 0 errors
+npm run build     # Should complete successfully
+npm run dev       # Should start dev server
+
+# Verify git state
+git status         # Should show clean working tree
+git log --oneline -5  # Should show recent commits
+```
+
+**Current Git State:**
+- Branch: `main`
+- Working tree: Clean (all changes committed)
+- Recent commits:
+  - `c93fc21` - docs: add Cursor behavior rules
+  - `fd62f29` - docs: add project status snapshot
+  - `5984463` - fix: move all hooks to top of LifetimePage
+  - `711393c` - chore: refresh lockfile under node 20
+  - `9582001` - chore: pin node 20 via .nvmrc
+
+**How to Verify Tomorrow:**
+1. Run `npm run typecheck` - should pass
+2. Run `npm run build` - should complete successfully
+3. Run `npm run dev` - should start without errors
+4. Check `git status` - should be clean
+5. Verify routes load: `/insights/weekly`, `/insights/summary`, `/insights/timeline`
 
 ---
 
 ## What is NEXT (in order)
 
-1. Verify Summary, Yearly, Lifetime, and YoY views all route through the canonical insight engine
-2. Remove any remaining view-level compute duplication
-3. Complete share preview = export contract
-4. Add platform presets for sharing
-5. Polish Yearly Wrap experience
+See `docs/NEXT.md` for detailed task breakdown.
+
+**Immediate Next Task:**
+Migrate Summary lens to canonical engine (replace `computeSummaryInsights` direct call with `computeInsightsForWindow`).
+
+**Subsequent Tasks:**
+1. Migrate Timeline lens to canonical engine
+2. Complete share preview = export contract
+3. Add platform presets for sharing
+4. Determine if Yearly/Lifetime/YoY should route through engine or remain separate
 
 ---
 
