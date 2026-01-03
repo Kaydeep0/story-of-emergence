@@ -55,6 +55,9 @@ export default function YearOverYearPage() {
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<any>(null);
+  const [computeError, setComputeError] = useState<{ message: string; debug?: any } | null>(null);
+  const [isComputing, setIsComputing] = useState(false);
+  const [retryKey, setRetryKey] = useState(0); // Force recompute on retry
 
   useEffect(() => {
     setMounted(true);
@@ -122,77 +125,127 @@ export default function YearOverYearPage() {
     }
   }, [availableYears, year1, year2]);
 
-  // Compute year-over-year card via canonical engine
+  // Compute year-over-year card via canonical engine with timeout protection
   useEffect(() => {
     if (reflections.length === 0 || year1 === null || year2 === null || !address) {
       setYoyCard(null);
+      setComputeError(null);
+      setIsComputing(false);
       return;
     }
 
-    try {
-      // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
-      const walletAlias = address.toLowerCase();
-      const events = reflections.map((r) => ({
-        id: r.id ?? crypto.randomUUID(),
-        walletAlias,
-        eventAt: new Date(r.createdAt).toISOString(),
-        eventKind: 'written' as const,
-        sourceKind: 'journal' as const,
-        plaintext: r.plaintext ?? '',
-        length: (r.plaintext ?? '').length,
-        sourceId: r.sourceId ?? null,
-        topics: [],
-      }));
+    // Reset state
+    setComputeError(null);
+    setIsComputing(true);
+    setYoyCard(null);
 
-      // Determine window: use all available reflections (YoY spans all time)
-      const dates = reflections.map((r) => new Date(r.createdAt));
-      const windowEnd = dates.length > 0 
-        ? new Date(Math.max(...dates.map(d => d.getTime())))
-        : new Date();
-      const windowStart = dates.length > 0
-        ? new Date(Math.min(...dates.map(d => d.getTime())))
-        : new Date(windowEnd.getTime() - 10 * 365 * 24 * 60 * 60 * 1000); // Default to 10 years back
-
-      // Compute YoY artifact via canonical engine with selected years
-      const artifact = computeInsightsForWindow({
-        horizon: 'yoy',
-        events,
-        windowStart,
-        windowEnd,
-        wallet: address ?? undefined,
-        entriesCount: reflections.length,
-        eventsCount: events.length,
-        fromYear: year1,
-        toYear: year2,
-        reflectionsLoaded: reflections.length,
-        eventsGenerated: events.length,
+    // Create timeout for 8 seconds
+    const timeoutId = setTimeout(() => {
+      setIsComputing(false);
+      setComputeError({
+        message: 'Computation timed out after 8 seconds',
+        debug: {
+          reflectionsCount: reflections.length,
+          year1,
+          year2,
+          eventCount: reflections.length,
+        },
       });
+      setYoyCard(null);
+    }, 8000);
 
-      // Store artifact for debug panel
-      setInsightArtifact(artifact);
+    // Wrap compute in async function to handle timeout
+    const computeAsync = async () => {
+      try {
+        // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
+        const walletAlias = address.toLowerCase();
+        const events = reflections.map((r) => ({
+          id: r.id ?? crypto.randomUUID(),
+          walletAlias,
+          eventAt: new Date(r.createdAt).toISOString(),
+          eventKind: 'written' as const,
+          sourceKind: 'journal' as const,
+          plaintext: r.plaintext ?? '',
+          length: (r.plaintext ?? '').length,
+          sourceId: r.sourceId ?? null,
+          topics: [],
+        }));
 
-      // Extract YearOverYearCard from artifact card metadata
-      const cards = artifact.cards ?? [];
-      const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
-      
-      if (yoyCardData && (yoyCardData as any)._yoyCard) {
-        const card = (yoyCardData as any)._yoyCard as YearOverYearCard;
+        // Determine window: use all available reflections (YoY spans all time)
+        const dates = reflections.map((r) => new Date(r.createdAt));
+        const windowEnd = dates.length > 0 
+          ? new Date(Math.max(...dates.map(d => d.getTime())))
+          : new Date();
+        const windowStart = dates.length > 0
+          ? new Date(Math.min(...dates.map(d => d.getTime())))
+          : new Date(windowEnd.getTime() - 10 * 365 * 24 * 60 * 60 * 1000); // Default to 10 years back
+
+        // Compute YoY artifact via canonical engine with selected years
+        const artifact = computeInsightsForWindow({
+          horizon: 'yoy',
+          events,
+          windowStart,
+          windowEnd,
+          wallet: address ?? undefined,
+          entriesCount: reflections.length,
+          eventsCount: events.length,
+          fromYear: year1,
+          toYear: year2,
+          reflectionsLoaded: reflections.length,
+          eventsGenerated: events.length,
+        });
+
+        // Clear timeout if computation completes
+        clearTimeout(timeoutId);
+        setIsComputing(false);
+
+        // Store artifact for debug panel
+        setInsightArtifact(artifact);
+
+        // Extract YearOverYearCard from artifact card metadata
+        const cards = artifact.cards ?? [];
+        const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
         
-        // Guard: ensure card has valid data and never shows inverted values
-        if (card && card.evidence && card.evidence.length > 0) {
-          setYoyCard(card);
+        if (yoyCardData && (yoyCardData as any)._yoyCard) {
+          const card = (yoyCardData as any)._yoyCard as YearOverYearCard;
+          
+          // Guard: ensure card has valid data and never shows inverted values
+          if (card && card.evidence && card.evidence.length > 0) {
+            setYoyCard(card);
+            setComputeError(null);
+          } else {
+            setYoyCard(null);
+          }
         } else {
+          // No card generated (likely because one or both years have no entries)
           setYoyCard(null);
         }
-      } else {
-        // No card generated (likely because one or both years have no entries)
+      } catch (err) {
+        // Clear timeout on error
+        clearTimeout(timeoutId);
+        setIsComputing(false);
+        
+        console.error('Failed to compute year-over-year insights:', err);
+        setComputeError({
+          message: err instanceof Error ? err.message : 'Unknown error during computation',
+          debug: {
+            reflectionsCount: reflections.length,
+            year1,
+            year2,
+            error: String(err),
+          },
+        });
         setYoyCard(null);
       }
-    } catch (err) {
-      console.error('Failed to compute year-over-year insights:', err);
-      setYoyCard(null);
-    }
-  }, [reflections, year1, year2, address]);
+    };
+
+    computeAsync();
+
+    // Cleanup function to clear timeout if component unmounts or dependencies change
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [reflections, year1, year2, address, retryKey]);
 
   if (!mounted) return null;
 
@@ -317,6 +370,47 @@ export default function YearOverYearPage() {
                   encryptionReady={encryptionReady}
                 />
               </div>
+            ) : computeError ? (
+              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-rose-400 mb-2">Computation Error</h3>
+                    <p className="text-sm text-white/70">{computeError.message}</p>
+                  </div>
+                  
+                  {computeError.debug && (
+                    <div className="rounded-lg border border-white/10 bg-black/40 p-3 text-xs font-mono">
+                      <div className="text-white/50 mb-1">Debug Info:</div>
+                      <div className="space-y-1 text-white/60">
+                        {Object.entries(computeError.debug).map(([key, value]) => (
+                          <div key={key}>
+                            <span className="text-white/50">{key}:</span> {String(value)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => {
+                      setComputeError(null);
+                      setIsComputing(false);
+                      setYoyCard(null);
+                      // Force recompute by incrementing retry key
+                      setRetryKey(prev => prev + 1);
+                    }}
+                    className="w-full rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-emerald-200 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : isComputing && year1 !== null && year2 !== null ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                <p className="text-sm text-white/60">
+                  Computing comparison between {year1} and {year2}...
+                </p>
+              </div>
             ) : year1 !== null && year2 !== null ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
                 <p className="text-sm text-white/60">
@@ -333,7 +427,7 @@ export default function YearOverYearPage() {
                     if (year1Reflections.length === 0 || year2Reflections.length === 0) {
                       return `Not enough data yet to compare these years.`;
                     }
-                    return `Computing comparison between ${year1} and ${year2}...`;
+                    return `Preparing comparison...`;
                   })()}
                 </p>
               </div>
