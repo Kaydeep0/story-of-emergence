@@ -10,7 +10,7 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeTimelineInsights } from '../../lib/insightEngine';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
 import type { ReflectionEntry } from '../../lib/insights/types';
 import type { TimelineSpikeCard, LinkClusterCard } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
@@ -118,9 +118,9 @@ export default function TimelinePage() {
     };
   }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute timeline insights
+  // Compute timeline insights via canonical engine
   useEffect(() => {
-    if (reflections.length === 0) {
+    if (reflections.length === 0 || !address) {
       setSpikeInsights([]);
       setClusterInsights([]);
       setTopicDrift([]);
@@ -129,11 +129,58 @@ export default function TimelinePage() {
     }
 
     try {
-      const result = computeTimelineInsights(reflections);
-      setSpikeInsights(result.spikes);
-      setClusterInsights(result.clusters);
-      setTopicDrift(result.topicDrift);
-      setContrastPairs(result.contrastPairs);
+      // Convert reflections to UnifiedInternalEvent format (same pattern as Weekly/Summary)
+      const walletAlias = address.toLowerCase();
+      const events = reflections.map((r) => ({
+        id: r.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: new Date(r.createdAt).toISOString(),
+        eventKind: 'written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: r.plaintext ?? '',
+        length: (r.plaintext ?? '').length,
+        sourceId: r.sourceId ?? null,
+        topics: [],
+      }));
+
+      // Determine window: use all available reflections (or last 90 days)
+      const now = new Date();
+      const windowEnd = now;
+      const windowStart = new Date(now);
+      windowStart.setDate(windowStart.getDate() - 90);
+
+      // Compute timeline artifact via canonical engine
+      const artifact = computeInsightsForWindow({
+        horizon: 'timeline',
+        events,
+        windowStart,
+        windowEnd,
+        wallet: address ?? undefined,
+        entriesCount: reflections.length,
+        eventsCount: events.length,
+      });
+
+      // Extract cards from artifact and reconstruct original types
+      const cards = artifact.cards ?? [];
+      
+      // Filter cards by kind to reconstruct original types
+      const spikes: TimelineSpikeCard[] = cards.filter((c): c is TimelineSpikeCard => c.kind === 'timeline_spike');
+      const clusters: LinkClusterCard[] = cards.filter((c): c is LinkClusterCard => c.kind === 'link_cluster');
+      
+      // Extract TopicDriftBucket from cards with metadata
+      const topicDriftBuckets: TopicDriftBucket[] = cards
+        .map((c) => (c as any)._topicDriftBucket)
+        .filter((b): b is TopicDriftBucket => b !== undefined);
+      
+      // Extract ContrastPair from cards with metadata
+      const contrastPairsData: ContrastPair[] = cards
+        .map((c) => (c as any)._contrastPair)
+        .filter((p): p is ContrastPair => p !== undefined);
+
+      setSpikeInsights(spikes);
+      setClusterInsights(clusters);
+      setTopicDrift(topicDriftBuckets);
+      setContrastPairs(contrastPairsData);
     } catch (err) {
       console.error('Failed to compute timeline insights:', err);
       setSpikeInsights([]);
@@ -141,7 +188,7 @@ export default function TimelinePage() {
       setTopicDrift([]);
       setContrastPairs([]);
     }
-  }, [reflections]);
+  }, [reflections, address]);
 
   // Generate timeline artifact
   useEffect(() => {

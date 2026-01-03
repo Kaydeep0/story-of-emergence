@@ -1,0 +1,180 @@
+// src/app/lib/insights/computeTimelineArtifact.ts
+// Compute Timeline InsightArtifact using existing pure compute functions
+// Part of Canonical Insight Engine Consolidation
+
+import type { ReflectionEntry, InsightCard } from './types';
+import type { InsightArtifact } from './artifactTypes';
+import type { InternalEvent } from '../types';
+import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
+import { computeTimelineSpikes } from './timelineSpikes';
+import { computeLinkClusters } from './linkClusters';
+import { computeTopicDrift } from './topicDrift';
+import { computeContrastPairs } from './contrastPairs';
+import type { TopicDriftBucket } from './topicDrift';
+import type { ContrastPair } from './contrastPairs';
+
+/**
+ * Convert InternalEvent or UnifiedInternalEvent to ReflectionEntry format
+ * Only includes journal events (sourceKind === "journal" && eventKind === "written")
+ */
+function eventsToReflectionEntries(
+  events: (InternalEvent | UnifiedInternalEvent)[]
+): ReflectionEntry[] {
+  const entries: ReflectionEntry[] = [];
+  
+  for (const ev of events) {
+    const eventAt = typeof ev.eventAt === 'string' ? new Date(ev.eventAt) : ev.eventAt;
+    
+    // Determine if this is a UnifiedInternalEvent or legacy InternalEvent
+    const isUnified = 'sourceKind' in ev;
+    
+    let sourceKind: string | undefined;
+    let eventKind: string | undefined;
+    let plaintext: string | undefined;
+    
+    if (isUnified) {
+      const unified = ev as UnifiedInternalEvent;
+      sourceKind = unified.sourceKind;
+      eventKind = unified.eventKind;
+      plaintext = unified.details;
+    } else {
+      const internal = ev as InternalEvent;
+      const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
+      sourceKind = payload.source_kind as string | undefined;
+      eventKind = payload.event_kind as string | undefined;
+      
+      if (typeof payload?.content === 'string') {
+        plaintext = payload.content;
+      } else if (typeof payload?.raw_metadata === 'object' && payload.raw_metadata !== null) {
+        const rawMeta = payload.raw_metadata as Record<string, unknown>;
+        if (typeof rawMeta.content === 'string') {
+          plaintext = rawMeta.content;
+        }
+      }
+    }
+    
+    // Only include journal events
+    if (sourceKind === 'journal' && eventKind === 'written' && plaintext) {
+      entries.push({
+        id: `timeline-entry-${entries.length}`,
+        createdAt: eventAt.toISOString(),
+        plaintext,
+      });
+    }
+  }
+  
+  return entries;
+}
+
+/**
+ * Convert TopicDriftBucket to InsightCard
+ * Stores original bucket data as metadata for reconstruction
+ */
+function topicDriftBucketToCard(bucket: TopicDriftBucket, index: number): InsightCard & { _topicDriftBucket?: TopicDriftBucket } {
+  const trendLabels: Record<TopicDriftBucket['trend'], string> = {
+    rising: 'Rising',
+    stable: 'Stable',
+    fading: 'Fading',
+  };
+  
+  const strengthLabels: Record<TopicDriftBucket['strengthLabel'], string> = {
+    high: 'High Drift',
+    medium: 'Medium Drift',
+    low: 'Low Drift',
+  };
+  
+  return {
+    id: `topic-drift-${bucket.topic}-${index}`,
+    kind: 'topic_cluster',
+    title: bucket.topic,
+    explanation: `${bucket.count} mentions in the last 28 days. Trend: ${trendLabels[bucket.trend]}, Strength: ${strengthLabels[bucket.strengthLabel]}`,
+    evidence: [],
+    computedAt: new Date().toISOString(),
+    _topicDriftBucket: bucket, // Store original data for reconstruction
+  };
+}
+
+/**
+ * Convert ContrastPair to InsightCard
+ * Stores original pair data as metadata for reconstruction
+ */
+function contrastPairToCard(pair: ContrastPair, index: number): InsightCard & { _contrastPair?: ContrastPair } {
+  const trendLabels: Record<ContrastPair['trendA'], string> = {
+    rising: 'Rising',
+    stable: 'Stable',
+    fading: 'Fading',
+  };
+  
+  return {
+    id: `contrast-pair-${pair.topicA}-${pair.topicB}-${index}`,
+    kind: 'topic_cluster',
+    title: `${pair.topicA} vs ${pair.topicB}`,
+    explanation: pair.summary,
+    evidence: [],
+    computedAt: new Date().toISOString(),
+    _contrastPair: pair, // Store original data for reconstruction
+  };
+}
+
+/**
+ * Compute Timeline InsightArtifact from events and window
+ * 
+ * Uses existing pure compute functions:
+ * - computeTimelineSpikes for activity spikes
+ * - computeLinkClusters for link clusters
+ * - computeTopicDrift for topic drift buckets
+ * - computeContrastPairs for contrast pairs
+ * 
+ * Returns InsightArtifact with cards ordered as UI expects
+ */
+export function computeTimelineArtifact(args: {
+  events: (InternalEvent | UnifiedInternalEvent)[];
+  windowStart: Date;
+  windowEnd: Date;
+  timezone?: string;
+  wallet?: string;
+  entriesCount?: number;
+  eventsCount?: number;
+}): InsightArtifact {
+  const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount } = args;
+  
+  // Convert events to ReflectionEntry format (only journal events)
+  const allReflectionEntries = eventsToReflectionEntries(events);
+  
+  // Filter entries to window
+  const windowEntries = allReflectionEntries.filter((entry) => {
+    const createdAt = new Date(entry.createdAt);
+    return createdAt >= windowStart && createdAt <= windowEnd;
+  });
+  
+  // Compute insights using existing pure functions
+  const spikes = computeTimelineSpikes(windowEntries);
+  const clusters = computeLinkClusters(windowEntries);
+  const topicDrift = computeTopicDrift(windowEntries);
+  const contrastPairs = computeContrastPairs(topicDrift);
+  
+  // Convert all to InsightCard[] format
+  // Spikes and clusters are already InsightCards
+  // TopicDriftBucket and ContrastPair are converted to InsightCards with metadata
+  const cards: InsightCard[] = [
+    ...spikes,
+    ...clusters,
+    ...topicDrift.map((bucket, idx) => topicDriftBucketToCard(bucket, idx)),
+    ...contrastPairs.map((pair, idx) => contrastPairToCard(pair, idx)),
+  ] as InsightCard[];
+  
+  const artifact: InsightArtifact = {
+    horizon: 'timeline',
+    window: {
+      kind: 'custom',
+      start: windowStart.toISOString(),
+      end: windowEnd.toISOString(),
+      timezone,
+    },
+    createdAt: new Date().toISOString(),
+    cards,
+  };
+  
+  return artifact;
+}
+
