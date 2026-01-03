@@ -84,8 +84,8 @@ export default function WeeklyPage() {
   }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
   // Compute weekly insights - filter events to weekly window before passing to engine
-  const { weeklyCards, eventsInWindow, windowStartIso, windowEndIso } = useMemo(() => {
-    if (reflections.length === 0) return { weeklyCards: [], eventsInWindow: 0, windowStartIso: '', windowEndIso: '' };
+  const { weeklyCards, eventsInWindow } = useMemo(() => {
+    if (reflections.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
     try {
       // Get current week window (Monday 00:00 through next Monday 00:00)
@@ -98,9 +98,6 @@ export default function WeeklyPage() {
       start.setHours(0, 0, 0, 0);
       const end = new Date(start);
       end.setDate(start.getDate() + 7);
-      
-      const windowStartIso = start.toISOString();
-      const windowEndIso = end.toISOString();
 
       // Convert all reflections to events format
       const eventsAll = reflections.map((r) => ({
@@ -119,7 +116,7 @@ export default function WeeklyPage() {
         return d >= start && d < end;
       });
 
-      if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0, windowStartIso, windowEndIso };
+      if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
       // Compute weekly artifact with filtered events
       const artifact = computeInsightsForWindow({
@@ -139,12 +136,10 @@ export default function WeeklyPage() {
       return {
         weeklyCards: normalizedCards,
         eventsInWindow: events.length,
-        windowStartIso,
-        windowEndIso,
       };
     } catch (err) {
       console.error('Failed to compute weekly insights:', err);
-      return { weeklyCards: [], eventsInWindow: 0, windowStartIso: '', windowEndIso: '' };
+      return { weeklyCards: [], eventsInWindow: 0 };
     }
   }, [reflections, address]);
 
@@ -187,25 +182,11 @@ export default function WeeklyPage() {
 
         {!loading && !error && reflections.length > 0 && (
           <div className="space-y-6">
-            {/* Debug block */}
-            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/70">
-              <div>weekly debug</div>
-              <div>reflections: {reflections.length}</div>
-              <div>eventsInWindow: {eventsInWindow}</div>
-              <div>cards: {weeklyCards.length}</div>
-              <div>windowStart: {windowStartIso}</div>
-              <div>windowEnd: {windowEndIso}</div>
-              <div>sample createdAt:</div>
-              <pre className="mt-2 whitespace-pre-wrap break-words text-white/60">
-                {JSON.stringify(reflections.slice(0, 3).map((r) => r.createdAt), null, 2)}
-              </pre>
-            </div>
-            
             {/* Weekly Cards */}
             {eventsInWindow === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
-                  No reflections this week. Write a reflection and it will appear here.
+                  No reflections this week yet.
                 </p>
                 <Link
                   href="/insights/summary"

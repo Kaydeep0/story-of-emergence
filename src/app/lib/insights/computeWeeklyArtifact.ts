@@ -96,15 +96,15 @@ export function computeWeeklyArtifact(args: {
   const timelineSpikes = computeTimelineSpikes(windowEntries);
   
   // Combine cards in the order UI expects:
-  // 1. Always-on summary cards first (weekly patterns, consistency, etc.)
-  // 2. Timeline spikes
+  // 1. Engine-generated cards first (always-on summary, timeline spikes)
+  // 2. Fallback card only if engine produces no cards but events exist
   const cards: InsightCard[] = [
     ...alwaysOnSummary,
     ...timelineSpikes,
   ];
   
   // Fallback: if no cards generated but we have events, create a baseline card
-  // Use events.length (filtered events) not windowEntries.length
+  // This ensures Weekly always shows something when there are reflections this week
   if (cards.length === 0 && events.length > 0) {
     cards.push({
       id: `weekly-fallback-${windowStart.toISOString()}`,
