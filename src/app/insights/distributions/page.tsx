@@ -7,7 +7,8 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeDistributionLayer, computeDistributionLayerLegacy, computeDistributionInsight, type WindowDistribution, type DistributionResult } from '../../lib/insights/distributionLayer';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
+import type { WindowDistribution, DistributionResult } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
@@ -86,26 +87,77 @@ export default function DistributionsPage() {
     };
   }, [mounted, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute distributions when reflections are loaded
+  // Compute distributions via canonical engine
   useEffect(() => {
-    if (reflections.length === 0) {
+    if (reflections.length === 0 || !address) {
       setDistributions([]);
       setDistributionResult(null);
       setDistributionInsight(null);
       return;
     }
 
-    // Compute detailed distribution result (30-day window)
-    const result = computeDistributionLayer(reflections, { windowDays: 30 });
-    setDistributionResult(result);
-    
-    // Compute legacy distributions for table view
-    const computed = computeDistributionLayerLegacy(reflections);
-    setDistributions(computed);
-    
-    const insight = computeDistributionInsight(reflections);
-    setDistributionInsight(insight);
-  }, [reflections]);
+    try {
+      // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
+      const walletAlias = address.toLowerCase();
+      const events = reflections.map((r) => ({
+        id: r.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: new Date(r.createdAt).toISOString(),
+        eventKind: 'written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: r.plaintext ?? '',
+        length: (r.plaintext ?? '').length,
+        sourceId: r.sourceId ?? null,
+        topics: [],
+      }));
+
+      // Determine window: use all available reflections (distributions analyzes all data)
+      const dates = reflections.map((r) => new Date(r.createdAt));
+      const windowEnd = dates.length > 0 
+        ? new Date(Math.max(...dates.map(d => d.getTime())))
+        : new Date();
+      const windowStart = dates.length > 0
+        ? new Date(Math.min(...dates.map(d => d.getTime())))
+        : new Date(windowEnd.getTime() - 365 * 24 * 60 * 60 * 1000); // Default to 1 year back
+
+      // Compute distributions artifact via canonical engine
+      const artifact = computeInsightsForWindow({
+        horizon: 'distributions',
+        events,
+        windowStart,
+        windowEnd,
+        wallet: address ?? undefined,
+        entriesCount: reflections.length,
+        eventsCount: events.length,
+      });
+
+      // Extract data structures from artifact card metadata
+      const cards = artifact.cards ?? [];
+      const distributionsCard = cards.find((c) => c.kind === 'distribution');
+      
+      if (distributionsCard) {
+        const cardWithMeta = distributionsCard as InsightCard & {
+          _distributionResult?: DistributionResult;
+          _windowDistributions?: WindowDistribution[];
+          _distributionInsight?: InsightCard | null;
+        };
+        
+        setDistributionResult(cardWithMeta._distributionResult ?? null);
+        setDistributions(cardWithMeta._windowDistributions ?? []);
+        setDistributionInsight(cardWithMeta._distributionInsight ?? null);
+      } else {
+        // No card generated
+        setDistributions([]);
+        setDistributionResult(null);
+        setDistributionInsight(null);
+      }
+    } catch (err) {
+      console.error('Failed to compute distributions insights:', err);
+      setDistributions([]);
+      setDistributionResult(null);
+      setDistributionInsight(null);
+    }
+  }, [reflections, address]);
 
   // Format date for display
   const formatDate = (dateStr: string): string => {

@@ -8,7 +8,7 @@ import type { PatternNarrative } from '../patternMemory/patternNarratives';
 /**
  * Time horizon for insight computation
  */
-export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy';
+export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy' | 'distributions';
 
 /**
  * Canonical insight artifact model

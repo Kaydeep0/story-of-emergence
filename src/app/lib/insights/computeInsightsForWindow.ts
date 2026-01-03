@@ -11,6 +11,7 @@ import { computeTimelineArtifact } from './computeTimelineArtifact';
 import { computeYearlyArtifact } from './computeYearlyArtifact';
 import { computeLifetimeArtifact } from './computeLifetimeArtifact';
 import { computeYoYArtifact } from './computeYoYArtifact';
+import { computeDistributionsArtifact } from './computeDistributionsArtifact';
 import { extractPatternsFromArtifact } from './patterns/extractPatterns';
 import { snapshotPatterns } from '../patternMemory/patternSnapshot';
 import { analyzePatternDeltas } from '../patternMemory/patternDelta';
@@ -105,6 +106,16 @@ export function computeInsightsForWindow(args: {
       eventsCount,
       fromYear: args.fromYear,
       toYear: args.toYear,
+    });
+  } else if (horizon === 'distributions') {
+    artifact = computeDistributionsArtifact({
+      events,
+      windowStart,
+      windowEnd,
+      timezone,
+      wallet,
+      entriesCount,
+      eventsCount,
     });
   } else {
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
