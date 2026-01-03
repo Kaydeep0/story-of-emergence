@@ -11,7 +11,7 @@
  * This is interpretation, not summarization.
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from '../artifacts/types';
 
 export type YearOverYearNarrative = {
   headline: string;

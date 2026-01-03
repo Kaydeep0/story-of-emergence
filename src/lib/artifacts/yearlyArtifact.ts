@@ -31,7 +31,7 @@ export async function generateYearlyArtifact(
   
   if (reflections.length > 0) {
     const dates = reflections
-      .map(r => r.timestamp)
+      .map(r => r.createdAt)
       .filter((d): d is string => !!d)
       .sort();
     
@@ -44,9 +44,9 @@ export async function generateYearlyArtifact(
   // Compute distinct months
   const monthSet = new Set<string>();
   for (const reflection of reflections) {
-    if (reflection.timestamp) {
+    if (reflection.createdAt) {
       try {
-        const date = new Date(reflection.timestamp);
+        const date = new Date(reflection.createdAt);
         if (!isNaN(date.getTime())) {
           const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
           monthSet.add(monthKey);

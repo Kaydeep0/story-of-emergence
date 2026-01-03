@@ -64,6 +64,10 @@ function formatDateRange(
  * Format: "Private reflection • Generated from encrypted data • {date range}"
  */
 export function generateProvenanceLine(artifact: ShareArtifact): string {
+  if (!artifact.inventory) {
+    return 'Private reflection • Generated from encrypted data';
+  }
+  
   const dateRange = formatDateRange(
     artifact.inventory.firstReflectionDate,
     artifact.inventory.lastReflectionDate

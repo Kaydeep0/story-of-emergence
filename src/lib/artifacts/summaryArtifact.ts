@@ -29,7 +29,7 @@ export async function generateSummaryArtifact(
   
   if (reflections.length > 0) {
     const dates = reflections
-      .map(r => r.timestamp || r.createdAt)
+      .map(r => r.createdAt)
       .filter((d): d is string => !!d)
       .sort();
     
@@ -42,7 +42,7 @@ export async function generateSummaryArtifact(
   // Compute distinct months (should be 1-2 for summary view)
   const monthSet = new Set<string>();
   for (const reflection of reflections) {
-    const dateStr = reflection.timestamp || reflection.createdAt;
+    const dateStr = reflection.createdAt;
     if (dateStr) {
       try {
         const date = new Date(dateStr);
@@ -61,7 +61,7 @@ export async function generateSummaryArtifact(
   
   const reflectionsByDay = new Map<string, ReflectionEntry[]>();
   for (const reflection of reflections) {
-    const dateStr = reflection.timestamp || reflection.createdAt;
+    const dateStr = reflection.createdAt;
     if (dateStr) {
       try {
         const date = new Date(dateStr);

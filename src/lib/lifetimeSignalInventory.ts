@@ -192,7 +192,7 @@ export function buildLifetimeSignalInventory(args: {
   };
 }
 
-import type { ShareArtifact } from './lifetimeArtifact';
+import type { ShareArtifact } from './artifacts/types';
 import { generateArtifactId } from './artifacts/artifactId';
 
 /**

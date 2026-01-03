@@ -12,7 +12,7 @@
  * - No Supabase writes
  */
 
-import type { ShareArtifact } from './lifetimeArtifact';
+import type { ShareArtifact } from './artifacts/types';
 import { aesGcmEncryptText, aesGcmDecryptText } from './crypto';
 import { u8ToArrayBuffer } from './crypto';
 
