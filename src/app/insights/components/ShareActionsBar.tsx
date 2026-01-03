@@ -440,7 +440,7 @@ function setShareConfirmed(): void {
  * Never logs content, captions, or decrypted text
  */
 function logShareAttempt(
-  platform: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage',
+  platform: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage' | 'copy_link',
   artifact: ShareArtifact
 ): void {
   // Fire-and-forget: don't block sharing if logging fails
@@ -590,11 +590,13 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   // Phase 3.4: Only external shares require confirmation (not "Send privately")
   const executeWithConfirmation = (
     action: () => void, 
-    logAction: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage',
+    logAction: 'caption' | 'download' | 'web_share' | 'x' | 'linkedin' | 'imessage' | 'copy_link',
     requiresConfirmation: boolean = true
   ) => {
     // Always log attempt (even if cancelled)
-    logShareAttempt(logAction, artifact);
+    if (artifact) {
+      logShareAttempt(logAction, artifact);
+    }
     
     if (!requiresConfirmation || shareConfirmed) {
       // Already confirmed this session or doesn't require confirmation, execute immediately

@@ -108,6 +108,7 @@ export default function SummaryPage() {
     let cancelled = false;
 
     async function loadSources() {
+      if (!address) return;
       try {
         const sourcesList = await listExternalEntries(address);
         if (!cancelled) {

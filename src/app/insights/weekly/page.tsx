@@ -86,7 +86,7 @@ export default function WeeklyPage() {
 
   // Compute weekly insights - filter events to weekly window before passing to engine
   const { weeklyCards, eventsInWindow } = useMemo(() => {
-    if (reflections.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
+    if (reflections.length === 0 || !address) return { weeklyCards: [], eventsInWindow: 0 };
 
     try {
       // Get current week window (Monday 00:00 through next Monday 00:00)
@@ -106,7 +106,7 @@ export default function WeeklyPage() {
         id: r.id ?? crypto.randomUUID(),
         walletAlias,
         eventAt: new Date(r.createdAt).toISOString(),
-        eventKind: 'reflection_written' as const,
+        eventKind: 'written' as const,
         sourceKind: 'journal' as const,
         plaintext: r.plaintext ?? '',
         length: (r.plaintext ?? '').length,
@@ -116,8 +116,8 @@ export default function WeeklyPage() {
 
       // Filter events to weekly window (engine expects pre-filtered events)
       const events = eventsAll.filter((e) => {
-        const d = e.eventAt;
-        return d >= start && d < end;
+        const dt = new Date(e.eventAt);
+        return dt >= start && dt < end;
       });
 
       if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
