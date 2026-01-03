@@ -139,12 +139,10 @@ export async function listExternalSources(
     query = query.eq('source_type', options.source_type);
   }
   
-  if (options?.limit) {
-    query = query.limit(options.limit);
-  }
-  
-  if (options?.offset) {
-    query = query.offset(options.offset);
+  if (options?.limit != null) {
+    const from = options.offset ?? 0;
+    const to = from + options.limit - 1;
+    query = query.range(from, to);
   }
   
   const { data: rows, error } = await query;
