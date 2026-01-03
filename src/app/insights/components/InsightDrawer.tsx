@@ -199,6 +199,7 @@ function ReflectionPreviewPanel({
     }
 
     async function loadLinkedSources() {
+      if (!address || !entry || !sessionKey) return;
       try {
         setLoadingSources(true);
         const sources = await listSourcesForReflection(address, entry.id, sessionKey);
@@ -221,6 +222,7 @@ function ReflectionPreviewPanel({
     }
 
     async function loadAvailableSources() {
+      if (!address || !sessionKey) return;
       try {
         const sources = await listExternalSources(address, sessionKey);
         // Filter out already linked sources
@@ -236,15 +238,13 @@ function ReflectionPreviewPanel({
   }, [showAddSource, address, encryptionReady, sessionKey, linkedSources]);
 
   const handleAddSource = async () => {
-    if (!entry || !address || !selectedSourceId) return;
+    if (!entry || !address || !selectedSourceId || !sessionKey) return;
 
     try {
       await linkSourceToReflection(address, entry.id, selectedSourceId);
       // Reload linked sources
-      if (sessionKey) {
-        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
-        setLinkedSources(sources);
-      }
+      const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+      setLinkedSources(sources);
       setShowAddSource(false);
       setSelectedSourceId('');
       toast.success('Source linked');
@@ -255,15 +255,13 @@ function ReflectionPreviewPanel({
   };
 
   const handleRemoveSource = async (sourceId: string) => {
-    if (!entry || !address) return;
+    if (!entry || !address || !sessionKey) return;
 
     try {
       await unlinkSourceFromReflection(address, entry.id, sourceId);
       // Reload linked sources
-      if (sessionKey) {
-        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
-        setLinkedSources(sources);
-      }
+      const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+      setLinkedSources(sources);
       toast.success('Source unlinked');
     } catch (err: any) {
       console.error('Failed to unlink source', err);

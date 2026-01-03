@@ -48,6 +48,7 @@ export default function WeeklyPage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) return;
       try {
         setLoading(true);
         setError(null);

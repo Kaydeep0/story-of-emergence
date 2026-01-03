@@ -82,6 +82,7 @@ export default function TimelinePage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) return;
       try {
         setLoading(true);
         setError(null);

@@ -65,6 +65,7 @@ export default function SummaryPage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) return;
       try {
         setLoading(true);
         setError(null);
@@ -200,7 +201,8 @@ export default function SummaryPage() {
       return;
     }
 
-    generateSummaryArtifact(reflections, address).then(setSummaryArtifact).catch((err) => {
+    const addr = address; // Capture for closure
+    generateSummaryArtifact(reflections, addr).then(setSummaryArtifact).catch((err) => {
       console.error('Failed to generate summary artifact', err);
       setSummaryArtifact(null);
     });
