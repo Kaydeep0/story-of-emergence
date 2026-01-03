@@ -169,7 +169,7 @@ export default function WeeklyPage() {
         {!loading && !error && reflections.length === 0 && (
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
             <p className="text-sm text-white/60 mb-4">
-              No reflections yet. Start writing reflections to see your weekly insights.
+              No reflections yet.
             </p>
             <Link
               href="/insights/summary"
