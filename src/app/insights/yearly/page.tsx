@@ -18,7 +18,8 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from '../../lib/insights/distributionLayer';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
+import { computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
@@ -119,22 +120,66 @@ export default function YearlyWrapPage() {
     };
   }, [mounted, connected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute yearly distribution (365 days)
+  // Compute yearly distribution via canonical engine
   useEffect(() => {
-    if (reflections.length === 0) {
+    if (reflections.length === 0 || !address) {
       setDistributionResult(null);
       setWindowDistribution(null);
       return;
     }
 
-    // Compute distribution for 365 days
-    const result = computeDistributionLayer(reflections, { windowDays: 365 });
-    setDistributionResult(result);
-    
-    // Also get window distribution for classification
-    const windowDist = computeWindowDistribution(reflections, 365);
-    setWindowDistribution(windowDist);
-  }, [reflections]);
+    try {
+      // Convert reflections to UnifiedInternalEvent format (same pattern as Weekly/Summary/Timeline)
+      const walletAlias = address.toLowerCase();
+      const events = reflections.map((r) => ({
+        id: r.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: new Date(r.createdAt).toISOString(),
+        eventKind: 'written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: r.plaintext ?? '',
+        length: (r.plaintext ?? '').length,
+        sourceId: r.sourceId ?? null,
+        topics: [],
+      }));
+
+      // Determine window: last 365 days
+      const now = new Date();
+      const windowEnd = now;
+      const windowStart = new Date(now);
+      windowStart.setDate(windowStart.getDate() - 365);
+
+      // Compute yearly artifact via canonical engine
+      const artifact = computeInsightsForWindow({
+        horizon: 'yearly',
+        events,
+        windowStart,
+        windowEnd,
+        wallet: address ?? undefined,
+        entriesCount: reflections.length,
+        eventsCount: events.length,
+      });
+
+      // Extract DistributionResult and WindowDistribution from artifact card metadata
+      const cards = artifact.cards ?? [];
+      const yearlyCard = cards.find((c) => c.kind === 'distribution');
+      
+      if (yearlyCard && (yearlyCard as any)._distributionResult && (yearlyCard as any)._windowDistribution) {
+        const distributionResult = (yearlyCard as any)._distributionResult as DistributionResult;
+        const windowDistribution = (yearlyCard as any)._windowDistribution as WindowDistribution;
+        setDistributionResult(distributionResult);
+        setWindowDistribution(windowDistribution);
+      } else {
+        // No data in window
+        setDistributionResult(null);
+        setWindowDistribution(null);
+      }
+    } catch (err) {
+      console.error('Failed to compute yearly insights:', err);
+      setDistributionResult(null);
+      setWindowDistribution(null);
+    }
+  }, [reflections, address]);
 
   // Format date for display
   const formatDate = (dateStr: string): string => {

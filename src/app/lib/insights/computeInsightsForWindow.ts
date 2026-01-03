@@ -8,6 +8,7 @@ import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { computeWeeklyArtifact } from './computeWeeklyArtifact';
 import { computeSummaryArtifact } from './computeSummaryArtifact';
 import { computeTimelineArtifact } from './computeTimelineArtifact';
+import { computeYearlyArtifact } from './computeYearlyArtifact';
 import { extractPatternsFromArtifact } from './patterns/extractPatterns';
 import { snapshotPatterns } from '../patternMemory/patternSnapshot';
 import { analyzePatternDeltas } from '../patternMemory/patternDelta';
@@ -69,8 +70,18 @@ export function computeInsightsForWindow(args: {
       entriesCount,
       eventsCount,
     });
+  } else if (horizon === 'yearly') {
+    artifact = computeYearlyArtifact({
+      events,
+      windowStart,
+      windowEnd,
+      timezone,
+      wallet,
+      entriesCount,
+      eventsCount,
+    });
   } else {
-    // Yearly, lifetime, yoy: Not supported through engine yet (use separate pages)
+    // Lifetime, yoy: Not supported through engine yet (use separate pages)
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
   }
   
