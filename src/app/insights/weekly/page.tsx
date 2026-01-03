@@ -89,8 +89,15 @@ export default function WeeklyPage() {
 
     try {
       // Get current week window (Monday 00:00 through next Monday 00:00)
-      const weekWindow = getWindowStartEnd('week');
-      const { start, end } = weekWindow;
+      // Use local time calculation for accurate week boundaries
+      const now = new Date();
+      const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      const diffToMonday = (day + 6) % 7; // Days to subtract to get to Monday
+      const start = new Date(now);
+      start.setDate(now.getDate() - diffToMonday);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
 
       // Convert all reflections to events format
       const eventsAll = reflections.map((r) => ({
@@ -109,13 +116,6 @@ export default function WeeklyPage() {
         return d >= start && d < end;
       });
 
-      // Temporary assertion log
-      console.log("WEEKLY CHECK", {
-        reflections: reflections.length,
-        eventsInWindow: events.length,
-        sample: reflections.slice(0, 3).map((r) => r.createdAt),
-      });
-
       if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
       // Compute weekly artifact with filtered events
@@ -132,9 +132,6 @@ export default function WeeklyPage() {
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
       const normalizedCards = cards.map(normalizeInsightCard);
-      
-      // Temporary guard log after compute
-      console.log("WEEKLY CARDS", normalizedCards.length, normalizedCards);
       
       return {
         weeklyCards: normalizedCards,

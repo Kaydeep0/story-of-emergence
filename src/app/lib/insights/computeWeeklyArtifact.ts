@@ -103,6 +103,24 @@ export function computeWeeklyArtifact(args: {
     ...timelineSpikes,
   ];
   
+  // Fallback: if no cards generated but we have events, create a baseline card
+  if (cards.length === 0 && windowEntries.length > 0) {
+    cards.push({
+      id: `weekly-fallback-${windowStart.toISOString()}`,
+      kind: 'always_on_summary',
+      title: 'This week',
+      headline: 'This week',
+      explanation: `You wrote ${windowEntries.length} reflection${windowEntries.length === 1 ? '' : 's'} this week.`,
+      confidence: 'medium',
+      scope: 'week',
+      evidence: windowEntries.slice(0, 3).map((e) => ({
+        entryId: e.id,
+        timestamp: e.createdAt,
+      })),
+      computedAt: new Date().toISOString(),
+    } as InsightCard);
+  }
+  
   // Generate artifact ID (deterministic based on window)
   const startDateStr = windowStart.toISOString().split('T')[0];
   const endDateStr = windowEnd.toISOString().split('T')[0];
