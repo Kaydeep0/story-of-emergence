@@ -140,6 +140,7 @@ export default function DistributionsPage() {
       setInsightArtifact(artifact);
 
       // Extract data structures from artifact card metadata
+      // Look for card with kind 'distribution' (created by computeDistributionsArtifact)
       const cards = artifact.cards ?? [];
       const distributionsCard = cards.find((c) => c.kind === 'distribution');
       
@@ -150,11 +151,13 @@ export default function DistributionsPage() {
           _distributionInsight?: InsightCard | null;
         };
         
+        // Extract metadata - these keys match what computeDistributionsArtifact writes
         setDistributionResult(cardWithMeta._distributionResult ?? null);
         setDistributions(cardWithMeta._windowDistributions ?? []);
         setDistributionInsight(cardWithMeta._distributionInsight ?? null);
       } else {
-        // No card generated
+        // No card generated (likely no entries in window or computation failed)
+        // Always set to empty/null to ensure consistent state
         setDistributions([]);
         setDistributionResult(null);
         setDistributionInsight(null);
@@ -309,9 +312,19 @@ export default function DistributionsPage() {
 
         {/* Minimum Entries Guard - only show if no distribution content */}
         {!loading && !error && reflections.length > 0 && reflections.length < 7 && !distributionResult && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
             <p className="text-sm text-white/60">
               Not enough data yet for a stable distribution profile. Keep writing for a few more days.
+            </p>
+          </div>
+        )}
+
+        {/* Missing Metadata State - guaranteed base render when metadata is missing */}
+        {!loading && !error && reflections.length >= 7 && !distributionResult && !distributionInsight && distributions.length === 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
+            <p className="text-white/70 mb-2">Distribution analysis is being computed.</p>
+            <p className="text-sm text-white/50">
+              {insightArtifact ? 'Check the debug panel above for details.' : 'Please wait...'}
             </p>
           </div>
         )}
