@@ -1,28 +1,23 @@
 // src/app/lib/insightEngine.ts
-// Insight Engine shell - prepares structure for future analysis
+// Canonical Insight Engine - Single Source of Truth for Insight Computation
+// Phase 4.0: Consolidates all insight computation into one orchestration point
 
+import type { ReflectionEntry } from './insights/types';
+import type { TimelineSpikeCard, AlwaysOnSummaryCard, LinkClusterCard } from './insights/types';
+import type { TopicDriftBucket } from './insights/topicDrift';
+import type { ContrastPair } from './insights/contrastPairs';
+import type { InsightArtifact, InsightHorizon } from './insights/artifactTypes';
 import type { InternalEvent } from './types';
 import type { UnifiedInternalEvent } from '../../lib/internalEvents';
 import type { ExternalEntry } from '../../lib/sources';
-import { listExternalEntries } from './useSources';
 
-export type TimelineInsight = {
-  id: string;
-  eventAt: Date;
-  eventType: string;
-  source: string | null;
-  metadata: Record<string, unknown>;
-};
-
-export type SummaryInsight = {
-  streak: number;
-  totalEntries: number;
-  totalEvents: number;
-  avgEntriesPerWeek: number;
-  topSources: string[];
-  lastActiveAt: Date | null;
-  activityHeatmap: Record<string, number>; // day -> count
-};
+// Import pure compute functions (keep them pure, only orchestrate here)
+import { computeTimelineSpikes } from './insights/timelineSpikes';
+import { computeAlwaysOnSummary } from './insights/alwaysOnSummary';
+import { computeLinkClusters } from './insights/linkClusters';
+import { computeTopicDrift } from './insights/topicDrift';
+import { computeContrastPairs } from './insights/contrastPairs';
+import { computeInsightsForWindow } from './insights/computeInsightsForWindow';
 
 /**
  * Insight Engine State
@@ -33,6 +28,24 @@ export type InsightEngineState = {
   external: ExternalEntry[];
   status: 'idle' | 'loading' | 'ready' | 'error';
 };
+
+/**
+ * Result of timeline insight computation
+ */
+export interface TimelineInsightResult {
+  spikes: TimelineSpikeCard[];
+  clusters: LinkClusterCard[];
+  topicDrift: TopicDriftBucket[];
+  contrastPairs: ContrastPair[];
+}
+
+/**
+ * Result of summary insight computation
+ */
+export interface SummaryInsightResult {
+  alwaysOnSummary: AlwaysOnSummaryCard[];
+  topicDrift: TopicDriftBucket[];
+}
 
 /**
  * Load external entries and update engine state
@@ -47,6 +60,7 @@ export async function loadExternalEntriesForEngine(
   state: InsightEngineState
 ): Promise<InsightEngineState> {
   try {
+    const { listExternalEntries } = await import('./useSources');
     const external = await listExternalEntries(wallet);
     return {
       ...state,
@@ -63,82 +77,135 @@ export async function loadExternalEntriesForEngine(
 }
 
 /**
+ * Canonical engine function for computing timeline insights
+ * 
+ * This is the SINGLE SOURCE OF TRUTH for timeline insight computation.
+ * All timeline insight computation should route through this function.
+ * 
+ * @param reflectionEntries - Array of decrypted reflection entries
+ * @returns TimelineInsightResult with all timeline insights
+ */
+export function computeTimelineInsights(
+  reflectionEntries: ReflectionEntry[]
+): TimelineInsightResult {
+  // Call pure compute functions (keep them pure, only orchestrate here)
+  const spikes = computeTimelineSpikes(reflectionEntries);
+  const clusters = computeLinkClusters(reflectionEntries);
+  const drift = computeTopicDrift(reflectionEntries);
+  const contrasts = computeContrastPairs(drift);
+
+  return {
+    spikes,
+    clusters,
+    topicDrift: drift,
+    contrastPairs: contrasts,
+  };
+}
+
+/**
+ * Canonical engine function for computing summary insights
+ * 
+ * This is the SINGLE SOURCE OF TRUTH for summary insight computation.
+ * All summary insight computation should route through this function.
+ * 
+ * @param reflectionEntries - Array of decrypted reflection entries
+ * @returns SummaryInsightResult with all summary insights
+ */
+export function computeSummaryInsights(
+  reflectionEntries: ReflectionEntry[]
+): SummaryInsightResult {
+  // Call pure compute functions (keep them pure, only orchestrate here)
+  const alwaysOnSummary = computeAlwaysOnSummary(reflectionEntries);
+  const topicDrift = computeTopicDrift(reflectionEntries);
+
+  return {
+    alwaysOnSummary,
+    topicDrift,
+  };
+}
+
+/**
+ * Canonical engine function for computing window-based insights (Weekly, Yearly, Lifetime, YoY)
+ * 
+ * This is the SINGLE SOURCE OF TRUTH for window-based insight computation.
+ * All window-based insight computation should route through this function.
+ * 
+ * @param args - Configuration for window-based insight computation
+ * @returns InsightArtifact with cards ordered as expected for the horizon
+ */
+export function computeWindowInsights(args: {
+  horizon: InsightHorizon;
+  events: (InternalEvent | UnifiedInternalEvent)[];
+  windowStart: Date;
+  windowEnd: Date;
+  timezone?: string;
+  wallet?: string;
+  entriesCount?: number;
+  eventsCount?: number;
+  previousSnapshots?: Array<import('./patternMemory/patternSnapshot').PatternSnapshot>;
+}): InsightArtifact {
+  // Delegate to canonical computeInsightsForWindow (already handles narratives, patterns, etc.)
+  return computeInsightsForWindow(args);
+}
+
+/**
+ * Legacy functions kept for backward compatibility (deprecated)
+ * These will be removed in future phases once all views use the engine
+ */
+
+/**
+ * @deprecated Use computeTimelineInsights instead
  * Process internal events into timeline insights
- * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
- * Currently returns empty array - will be implemented in Phase Two
- *
- * @param events - List of internal events (legacy or unified)
- * @returns Timeline insights for display
  */
 export function runTimelineInsights(
   events: InternalEvent[] | UnifiedInternalEvent[]
-): TimelineInsight[] {
-  // Phase Two: This will analyze events and extract meaningful timeline data
-  // For now, return empty array as a scaffold
-  void events; // Suppress unused parameter warning
+): Array<{ id: string; eventAt: Date; eventType: string; source: string | null; metadata: Record<string, unknown> }> {
+  // Legacy stub - return empty array
+  void events;
   return [];
 }
 
 /**
+ * @deprecated Use computeSummaryInsights instead
  * Process internal events into summary insights
- * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
- * Currently returns empty object - will be implemented in Phase Two
- *
- * @param events - List of internal events (legacy or unified)
- * @returns Summary insights with aggregated statistics
  */
 export function runSummaryInsights(
   events: InternalEvent[] | UnifiedInternalEvent[]
-): Partial<SummaryInsight> {
-  // Phase Two: This will compute streaks, averages, and patterns
-  // For now, return empty partial as a scaffold
-  void events; // Suppress unused parameter warning
+): Partial<{ streak: number; totalEntries: number; totalEvents: number; avgEntriesPerWeek: number; topSources: string[]; lastActiveAt: Date | null; activityHeatmap: Record<string, number> }> {
+  // Legacy stub - return empty object
+  void events;
   return {};
 }
 
 /**
+ * @deprecated Will be implemented in future phases
  * Calculate writing streak from events
- * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
- * Streak = consecutive days with at least one journal event
- *
- * @param events - List of internal events (legacy or unified)
- * @returns Number of consecutive days
  */
 export function calculateStreak(
   events: InternalEvent[] | UnifiedInternalEvent[]
 ): number {
-  // Phase Two: Implement streak calculation
-  void events; // Suppress unused parameter warning
+  void events;
   return 0;
 }
 
 /**
+ * @deprecated Will be implemented in future phases
  * Extract topic trends from events over time
- * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
- *
- * @param events - List of internal events (legacy or unified)
- * @returns Map of topic -> count
  */
 export function extractTopicTrends(
   events: InternalEvent[] | UnifiedInternalEvent[]
 ): Map<string, number> {
-  // Phase Two: Implement topic extraction and counting
-  void events; // Suppress unused parameter warning
+  void events;
   return new Map();
 }
 
 /**
+ * @deprecated Will be implemented in future phases
  * Detect activity spikes - days with unusually high activity
- * Accepts either legacy InternalEvent[] or UnifiedInternalEvent[].
- *
- * @param events - List of internal events (legacy or unified)
- * @returns List of dates with spikes
  */
 export function detectActivitySpikes(
   events: InternalEvent[] | UnifiedInternalEvent[]
 ): Date[] {
-  // Phase Two: Implement spike detection algorithm
-  void events; // Suppress unused parameter warning
+  void events;
   return [];
 }
-

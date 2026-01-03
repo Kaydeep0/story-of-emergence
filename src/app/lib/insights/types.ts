@@ -1,6 +1,8 @@
 // src/app/lib/insights/types.ts
 // Shared types for the client-side insight engine
 
+import type { InsightPatternSet } from './patternModel';
+
 /**
  * A decrypted reflection entry available in memory
  * This represents entries that have already been decrypted client-side
@@ -34,7 +36,8 @@ export type InsightKind =
   | 'always_on_summary'
   | 'link_cluster'
   | 'streak_coach'
-  | 'distribution';
+  | 'distribution'
+  | 'year_over_year';
 
 /**
  * Base insight card type
@@ -47,6 +50,7 @@ export type InsightCard = {
   explanation: string;
   evidence: InsightEvidence[];
   computedAt: string; // ISO timestamp when this insight was generated
+  patternSet?: InsightPatternSet; // Phase 4.1: Canonical pattern set (optional, backward compatible)
 };
 
 /**
@@ -132,6 +136,52 @@ export type StreakCoachCard = InsightCard & {
   kind: 'streak_coach';
   data: StreakCoachData;
 };
+
+/**
+ * Year over Year specific data
+ */
+export type YearOverYearData = {
+  fromYear: number;
+  toYear: number;
+  themeContinuities: Array<{
+    theme: string;
+    presentInYear1: boolean;
+    presentInYear2: boolean;
+    strength: 'strong' | 'moderate' | 'weak';
+  }>;
+  themeDisappearances: Array<{
+    theme: string;
+    wasPresentInYear1: boolean;
+    absentInYear2: boolean;
+  }>;
+  themeEmergences: Array<{
+    theme: string;
+    absentInYear1: boolean;
+    presentInYear2: boolean;
+  }>;
+  languageShifts: Array<{
+    descriptor: string;
+    evidence: string[];
+  }>;
+  notableAbsences: Array<{
+    what: string;
+    previouslySeenIn: number;
+    nowAbsentIn: number;
+  }>;
+};
+
+/**
+ * Extended insight card for year over year
+ */
+export type YearOverYearCard = InsightCard & {
+  kind: 'year_over_year';
+  data: YearOverYearData;
+  derived: true; // Marked as derived insight
+};
+
+// Re-export TopicDriftBucket and ContrastPair for convenience
+export type { TopicDriftBucket } from './topicDrift';
+export type { ContrastPair } from './contrastPairs';
 
 /**
  * A snapshot of a highlighted insight card

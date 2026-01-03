@@ -3,7 +3,10 @@
 import { useMemo, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { traceObserverView } from '@/app/lib/observer';
-import type { InsightCard, InsightDeltaCard } from '@/app/lib/insights/viewModels';
+import type { InsightCardBase } from '@/app/lib/insights/normalizeCard';
+import type { InsightDeltaCard } from '@/app/lib/insights/viewModels';
+
+type InsightCard = InsightCardBase;
 
 type Props = {
   insights: InsightCard[];
@@ -65,10 +68,13 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
 
   return (
     <div className="space-y-6">
-      {sortedInsights.map((insight) => {
+      {sortedInsights.map((insight, index) => {
         const scopeDeltas = deltasByScope.get(insight.scope) || [];
+        // Ensure stable unique key: coerce id to string, fallback to scope+index
+        const stableId = typeof insight.id === 'string' ? insight.id : JSON.stringify(insight.id ?? {});
+        const uniqueKey = `${insight.scope}:${stableId}:${index}`;
         return (
-          <div key={insight.id} className="space-y-3">
+          <div key={uniqueKey} className="space-y-3">
             {/* Insight Card */}
             <div className="border border-gray-200 rounded p-4 bg-white">
               <div className="flex items-start justify-between gap-4 mb-2">
@@ -89,8 +95,11 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
             {/* Deltas for this scope */}
             {scopeDeltas.length > 0 && (
               <div className="ml-4 space-y-2 border-l-2 border-gray-100 pl-4">
-                {scopeDeltas.map((delta) => (
-                  <div key={delta.id} className="flex items-start gap-2 text-sm">
+                {scopeDeltas.map((delta, deltaIndex) => {
+                  const deltaStableId = typeof delta.id === 'string' ? delta.id : JSON.stringify(delta.id ?? {});
+                  const deltaKey = `${delta.scope}:${deltaStableId}:${deltaIndex}`;
+                  return (
+                  <div key={deltaKey} className="flex items-start gap-2 text-sm">
                     <span className="text-gray-500 mt-0.5 shrink-0">
                       <DirectionIcon direction={delta.direction} />
                     </span>
@@ -99,7 +108,8 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
                       <p className="text-gray-600 mt-0.5">{delta.summary}</p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -111,18 +121,20 @@ export function InsightPanel({ insights, deltas = [] }: Props) {
 
 /**
  * Confidence badge component
+ * Input is guaranteed to be normalized by normalizeInsightCard
  */
 function ConfidenceBadge({ confidence }: { confidence: InsightCard['confidence'] }) {
   const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+
   const colorClass =
     confidence === 'high'
       ? 'bg-gray-800 text-white'
-      : confidence === 'medium'
+      : confidence === 'low'
       ? 'bg-gray-200 text-gray-800'
-      : 'bg-gray-100 text-gray-600';
+      : 'bg-gray-500 text-white';
 
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${colorClass}`}>
       {label}
     </span>
   );
@@ -130,12 +142,11 @@ function ConfidenceBadge({ confidence }: { confidence: InsightCard['confidence']
 
 /**
  * Scope label component
+ * Input is guaranteed to be normalized by normalizeInsightCard
  */
 function ScopeLabel({ scope }: { scope: InsightCard['scope'] }) {
   const label = scope.charAt(0).toUpperCase() + scope.slice(1);
-  return (
-    <span className="text-xs text-gray-500 font-medium">{label}</span>
-  );
+  return <span className="text-xs text-gray-500 font-medium">{label}</span>;
 }
 
 /**

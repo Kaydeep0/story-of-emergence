@@ -3,7 +3,10 @@
 import { useMemo, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { traceObserverView } from '@/app/lib/observer';
-import type { InsightCard, InsightDeltaCard } from '@/app/lib/insights/viewModels';
+import type { InsightCardBase } from '@/app/lib/insights/normalizeCard';
+import type { InsightDeltaCard } from '@/app/lib/insights/viewModels';
+
+type InsightCard = InsightCardBase;
 
 type Props = {
   insights: InsightCard[];
@@ -86,9 +89,12 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                 {group.insights.map((insight, insightIndex) => {
                   // Render deltas after the last insight in the group
                   const isLastInsight = insightIndex === group.insights.length - 1;
+                  // Ensure stable unique key
+                  const stableId = typeof insight.id === 'string' ? insight.id : JSON.stringify(insight.id ?? {});
+                  const uniqueKey = `${group.scope}:${stableId}:${insightIndex}`;
                   
                   return (
-                    <div key={insight.id} className="space-y-3">
+                    <div key={uniqueKey} className="space-y-3">
                       {/* Insight card */}
                       <div className="border-l-2 border-gray-200 pl-4 py-2">
                         <div className="flex items-start justify-between gap-4 mb-2">
@@ -108,8 +114,11 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                       {/* Deltas for this scope (render after last insight) */}
                       {isLastInsight && scopeDeltas.length > 0 && (
                         <div className="ml-4 space-y-2 border-l-2 border-gray-100 pl-4">
-                          {scopeDeltas.map((delta) => (
-                            <div key={delta.id} className="flex items-start gap-2 text-sm">
+                          {scopeDeltas.map((delta, deltaIndex) => {
+                            const deltaStableId = typeof delta.id === 'string' ? delta.id : JSON.stringify(delta.id ?? {});
+                            const deltaKey = `${delta.scope}:${deltaStableId}:${deltaIndex}`;
+                            return (
+                            <div key={deltaKey} className="flex items-start gap-2 text-sm">
                               <span className="text-gray-500 mt-0.5 shrink-0">
                                 <DirectionIcon direction={delta.direction} />
                               </span>
@@ -118,7 +127,8 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
                                 <p className="text-gray-600 mt-0.5">{delta.summary}</p>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -140,18 +150,20 @@ export function InsightTimeline({ insights, deltas = [] }: Props) {
 
 /**
  * Confidence badge component
+ * Input is guaranteed to be normalized by normalizeInsightCard
  */
 function ConfidenceBadge({ confidence }: { confidence: InsightCard['confidence'] }) {
   const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+
   const colorClass =
     confidence === 'high'
       ? 'bg-gray-800 text-white'
-      : confidence === 'medium'
+      : confidence === 'low'
       ? 'bg-gray-200 text-gray-800'
-      : 'bg-gray-100 text-gray-600';
+      : 'bg-gray-500 text-white';
 
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${colorClass}`}>
       {label}
     </span>
   );

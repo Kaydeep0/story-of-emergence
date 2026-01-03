@@ -1,6 +1,7 @@
 // Platform-specific text generation for yearly wrap sharing
 
 import type { ReflectionEntry } from '../insights/types';
+import { sanitizeCaption } from './sanitizeShareMetadata';
 
 export type Platform = 'instagram' | 'linkedin' | 'x' | 'tiktok' | 'threads';
 
@@ -195,7 +196,10 @@ export function buildShareText(
     parts.push('Computed locally with Story of Emergence.');
   }
 
-  const caption = parts.join('\n');
+  let caption = parts.join('\n');
+
+  // Sanitize caption to remove sensitive metadata (wallet addresses, IDs, timestamps)
+  caption = sanitizeCaption(caption);
 
   // TikTok overlay (3 lines max, punchy)
   let tiktokOverlay: string[] | undefined;

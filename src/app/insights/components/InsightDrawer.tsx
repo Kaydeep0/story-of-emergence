@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useAccount } from 'wagmi';
+import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import type { AlwaysOnSummaryCard, InsightEvidence, InsightCard, ReflectionEntry } from '../../lib/insights/types';
 import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
 import type { SourceEntryLite } from '../../lib/insights/fromSources';
+import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../lib/reflectionSources';
+import { listExternalSources, type ExternalSourceDecrypted } from '../../lib/externalSources';
+import { assertInsightTone } from '../../lib/insights/insightGuardrails';
+import { toast } from 'sonner';
 
 /**
  * Normalized insight type that the drawer can consume
@@ -165,6 +171,14 @@ function ReflectionPreviewPanel({
   isOpen: boolean;
   onClose: () => void;
 }) {
+  const { address } = useAccount();
+  const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
+  const [linkedSources, setLinkedSources] = useState<ExternalSourceDecrypted[]>([]);
+  const [loadingSources, setLoadingSources] = useState(false);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [availableSources, setAvailableSources] = useState<ExternalSourceDecrypted[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('');
+
   // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -176,6 +190,86 @@ function ReflectionPreviewPanel({
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
+
+  // Load linked sources when reflection opens
+  useEffect(() => {
+    if (!isOpen || !entry || !address || !encryptionReady || !sessionKey) {
+      setLinkedSources([]);
+      return;
+    }
+
+    async function loadLinkedSources() {
+      try {
+        setLoadingSources(true);
+        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+        setLinkedSources(sources);
+      } catch (err) {
+        console.error('Failed to load linked sources', err);
+      } finally {
+        setLoadingSources(false);
+      }
+    }
+
+    loadLinkedSources();
+  }, [isOpen, entry?.id, address, encryptionReady, sessionKey]);
+
+  // Load available sources when showing add form
+  useEffect(() => {
+    if (!showAddSource || !address || !encryptionReady || !sessionKey) {
+      setAvailableSources([]);
+      return;
+    }
+
+    async function loadAvailableSources() {
+      try {
+        const sources = await listExternalSources(address, sessionKey);
+        // Filter out already linked sources
+        const linkedIds = new Set(linkedSources.map(s => s.id));
+        setAvailableSources(sources.filter(s => !linkedIds.has(s.id)));
+      } catch (err) {
+        console.error('Failed to load available sources', err);
+        toast.error('Failed to load sources');
+      }
+    }
+
+    loadAvailableSources();
+  }, [showAddSource, address, encryptionReady, sessionKey, linkedSources]);
+
+  const handleAddSource = async () => {
+    if (!entry || !address || !selectedSourceId) return;
+
+    try {
+      await linkSourceToReflection(address, entry.id, selectedSourceId);
+      // Reload linked sources
+      if (sessionKey) {
+        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+        setLinkedSources(sources);
+      }
+      setShowAddSource(false);
+      setSelectedSourceId('');
+      toast.success('Source linked');
+    } catch (err: any) {
+      console.error('Failed to link source', err);
+      toast.error(err.message || 'Failed to link source');
+    }
+  };
+
+  const handleRemoveSource = async (sourceId: string) => {
+    if (!entry || !address) return;
+
+    try {
+      await unlinkSourceFromReflection(address, entry.id, sourceId);
+      // Reload linked sources
+      if (sessionKey) {
+        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+        setLinkedSources(sources);
+      }
+      toast.success('Source unlinked');
+    } catch (err: any) {
+      console.error('Failed to unlink source', err);
+      toast.error(err.message || 'Failed to unlink source');
+    }
+  };
 
   if (!entry) return null;
 
@@ -229,9 +323,114 @@ function ReflectionPreviewPanel({
           </div>
 
           {/* Full reflection text */}
-          <div className="prose prose-invert max-w-none">
+          <div className="prose prose-invert max-w-none mb-6">
             <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
           </div>
+
+          {/* Linked sources section */}
+          {encryptionReady && address && (
+            <div className="pt-6 border-t border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-white/80">Linked sources</h4>
+                {!showAddSource && (
+                  <button
+                    onClick={() => setShowAddSource(true)}
+                    className="text-xs text-white/60 hover:text-white/80 transition-colors"
+                  >
+                    Add source
+                  </button>
+                )}
+              </div>
+
+              {showAddSource && (
+                <div className="mb-4 space-y-2">
+                  <select
+                    value={selectedSourceId}
+                    onChange={(e) => setSelectedSourceId(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                  >
+                    <option value="">Select a source</option>
+                    {availableSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.title} ({source.source_type}, {source.occurred_at_year})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddSource}
+                      disabled={!selectedSourceId}
+                      className="flex-1 rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/90 bg-white/10 hover:bg-white/15 transition-colors disabled:opacity-50"
+                    >
+                      Link
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddSource(false);
+                        setSelectedSourceId('');
+                      }}
+                      className="flex-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingSources ? (
+                <p className="text-xs text-white/50">Loading sources...</p>
+              ) : linkedSources.length === 0 ? (
+                <p className="text-xs text-white/50 italic">No linked sources</p>
+              ) : (
+                <div className="space-y-2">
+                  {linkedSources.map((source) => (
+                    <div
+                      key={source.id}
+                      className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/60 capitalize">
+                            {source.source_type}
+                          </span>
+                          <span className="text-xs text-white/40">
+                            {source.occurred_at_year}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/80 font-medium truncate">
+                          {source.title}
+                        </p>
+                        {source.author && (
+                          <p className="text-xs text-white/50 truncate">
+                            by {source.author}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveSource(source.id)}
+                        className="text-white/40 hover:text-white/60 transition-colors flex-shrink-0"
+                        title="Remove link"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.5}
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -263,9 +462,114 @@ function ReflectionPreviewPanel({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1">
-          <div className="prose prose-invert max-w-none">
+          <div className="prose prose-invert max-w-none mb-6">
             <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
           </div>
+
+          {/* Linked sources section */}
+          {encryptionReady && address && (
+            <div className="pt-6 border-t border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-white/80">Linked sources</h4>
+                {!showAddSource && (
+                  <button
+                    onClick={() => setShowAddSource(true)}
+                    className="text-xs text-white/60 hover:text-white/80 transition-colors"
+                  >
+                    Add source
+                  </button>
+                )}
+              </div>
+
+              {showAddSource && (
+                <div className="mb-4 space-y-2">
+                  <select
+                    value={selectedSourceId}
+                    onChange={(e) => setSelectedSourceId(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
+                  >
+                    <option value="">Select a source</option>
+                    {availableSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.title} ({source.source_type}, {source.occurred_at_year})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddSource}
+                      disabled={!selectedSourceId}
+                      className="flex-1 rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/90 bg-white/10 hover:bg-white/15 transition-colors disabled:opacity-50"
+                    >
+                      Link
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddSource(false);
+                        setSelectedSourceId('');
+                      }}
+                      className="flex-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingSources ? (
+                <p className="text-xs text-white/50">Loading sources...</p>
+              ) : linkedSources.length === 0 ? (
+                <p className="text-xs text-white/50 italic">No linked sources</p>
+              ) : (
+                <div className="space-y-2">
+                  {linkedSources.map((source) => (
+                    <div
+                      key={source.id}
+                      className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/60 capitalize">
+                            {source.source_type}
+                          </span>
+                          <span className="text-xs text-white/40">
+                            {source.occurred_at_year}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/80 font-medium truncate">
+                          {source.title}
+                        </p>
+                        {source.author && (
+                          <p className="text-xs text-white/50 truncate">
+                            by {source.author}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveSource(source.id)}
+                        className="text-white/40 hover:text-white/60 transition-colors flex-shrink-0"
+                        title="Remove link"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.5}
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -354,10 +658,10 @@ function EmptyState({ onNewReflection }: { onNewReflection: () => void }) {
       </svg>
       <div className="space-y-2">
         <p className="text-sm font-medium text-white/90">
-          No insights yet
+          No patterns detected
         </p>
         <p className="text-sm text-white/60 max-w-sm">
-          Add a few reflections and I will start connecting the dots.
+          Insights describe patterns observed in past reflections. Meaning is constructed by you.
         </p>
       </div>
       <button
@@ -423,6 +727,15 @@ export function InsightDrawer({
       }
     }
   }, [isOpen, insight]);
+
+  // Soft guardrail check for banned language in insight text
+  useEffect(() => {
+    if (insight) {
+      assertInsightTone(insight.title, 'insight.title');
+      assertInsightTone(insight.summary, 'insight.summary');
+      assertInsightTone(insight.whyThisMatters, 'insight.whyThisMatters');
+    }
+  }, [insight]);
 
   // Create a map of sourceId -> source title for quick lookups
   const sourceTitleById = new Map<string, string>();

@@ -166,3 +166,5 @@ Only kill processes if they clearly belong to this project
 Avoid running more than one terminal with pnpm dev running
 
 Cursor agents should never modify documentation files
+
+Story of Emergence is a private, wallet bound reflection vault that encrypts all content client side and stores only ciphertext. The system is designed as a Mirror: it reveals structure, timelines, clusters, and distributions as observable facts without assigning meaning, preference, goals, or recommendations. Interpretation, significance, and action belong to the human observer. The product explicitly avoids feedback loops, reinforcement mechanics, coaching, streaks, highlights, or any feature that shapes future behavior. Insights are projections over past data only, and interactions are view-only so the system never crosses from reflection into agency.

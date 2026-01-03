@@ -7,7 +7,6 @@ const tabs = [
   { href: '/', label: 'Reflections' },
   { href: '/insights', label: 'Insights' },
   { href: '/sources', label: 'Sources' },
-  { href: '/shared', label: 'Shared' },
 ];
 
 export default function NavTabs() {
@@ -25,8 +24,8 @@ export default function NavTabs() {
             href={tab.href}
             className={`rounded-lg px-3 py-1 text-sm transition-colors ${
               isActive
-                ? 'bg-white/10 text-white'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
+                ? 'bg-white/5 text-white/70'
+                : 'text-white/60 hover:text-white/70 hover:bg-white/3'
             }`}
           >
             {tab.label}

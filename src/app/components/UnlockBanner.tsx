@@ -51,14 +51,14 @@ export function UnlockBanner() {
             <div className="min-w-0">
               <p className="text-sm font-medium text-amber-200">
                 {!isConnected
-                  ? 'Connect your wallet to unlock encrypted data'
+                  ? 'Connect your wallet to view past reflections'
                   : error
                   ? `Encryption error: ${error}`
-                  : 'Unlock to view encrypted data'}
+                  : 'Unlock to view past reflections'}
               </p>
               {!isConnected && (
                 <p className="text-xs text-amber-300/70 mt-0.5">
-                  Your data is encrypted and requires wallet connection
+                  Reflections are encrypted and require wallet connection to decrypt
                 </p>
               )}
               {showReturnOrientation && (

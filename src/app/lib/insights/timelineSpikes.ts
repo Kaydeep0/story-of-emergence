@@ -208,11 +208,28 @@ export function computeTimelineSpikes(entries: ReflectionEntry[]): TimelineSpike
  * Helper to convert Item (from entries.ts) to ReflectionEntry format
  * This bridges the existing data structures with the insight engine
  */
+/**
+ * Coerce a value to a valid Date object
+ * Returns Date(0) for invalid/missing values
+ */
+function coerceDate(value: any): Date {
+  if (!value) return new Date(0);
+  if (value instanceof Date) return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
 export function itemToReflectionEntry(
   item: {
     id: string;
-    createdAt: Date;
-    deletedAt: Date | null;
+    createdAt?: Date | string;
+    created_at?: Date | string;
+    inserted_at?: Date | string;
+    timestamp?: Date | string;
+    date?: Date | string;
+    created?: Date | string;
+    deletedAt?: Date | string | null;
+    deleted_at?: Date | string | null;
     plaintext: unknown;
   },
   getSourceIdFor?: (reflectionId: string) => string | undefined
@@ -254,10 +271,27 @@ export function itemToReflectionEntry(
     text = JSON.stringify(item.plaintext);
   }
   
+  // Normalize createdAt to Date object
+  // rpcFetchEntries returns Item with createdAt: Date, so prioritize that
+  // Fallback to other field names for compatibility
+  const raw =
+    item.createdAt ?? // Date object from rpcFetchEntries
+    item.created_at ?? // ISO string fallback
+    item.inserted_at ??
+    item.timestamp ??
+    item.date ??
+    item.created;
+  
+  const createdAtDate = coerceDate(raw);
+  
+  // Normalize deletedAt to Date object or null
+  const deletedRaw = item.deletedAt ?? item.deleted_at;
+  const deletedAtDate = deletedRaw ? coerceDate(deletedRaw) : null;
+  
   return {
-    id: item.id,
-    createdAt: item.createdAt.toISOString(),
-    deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
+    id: String(item.id ?? (item as any).entry_id ?? crypto.randomUUID()),
+    createdAt: createdAtDate.toISOString(), // Keep as ISO string for compatibility with existing code
+    deletedAt: deletedAtDate ? deletedAtDate.toISOString() : null,
     sourceId: sourceId || undefined,
     plaintext: text,
   };

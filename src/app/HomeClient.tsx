@@ -11,6 +11,7 @@ import EmptyReflections from '../components/EmptyReflections';
 import ExportButton from './components/ExportButton';
 import { SourceLinkMenu } from './components/SourceLinkMenu';
 import { ReflectionLinks } from '@/app/components/ReflectionLinks';
+import { LinkedSourcesBacklinks } from './components/LinkedSourcesBacklinks';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
@@ -69,19 +70,33 @@ export default function HomeClient() {
   // ---- hooks must be called first, same order every render ----
   const { address, isConnected } = useAccount();
   const signLockRef = useRef(false);
+  
+  // Hooks must be called unconditionally - guard usage in effects/renders instead
   const searchParams = useSearchParams();
   const router = useRouter();
-  const focusId = searchParams.get('focus');
+  // Safely get focusId - handle case where searchParams might not be ready during SSR
+  const focusId = searchParams && typeof searchParams.get === 'function' ? searchParams.get('focus') : null;
 
+  // Hooks must be called unconditionally - guard usage instead
   const chainId = useChainId();
   const { data: balance, isLoading: balLoading } = useBalance({
     address,
     chainId,
-    query: { enabled: !!address },
+    query: { enabled: !!address && typeof window !== 'undefined' },
   });
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const { switchChain, isPending: switching } = useSwitchChain();
-  const sb = useMemo(() => getSupabaseForWallet(address ?? ''), [address]);
+  
+  const sb = useMemo(() => {
+    if (typeof window === 'undefined' || !address) return null;
+    try {
+      return getSupabaseForWallet(address);
+    } catch (e) {
+      console.warn('Supabase initialization failed:', e);
+      return null;
+    }
+  }, [address]);
+  
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   // mounted gate to avoid hydration mismatch
 const [mounted, setMounted] = useState(false);
@@ -94,7 +109,7 @@ const w = (address ?? '').toLowerCase();
 // Event logging hook
 const { logEvent } = useLogEvent();
 
-// Reflection links hook
+// Reflection links hook (legacy - keeping for compatibility)
 const { links: reflectionLinks, getSourceIdFor, setLink: setReflectionLink } = useReflectionLinks(address);
 
 // Log navigation event when page loads (connected wallet only)
@@ -103,18 +118,24 @@ useEffect(() => {
   logEvent('page_reflections');
 }, [mounted, connected, logEvent]);
 
-// Load sources for linking
+// Load sources for linking (using external_sources table)
 useEffect(() => {
-  if (!mounted || !connected || !address) return;
+  if (!mounted || !connected || !address || !encryptionReady || !sessionKey) return;
   let cancelled = false;
   async function loadSourcesList() {
-    if (!address) {
+    if (!address || !sessionKey) {
       setSources([]);
       return;
     }
     try {
-      const data = await listExternalEntries(address);
-      if (!cancelled) setSources(data as any[]);
+      const { listExternalSources } = await import('./lib/externalSources');
+      const data = await listExternalSources(address, sessionKey);
+      if (!cancelled) setSources(data.map(s => ({
+        sourceId: s.id,
+        source_id: s.id,
+        title: s.title,
+        kind: s.source_type,
+      })));
     } catch {
       if (!cancelled) setSources([]);
     }
@@ -123,7 +144,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, [mounted, connected, address]);
+}, [mounted, connected, address, encryptionReady, sessionKey]);
 
 // ---- local state ----
 const [status, setStatus] = useState('');
@@ -247,14 +268,33 @@ const visibleItems = useMemo(
 );
 
 async function setSourceLink(reflectionId: string, sourceId: string | null): Promise<void> {
+  if (!address || !sessionKey) return;
+  
   try {
-    await setReflectionLink(reflectionId, sourceId);
-    // Only update local state on success (hook handles errors with toast)
+    // Use reflection_sources table for persistence
+    const { linkSourceToReflection, unlinkSourceFromReflection, listSourcesForReflection } = await import('./lib/reflectionSources');
+    
+    if (sourceId === null) {
+      // Unlink: find existing links and remove them
+      const linkedSources = await listSourcesForReflection(address, reflectionId, sessionKey);
+      for (const source of linkedSources) {
+        await unlinkSourceFromReflection(address, reflectionId, source.id);
+      }
+    } else {
+      // Link: create new link (handles duplicates gracefully)
+      await linkSourceToReflection(address, reflectionId, sourceId);
+    }
+    
+    // Update local state optimistically
     setItems((prev) =>
       prev.map((it) => (it.id === reflectionId ? { ...it, sourceId } : it))
     );
-  } catch {
-    // Error already handled in hook with toast notification
+    
+    // No success toast - quiet persistence
+  } catch (err: any) {
+    console.error('Failed to link source', err);
+    // Only show toast on failure
+    toast.error(err.message || 'Failed to link source');
   }
 }
 
@@ -309,6 +349,7 @@ useEffect(() => {
   const retryDelay = 100;
   
   const attemptScroll = () => {
+    if (typeof document === 'undefined') return;
     const element = document.querySelector(`[data-entry-id="${focusId}"]`) as HTMLElement;
     
     if (element) {
@@ -328,8 +369,15 @@ useEffect(() => {
       
       // Clear focus param after successful scroll (allow re-triggering on next navigation)
       // Use replace to avoid adding to history
-      const currentPath = window.location.pathname;
-      router.replace(currentPath);
+      try {
+        if (typeof window !== 'undefined' && router && typeof router.replace === 'function') {
+          const currentPath = window.location.pathname;
+          router.replace(currentPath);
+        }
+      } catch (e) {
+        // Router may not be available during SSR - safe to ignore
+        console.warn('Router not available:', e);
+      }
       
       // Note: We don't clear lastFocusedIdRef here. Instead, when the focus param
       // is cleared (router.replace), the effect will re-run with focusId = null,
@@ -364,7 +412,7 @@ useEffect(() => {
       retryTimeoutRef.current = null;
     }
   };
-}, [focusId, mounted, visibleItems.length, router, searchParams]);
+}, [focusId, mounted, visibleItems.length, router]);
 
 
 
@@ -1160,8 +1208,9 @@ async function createShare() {
             {it.note}
           </div>
 
+      {/* Link to source dropdown */}
       <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3 space-y-2">
-        <p className="text-xs text-white/60">Linked Source</p>
+        <p className="text-xs text-white/60">Link to source</p>
         <SourceLinkMenu
           reflectionId={it.id}
           currentSourceId={it.sourceId}
@@ -1169,6 +1218,14 @@ async function createShare() {
           onLink={setSourceLink}
         />
       </div>
+
+      {/* Linked sources backlinks (read-only) */}
+      <LinkedSourcesBacklinks
+        reflectionId={it.id}
+        walletAddress={address ?? ''}
+        sessionKey={sessionKey ?? null}
+        encryptionReady={encryptionReady}
+      />
 
       <ReflectionLinks
         reflectionId={it.id}
