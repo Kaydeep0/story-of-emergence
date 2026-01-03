@@ -17,6 +17,8 @@ import { buildDistributionFromReflections } from '../../lib/distributions/buildS
 import { classifyDistribution } from '../../lib/distributions/classify';
 import { generateDistributionInsight } from '../../lib/distributions/insights';
 import { generateNarrative } from '../../lib/distributions/narratives';
+import { filterEventsByWindow } from '../../lib/insights/timeWindows';
+import type { DistributionShape } from '../../lib/distributions/classify';
 import { fromNarrative } from '../../lib/insights/viewModels';
 import type { ReflectionEntry, AlwaysOnSummaryCard } from '../../lib/insights/types';
 import type { InsightCard } from '../../lib/insights/viewModels';
@@ -154,18 +156,33 @@ export default function SummaryPage() {
   const distributionInsightCards = useMemo(() => {
     if (reflections.length === 0) return [];
 
-    const weekNarrative = generateNarrative(
-      buildDistributionFromReflections(reflections, 7),
-      classifyDistribution
-    );
-    const monthNarrative = generateNarrative(
-      buildDistributionFromReflections(reflections, 30),
-      classifyDistribution
-    );
-    const yearNarrative = generateNarrative(
-      buildDistributionFromReflections(reflections, 365),
-      classifyDistribution
-    );
+    const now = new Date();
+    const defaultShape: DistributionShape = 'normal';
+
+    // Helper to build narrative for a time window
+    const buildNarrativeForWindow = (days: number, scope: 'week' | 'month' | 'year') => {
+      const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      const windowReflections = filterEventsByWindow(reflections, start, now);
+      
+      if (windowReflections.length === 0) return null;
+
+      // Build distribution series with 'day' bucket and default shape
+      const series = buildDistributionFromReflections(windowReflections, 'day', defaultShape);
+      
+      // Classify to get actual shape
+      const shape = classifyDistribution(series);
+      
+      // Generate insight
+      const insight = generateDistributionInsight(series, shape);
+      if (!insight) return null;
+
+      // Generate narrative
+      return generateNarrative(scope, insight, windowReflections.length);
+    };
+
+    const weekNarrative = buildNarrativeForWindow(7, 'week');
+    const monthNarrative = buildNarrativeForWindow(30, 'month');
+    const yearNarrative = buildNarrativeForWindow(365, 'year');
 
     const cards: InsightCard[] = [];
     if (weekNarrative) cards.push(fromNarrative(weekNarrative, 'week'));
