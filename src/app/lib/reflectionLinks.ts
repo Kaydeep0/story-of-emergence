@@ -1,5 +1,6 @@
 // src/app/lib/reflectionLinks.ts
 // Supabase-backed reflection → source links (persistent across reloads)
+// Now reads from reflection_sources table (migrated from reflection_links)
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
@@ -15,16 +16,18 @@ export type ReflectionLink = {
 };
 
 /**
- * Fetch all reflection links for a wallet
+ * Fetch all reflection links for a wallet from reflection_sources table
+ * Returns primary source (most recently linked) per reflection
  */
 export async function fetchReflectionLinks(walletAddress: string): Promise<ReflectionLink[]> {
   if (!walletAddress) return [];
   
   const supabase = getSupabaseForWallet(walletAddress);
   const { data, error } = await supabase
-    .from('reflection_links')
-    .select('*')
-    .eq('wallet_address', walletAddress.toLowerCase());
+    .from('reflection_sources')
+    .select('id, user_wallet, reflection_id, source_id, created_at')
+    .eq('user_wallet', walletAddress.toLowerCase())
+    .order('created_at', { ascending: false });
 
   if (error) {
     if (process.env.NODE_ENV === 'development') {
@@ -33,20 +36,34 @@ export async function fetchReflectionLinks(walletAddress: string): Promise<Refle
     throw error;
   }
 
-  return (data ?? []).map((row) => ({
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  // Group by reflection_id and pick the most recent (first after descending sort)
+  const reflectionMap = new Map<string, typeof data[0]>();
+  for (const row of data) {
+    if (!reflectionMap.has(row.reflection_id)) {
+      reflectionMap.set(row.reflection_id, row);
+    }
+  }
+
+  // Convert to ReflectionLink format (using most recent link per reflection)
+  return Array.from(reflectionMap.values()).map((row) => ({
     id: row.id,
-    walletAddress: row.wallet_address,
+    walletAddress: row.user_wallet,
     reflectionId: row.reflection_id,
     sourceId: row.source_id,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    updatedAt: row.created_at, // reflection_sources doesn't have updated_at, use created_at
   }));
 }
 
 /**
  * Upsert or delete a reflection link
- * If sourceId is null, deletes any existing link for that reflection
- * Otherwise, updates existing link or creates a new one
+ * Now uses reflection_sources table (migrated from reflection_links)
+ * If sourceId is null, deletes the specific link (not all links for that reflection)
+ * Otherwise, creates a new link (reflection_sources allows multiple links per reflection)
  */
 export async function upsertReflectionLink(
   walletAddress: string,
@@ -58,12 +75,17 @@ export async function upsertReflectionLink(
   const supabase = getSupabaseForWallet(walletAddress);
   const w = walletAddress.toLowerCase();
 
-  // If sourceId is null, delete any existing link
+  // If sourceId is null, delete the specific link
+  // Note: This function is called from setLink which should pass the current sourceId
+  // For now, we'll delete any link for this reflection (legacy behavior)
+  // The actual removal of specific source is handled in HomeClient.setSourceLink
   if (sourceId === null) {
+    // This path is deprecated - specific source removal should use reflectionSources.unlinkSourceFromReflection
+    // But keeping for backward compatibility with setLink calls
     const { error } = await supabase
-      .from('reflection_links')
+      .from('reflection_sources')
       .delete()
-      .eq('wallet_address', w)
+      .eq('user_wallet', w)
       .eq('reflection_id', reflectionId);
 
     if (error) {
@@ -75,51 +97,31 @@ export async function upsertReflectionLink(
     return;
   }
 
-  // Check if a link already exists
-  const { data: existing } = await supabase
-    .from('reflection_links')
-    .select('id')
-    .eq('wallet_address', w)
-    .eq('reflection_id', reflectionId)
-    .maybeSingle();
+  // Insert new link (reflection_sources allows multiple links, so we always insert)
+  // The unique constraint will prevent duplicates
+  const { error } = await supabase
+    .from('reflection_sources')
+    .insert({
+      user_wallet: w,
+      reflection_id: reflectionId,
+      source_id: sourceId,
+    });
 
-  if (existing) {
-    // Update existing link
-    const { error } = await supabase
-      .from('reflection_links')
-      .update({
-        source_id: sourceId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existing.id);
-
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[reflectionLinks] Failed to update reflection link:', error);
-      }
-      throw error;
+  if (error) {
+    // If it's a unique constraint violation, the link already exists - that's fine
+    if (error.code === '23505') {
+      return;
     }
-  } else {
-    // Insert new link
-    const { error } = await supabase
-      .from('reflection_links')
-      .insert({
-        wallet_address: w,
-        reflection_id: reflectionId,
-        source_id: sourceId,
-      });
-
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[reflectionLinks] Failed to insert reflection link:', error);
-      }
-      throw error;
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[reflectionLinks] Failed to insert reflection link:', error);
     }
+    throw error;
   }
 }
 
 /**
  * Delete a reflection link
+ * Now uses reflection_sources table
  */
 export async function deleteReflectionLink(
   walletAddress: string,
@@ -129,9 +131,9 @@ export async function deleteReflectionLink(
 
   const supabase = getSupabaseForWallet(walletAddress);
   const { error } = await supabase
-    .from('reflection_links')
+    .from('reflection_sources')
     .delete()
-    .eq('wallet_address', walletAddress.toLowerCase())
+    .eq('user_wallet', walletAddress.toLowerCase())
     .eq('reflection_id', reflectionId);
 
   if (error) {

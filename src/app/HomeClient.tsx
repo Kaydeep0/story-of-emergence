@@ -272,13 +272,13 @@ async function setSourceLink(reflectionId: string, sourceId: string | null): Pro
   
   try {
     // Use reflection_sources table for persistence
-    const { linkSourceToReflection, unlinkSourceFromReflection, listSourcesForReflection } = await import('./lib/reflectionSources');
+    const { linkSourceToReflection, unlinkSourceFromReflection } = await import('./lib/reflectionSources');
     
     if (sourceId === null) {
-      // Unlink: find existing links and remove them
-      const linkedSources = await listSourcesForReflection(address, reflectionId, sessionKey);
-      for (const source of linkedSources) {
-        await unlinkSourceFromReflection(address, reflectionId, source.id);
+      // Unlink: remove only the currently selected source for this reflection
+      const current = getSourceIdFor(reflectionId);
+      if (current) {
+        await unlinkSourceFromReflection(address, reflectionId, current);
       }
     } else {
       // Link: create new link (handles duplicates gracefully)
