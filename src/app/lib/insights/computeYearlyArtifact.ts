@@ -98,6 +98,49 @@ export function computeYearlyArtifact(args: {
 }): InsightArtifact {
   const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount } = args;
   
+  // Dev-only logging for Yearly compute path
+  if (process.env.NODE_ENV === 'development') {
+    const eventDates = events
+      .map(e => {
+        const isUnified = 'sourceKind' in e;
+        let ts: Date | null = null;
+        if (isUnified) {
+          const unified = e as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
+          ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
+               unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
+               unified.eventAt ? new Date(unified.eventAt) :
+               unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
+               null;
+        } else {
+          const internal = e as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
+          ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
+               internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
+               internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
+               internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
+               null;
+        }
+        return ts;
+      })
+      .filter((d): d is Date => d !== null && !isNaN(d.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime());
+    
+    const minEventIso = eventDates.length > 0 ? eventDates[0].toISOString() : null;
+    const maxEventIso = eventDates.length > 0 ? eventDates[eventDates.length - 1].toISOString() : null;
+    
+    console.log('[computeYearlyArtifact] Yearly compute path debug:', {
+      eventCount: events.length,
+      windowStartIso: windowStart.toISOString(),
+      windowEndIso: windowEnd.toISOString(),
+      minEventIso,
+      maxEventIso,
+      windowStartTime: windowStart.getTime(),
+      windowEndTime: windowEnd.getTime(),
+      minEventTime: eventDates.length > 0 ? eventDates[0].getTime() : null,
+      maxEventTime: eventDates.length > 0 ? eventDates[eventDates.length - 1].getTime() : null,
+      eventsInWindow: eventDates.filter(d => d >= windowStart && d <= windowEnd).length,
+    });
+  }
+  
   // Convert events to ReflectionEntry format (only journal events)
   const allReflectionEntries = eventsToReflectionEntries(events);
   

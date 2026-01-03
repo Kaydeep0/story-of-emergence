@@ -146,11 +146,14 @@ export default function YearlyWrapPage() {
         topics: [],
       }));
 
-      // Determine window: last 365 days
+      // Determine window: last 365 days with day boundaries (unified with Weekly)
+      // Use startOfDay and endOfDay to ensure reflections don't fall outside window due to time math
       const now = new Date();
-      const windowEnd = now;
+      const windowEnd = new Date(now);
+      windowEnd.setHours(23, 59, 59, 999); // End of today
       const windowStart = new Date(now);
       windowStart.setDate(windowStart.getDate() - 365);
+      windowStart.setHours(0, 0, 0, 0); // Start of day 365 days ago
 
       // Compute yearly artifact via canonical engine
       const artifact = computeInsightsForWindow({
