@@ -6,60 +6,9 @@ import type { ReflectionEntry, InsightCard } from './types';
 import type { InsightArtifact } from './artifactTypes';
 import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
+import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from './distributionLayer';
 
-/**
- * Convert InternalEvent or UnifiedInternalEvent to ReflectionEntry format
- * Only includes journal events (sourceKind === "journal" && eventKind === "written")
- */
-function eventsToReflectionEntries(
-  events: (InternalEvent | UnifiedInternalEvent)[]
-): ReflectionEntry[] {
-  const entries: ReflectionEntry[] = [];
-  
-  for (const ev of events) {
-    const eventAt = typeof ev.eventAt === 'string' ? new Date(ev.eventAt) : ev.eventAt;
-    
-    // Determine if this is a UnifiedInternalEvent or legacy InternalEvent
-    const isUnified = 'sourceKind' in ev;
-    
-    let sourceKind: string | undefined;
-    let eventKind: string | undefined;
-    let plaintext: string | undefined;
-    
-    if (isUnified) {
-      const unified = ev as UnifiedInternalEvent;
-      sourceKind = unified.sourceKind;
-      eventKind = unified.eventKind;
-      plaintext = unified.details;
-    } else {
-      const internal = ev as InternalEvent;
-      const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
-      sourceKind = payload.source_kind as string | undefined;
-      eventKind = payload.event_kind as string | undefined;
-      
-      if (typeof payload?.content === 'string') {
-        plaintext = payload.content;
-      } else if (typeof payload?.raw_metadata === 'object' && payload.raw_metadata !== null) {
-        const rawMeta = payload.raw_metadata as Record<string, unknown>;
-        if (typeof rawMeta.content === 'string') {
-          plaintext = rawMeta.content;
-        }
-      }
-    }
-    
-    // Only include journal events
-    if (sourceKind === 'journal' && eventKind === 'written' && plaintext) {
-      entries.push({
-        id: `yearly-entry-${entries.length}`,
-        createdAt: eventAt.toISOString(),
-        plaintext,
-      });
-    }
-  }
-  
-  return entries;
-}
 
 /**
  * Format classification label for display
@@ -152,15 +101,14 @@ export function computeYearlyArtifact(args: {
   // Convert events to ReflectionEntry format (only journal events)
   const allReflectionEntries = eventsToReflectionEntries(events);
   
-  // Filter entries to window (365-day window for yearly)
-  const windowEntries = allReflectionEntries.filter((entry) => {
-    const createdAt = new Date(entry.createdAt);
-    return createdAt >= windowStart && createdAt <= windowEnd;
-  });
+  // NOTE: Do NOT pre-filter entries here. computeDistributionLayer and computeWindowDistribution
+  // will filter themselves using their own window calculations. Pre-filtering causes double-filtering
+  // which can drop entries if the window calculations don't match exactly.
   
   // Compute distribution insights using existing pure functions
-  const distributionResult = computeDistributionLayer(windowEntries, { windowDays: 365 });
-  const windowDistribution = computeWindowDistribution(windowEntries, 365);
+  // These functions will filter entries themselves to the last 365 days
+  const distributionResult = computeDistributionLayer(allReflectionEntries, { windowDays: 365 });
+  const windowDistribution = computeWindowDistribution(allReflectionEntries, 365);
   
   // Create narrative card from distribution results
   const cards: InsightCard[] = [];

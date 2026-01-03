@@ -17,7 +17,9 @@ import { generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
 import type { LifetimeSignalInventory } from '../../../lib/lifetimeSignalInventory';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 import { InsightsTabs } from '../components/InsightsTabs';
 
@@ -41,6 +43,7 @@ export default function LifetimePage() {
   const [inventory, setInventory] = useState<LifetimeSignalInventory | null>(null);
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
   const [artifact, setArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
 
   const connected = isConnected && !!address;
   const wallet = address || '';
@@ -145,7 +148,12 @@ export default function LifetimePage() {
         wallet: address ?? undefined,
         entriesCount: allReflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: allReflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract LifetimeSignalInventory from artifact card metadata
       const cards = artifact.cards ?? [];
@@ -443,6 +451,8 @@ export default function LifetimePage() {
         <h1 className="text-white/80 text-sm uppercase tracking-wide mb-6">
           Lifetime Signal Inventory
         </h1>
+
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {/* Explicit Boundary Copy */}
         <div className="mb-8 p-4 border border-white/10 bg-white/5 rounded-lg">

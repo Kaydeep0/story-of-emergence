@@ -21,7 +21,9 @@ import { InsightDrawer, normalizeInsight } from '../components/InsightDrawer';
 import { TimelineSectionSkeleton } from '../components/InsightsSkeleton';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { generateTimelineArtifact } from '../../lib/artifacts/timelineArtifact';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import { Sparkline } from '../../components/Sparkline';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 
 /**
  * Compute trend summary counts from topic drift buckets
@@ -62,6 +64,7 @@ export default function TimelinePage() {
   const [topicDrift, setTopicDrift] = useState<TopicDriftBucket[]>([]);
   const [contrastPairs, setContrastPairs] = useState<ContrastPair[]>([]);
   const [timelineArtifact, setTimelineArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
   const [showTimelineCapsuleDialog, setShowTimelineCapsuleDialog] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<any>(null);
@@ -158,7 +161,12 @@ export default function TimelinePage() {
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract cards from artifact and reconstruct original types
       const cards = artifact.cards ?? [];
@@ -287,6 +295,8 @@ export default function TimelinePage() {
         <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
         <InsightsTabs />
+
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {loading && (
           <div className="space-y-4">

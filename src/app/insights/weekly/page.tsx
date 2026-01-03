@@ -21,7 +21,9 @@ import { LENSES } from '../lib/lensContract';
 import { InsightCardSkeleton } from '../components/InsightsSkeleton';
 import { InsightPanel } from '../components/InsightPanel';
 import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import Link from 'next/link';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 
 export default function WeeklyPage() {
   const { address, isConnected } = useAccount();
@@ -31,6 +33,7 @@ export default function WeeklyPage() {
   const [reflections, setReflections] = useState<ReflectionEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [artifact, setArtifact] = useState<InsightArtifact | null>(null);
 
   const lens = LENSES.weekly;
 
@@ -131,11 +134,16 @@ export default function WeeklyPage() {
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: eventsAll.length, // Total events generated before filtering
       });
 
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
       const normalizedCards = cards.map(normalizeInsightCard);
+      
+      // Store artifact for debug panel
+      setArtifact(artifact);
       
       return {
         weeklyCards: normalizedCards,
@@ -157,6 +165,8 @@ export default function WeeklyPage() {
         <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
         <InsightsTabs />
+
+        <InsightDebugPanel debug={artifact?.debug} />
 
         {loading && (
           <div className="mt-8 space-y-4">

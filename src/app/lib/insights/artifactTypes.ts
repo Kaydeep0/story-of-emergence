@@ -11,6 +11,22 @@ import type { PatternNarrative } from '../patternMemory/patternNarratives';
 export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy' | 'distributions';
 
 /**
+ * Debug information attached to artifacts for development
+ */
+export type InsightArtifactDebug = {
+  eventCount: number;
+  windowStartIso: string;
+  windowEndIso: string;
+  minEventIso: string | null;
+  maxEventIso: string | null;
+  sampleEventIds: string[];
+  sampleEventDates: string[];
+  /** Dev-only: Reflection intake counters */
+  reflectionsLoaded?: number;
+  eventsGenerated?: number;
+};
+
+/**
  * Canonical insight artifact model
  * All computed insights follow this structure regardless of horizon
  */
@@ -26,5 +42,7 @@ export type InsightArtifact = {
   cards: InsightCard[];
   /** Phase 5.4: Optional pattern narratives attached to artifact */
   narratives?: PatternNarrative[];
+  /** Debug information for development */
+  debug?: InsightArtifactDebug;
 };
 

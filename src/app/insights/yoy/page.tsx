@@ -18,7 +18,9 @@ import { LENSES } from '../lib/lensContract';
 import { InsightCardSkeleton } from '../components/InsightsSkeleton';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { InsightDrawer, normalizeInsight } from '../components/InsightDrawer';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import YearSelector from '../components/YearSelector';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 
 /**
  * Group reflections by year
@@ -50,6 +52,7 @@ export default function YearOverYearPage() {
   const [year1, setYear1] = useState<number | null>(null);
   const [year2, setYear2] = useState<number | null>(null);
   const [yoyCard, setYoyCard] = useState<YearOverYearCard | null>(null);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<any>(null);
 
@@ -161,7 +164,12 @@ export default function YearOverYearPage() {
         eventsCount: events.length,
         fromYear: year1,
         toYear: year2,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract YearOverYearCard from artifact card metadata
       const cards = artifact.cards ?? [];
@@ -197,6 +205,8 @@ export default function YearOverYearPage() {
         <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
         <InsightsTabs />
+
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {loading && (
           <div className="space-y-4">

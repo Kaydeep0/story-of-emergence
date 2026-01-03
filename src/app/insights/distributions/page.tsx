@@ -10,6 +10,8 @@ import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
 import type { WindowDistribution, DistributionResult } from '../../lib/insights/distributionLayer';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
 
@@ -26,6 +28,7 @@ export default function DistributionsPage() {
   const [distributions, setDistributions] = useState<WindowDistribution[]>([]);
   const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [distributionInsight, setDistributionInsight] = useState<InsightCard | null>(null);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
 
   const connected = isConnected && !!address;
 
@@ -129,7 +132,12 @@ export default function DistributionsPage() {
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract data structures from artifact card metadata
       const cards = artifact.cards ?? [];
@@ -275,6 +283,8 @@ export default function DistributionsPage() {
     <main className="min-h-screen bg-black text-white">
       <section className="max-w-4xl mx-auto px-4 py-10">
         <h1 className="text-2xl font-semibold text-center mb-6">Distribution Analysis</h1>
+
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {/* Loading State */}
         {loading && (

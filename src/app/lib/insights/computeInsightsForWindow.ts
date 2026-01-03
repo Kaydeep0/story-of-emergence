@@ -2,7 +2,7 @@
 // Canonical insight engine entry point
 // Phase 4.2: Single source of truth for insight computation
 
-import type { InsightArtifact, InsightHorizon } from './artifactTypes';
+import type { InsightArtifact, InsightHorizon, InsightArtifactDebug } from './artifactTypes';
 import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { computeWeeklyArtifact } from './computeWeeklyArtifact';
@@ -40,8 +40,11 @@ export function computeInsightsForWindow(args: {
   previousSnapshots?: Array<import('../patternMemory/patternSnapshot').PatternSnapshot>;
   fromYear?: number;
   toYear?: number;
+  /** Dev-only: Reflection intake counters for debugging */
+  reflectionsLoaded?: number;
+  eventsGenerated?: number;
 }): InsightArtifact {
-  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [] } = args;
+  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [], reflectionsLoaded, eventsGenerated } = args;
   
   let artifact: InsightArtifact;
   
@@ -120,6 +123,131 @@ export function computeInsightsForWindow(args: {
   } else {
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
   }
+  
+  // Attach debug information to artifact
+  const eventDates = events
+    .map(e => {
+      // Extract timestamp using same logic as reflectionAdapters
+      const isUnified = 'sourceKind' in e;
+      let ts: Date | null = null;
+      
+      if (isUnified) {
+        const unified = e as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
+        ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
+             unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
+             unified.eventAt ? new Date(unified.eventAt) :
+             unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
+             null;
+      } else {
+        const internal = e as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
+        ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
+             internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
+             internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
+             internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
+             null;
+      }
+      
+      return ts ? ts.toISOString() : null;
+    })
+    .filter((d): d is string => d !== null && d !== undefined)
+    .sort();
+  
+  const debug: InsightArtifactDebug = {
+    eventCount: events.length,
+    windowStartIso: windowStart.toISOString(),
+    windowEndIso: windowEnd.toISOString(),
+    minEventIso: eventDates.length > 0 ? eventDates[0] : null,
+    maxEventIso: eventDates.length > 0 ? eventDates[eventDates.length - 1] : null,
+    sampleEventIds: events.slice(0, 3).map(e => e.id ?? 'unknown'),
+    sampleEventDates: events.slice(0, 3).map(e => {
+      const isUnified = 'sourceKind' in e;
+      let ts: Date | null = null;
+      if (isUnified) {
+        const unified = e as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
+        ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
+             unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
+             unified.eventAt ? new Date(unified.eventAt) :
+             unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
+             null;
+      } else {
+        const internal = e as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
+        ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
+             internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
+             internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
+             internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
+             null;
+      }
+      return ts ? ts.toISOString() : 'invalid';
+    }),
+    // Dev-only reflection intake counters
+    reflectionsLoaded: args.reflectionsLoaded,
+    eventsGenerated: args.eventsGenerated,
+  };
+  
+  // Dev-only validation checks
+  if (process.env.NODE_ENV === 'development') {
+    if (events.length > 0) {
+      const minDate = debug.minEventIso ? new Date(debug.minEventIso) : null;
+      const maxDate = debug.maxEventIso ? new Date(debug.maxEventIso) : null;
+      
+      // Check if minEventIso is after windowEndIso
+      if (minDate && minDate > windowEnd) {
+        console.error(`[computeInsightsForWindow] minEventIso (${debug.minEventIso}) is after windowEndIso (${debug.windowEndIso})`, {
+          horizon,
+          eventCount: events.length,
+          windowStart: debug.windowStartIso,
+          windowEnd: debug.windowEndIso,
+          minEvent: debug.minEventIso,
+          maxEvent: debug.maxEventIso,
+        });
+      }
+      
+      // Check if maxEventIso is before windowStartIso
+      if (maxDate && maxDate < windowStart) {
+        console.error(`[computeInsightsForWindow] maxEventIso (${debug.maxEventIso}) is before windowStartIso (${debug.windowStartIso})`, {
+          horizon,
+          eventCount: events.length,
+          windowStart: debug.windowStartIso,
+          windowEnd: debug.windowEndIso,
+          minEvent: debug.minEventIso,
+          maxEvent: debug.maxEventIso,
+        });
+      }
+      
+      // Check for invalid dates
+      for (const event of events) {
+        const isUnified = 'sourceKind' in event;
+        let ts: Date | null = null;
+        
+        if (isUnified) {
+          const unified = event as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
+          ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
+               unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
+               unified.eventAt ? new Date(unified.eventAt) :
+               unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
+               null;
+        } else {
+          const internal = event as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
+          ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
+               internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
+               internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
+               internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
+               null;
+        }
+        
+        if (ts && isNaN(ts.getTime())) {
+          console.error(`[computeInsightsForWindow] Invalid date parsed for event ${event.id}`, {
+            eventId: event.id,
+            horizon,
+            eventKeys: Object.keys(event),
+          });
+          throw new Error(`Event ${event.id} has invalid timestamp`);
+        }
+      }
+    }
+  }
+  
+  artifact.debug = debug;
   
   // Phase 5.4-5.5: Attach narratives to artifact (single integration point)
   // Extract patterns, generate snapshots, analyze deltas, generate narratives, select, attach

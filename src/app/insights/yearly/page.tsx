@@ -35,9 +35,11 @@ import { MirrorSection } from './components/MirrorSection';
 import { buildEmergenceMap } from '../../lib/philosophy/emergenceMap';
 import { EmergenceMapViz } from '../../components/philosophy/EmergenceMapViz';
 import { ShareActionsBar } from '../components/ShareActionsBar';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import { buildMeaningCapsule } from '../../lib/share/meaningCapsule';
 import { buildPublicSharePayload } from '../../lib/share/publicSharePayload';
 import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 
 // Yearly Wrap v1 - Locked
 const YEARLY_WRAP_VERSION = 'v1' as const;
@@ -57,6 +59,7 @@ export default function YearlyWrapPage() {
   const [identitySentence, setIdentitySentence] = useState<string>('');
   const [includeNumbers, setIncludeNumbers] = useState(false);
   const [privateMode, setPrivateMode] = useState(true);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
 
   // Removed yearlyArtifact state - sharing is handled by SharePackBuilder
 
@@ -158,7 +161,12 @@ export default function YearlyWrapPage() {
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract DistributionResult and WindowDistribution from artifact card metadata
       const cards = artifact.cards ?? [];
@@ -458,6 +466,7 @@ export default function YearlyWrapPage() {
 
   return (
     <section className="max-w-4xl mx-auto px-4 py-10">
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {/* Loading State */}
         {loading && (

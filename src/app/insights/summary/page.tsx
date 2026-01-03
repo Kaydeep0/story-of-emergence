@@ -29,6 +29,8 @@ import { NarrativeBlock } from '../components/NarrativeBlock';
 import { InsightsSourceCard } from '../../components/InsightsSourceCard';
 import { InsightPanel } from '../components/InsightPanel';
 import { InsightTimeline } from '../components/InsightTimeline';
+import { InsightDebugPanel } from '../components/InsightDebugPanel';
+import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
 
 export default function SummaryPage() {
@@ -43,6 +45,7 @@ export default function SummaryPage() {
   const [sources, setSources] = useState<SourceEntryLite[]>([]);
   const [sourceInsights, setSourceInsights] = useState<UnifiedSourceInsights | null>(null);
   const [summaryArtifact, setSummaryArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
+  const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
   const [showSummaryCapsuleDialog, setShowSummaryCapsuleDialog] = useState(false);
   const [insightView, setInsightView] = useState<'panel' | 'timeline'>('panel');
 
@@ -165,7 +168,12 @@ export default function SummaryPage() {
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
+        reflectionsLoaded: reflections.length,
+        eventsGenerated: events.length,
       });
+
+      // Store artifact for debug panel
+      setInsightArtifact(artifact);
 
       // Extract cards from artifact
       const cards = artifact.cards ?? [];
@@ -273,6 +281,8 @@ export default function SummaryPage() {
         <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
 
         <InsightsTabs />
+
+        <InsightDebugPanel debug={insightArtifact?.debug} />
 
         {loading && (
           <div className="space-y-4">
