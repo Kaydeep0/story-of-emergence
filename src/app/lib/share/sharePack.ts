@@ -48,6 +48,37 @@ export type SharePack = {
   
   /** Static privacy label - always the same */
   privacyLabel: 'Derived from encrypted private journal';
+  
+  // Optional fields for extended SharePack (used by generateSharePack)
+  id?: string;
+  createdAt?: number;
+  checksum?: string;
+  scope?: 'year' | 'week' | 'month';
+  title?: string;
+  summary?: string;
+  moments?: Array<{
+    headline: string;
+    summary: string;
+    confidence: 'high' | 'medium' | 'low';
+  }>;
+  shifts?: Array<{
+    scope: string;
+    direction: string;
+    headline: string;
+    summary: string;
+  }>;
+  density?: string;
+  cadence?: string;
+  confidence?: 'high' | 'medium' | 'low';
+};
+
+/**
+ * Moment type for extended SharePack format
+ */
+export type Moment = {
+  headline: string;
+  summary: string;
+  confidence: 'high' | 'medium' | 'low';
 };
 
 /**

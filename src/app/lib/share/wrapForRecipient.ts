@@ -36,13 +36,14 @@ export async function wrapSharePackForRecipient(
   const wrappedKey = await wrapKeyForRecipient(contentKey, recipientDerivedKey);
 
   // Generate capsule ID (deterministic from checksum + recipient + timestamp)
-  const capsuleId = `capsule-${sharePack.checksum.slice(0, 8)}-${recipientWalletAddress.slice(2, 10)}-${Date.now().toString(36)}`;
+  const checksum = sharePack.checksum || '';
+  const capsuleId = `capsule-${checksum.slice(0, 8)}-${recipientWalletAddress.slice(2, 10)}-${Date.now().toString(36)}`;
 
   const capsule: Capsule = {
     capsuleId,
     createdAt: Date.now(),
     expiresAt,
-    sharePackChecksum: sharePack.checksum,
+    sharePackChecksum: checksum,
     wrappedKey,
     recipientPublicKey: recipientWalletAddress.toLowerCase(),
     payload: encryptedPayload,
