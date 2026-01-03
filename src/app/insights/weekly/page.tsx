@@ -83,14 +83,17 @@ export default function WeeklyPage() {
     };
   }, [mounted, isConnected, address, encryptionReady, sessionKey, getSourceIdFor]);
 
-  // Compute weekly insights - engine handles windowing
-  const weeklyCards = useMemo(() => {
-    if (reflections.length === 0) return [];
+  // Compute weekly insights - filter events to weekly window before passing to engine
+  const { weeklyCards, eventsInWindow } = useMemo(() => {
+    if (reflections.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
     try {
-      // Convert all reflections to events format expected by engine
-      // Engine will handle weekly windowing internally
-      const events = reflections.map((r) => ({
+      // Get current week window (Monday 00:00 through next Monday 00:00)
+      const weekWindow = getWindowStartEnd('week');
+      const { start, end } = weekWindow;
+
+      // Convert all reflections to events format
+      const eventsAll = reflections.map((r) => ({
         eventAt: new Date(r.createdAt),
         kind: 'written' as const,
         sourceKind: r.sourceKind ?? 'journal' as const,
@@ -100,15 +103,26 @@ export default function WeeklyPage() {
         topics: [], // Will be extracted by engine if needed
       }));
 
-      // Get current week window for engine
-      const weekWindow = getWindowStartEnd('week');
+      // Filter events to weekly window (engine expects pre-filtered events)
+      const events = eventsAll.filter((e) => {
+        const d = e.eventAt;
+        return d >= start && d < end;
+      });
 
-      // Compute weekly artifact - engine handles windowing
+      // Temporary debug log
+      console.log("weekly window", start.toISOString(), end.toISOString(), {
+        reflections: reflections.length,
+        events: events.length,
+      });
+
+      if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
+
+      // Compute weekly artifact with filtered events
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
-        windowStart: weekWindow.start,
-        windowEnd: weekWindow.end,
+        windowStart: start,
+        windowEnd: end,
         wallet: address ?? undefined,
         entriesCount: reflections.length,
         eventsCount: events.length,
@@ -116,10 +130,13 @@ export default function WeeklyPage() {
 
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
-      return cards.map(normalizeInsightCard);
+      return {
+        weeklyCards: cards.map(normalizeInsightCard),
+        eventsInWindow: events.length,
+      };
     } catch (err) {
       console.error('Failed to compute weekly insights:', err);
-      return [];
+      return { weeklyCards: [], eventsInWindow: 0 };
     }
   }, [reflections, address]);
 
@@ -163,7 +180,19 @@ export default function WeeklyPage() {
         {!loading && !error && reflections.length > 0 && (
           <div className="space-y-6">
             {/* Weekly Cards */}
-            {weeklyCards.length === 0 ? (
+            {eventsInWindow === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                <p className="text-sm text-white/60 mb-4">
+                  No reflections this week. Write a reflection and it will appear here.
+                </p>
+                <Link
+                  href="/insights/summary"
+                  className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  Back to Summary
+                </Link>
+              </div>
+            ) : weeklyCards.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
                   No weekly insights yet. Keep writing reflections and they&apos;ll appear here.
