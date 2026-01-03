@@ -147,11 +147,11 @@ export function PublicShareImage({ payload, width = 1200, height = 628 }: Public
     },
   };
   
-  // Spacing
+  // Spacing (numeric values for math, convert to px at style boundaries)
   const spacing = {
-    padding: '60px',
-    sectionGap: '40px',
-    textGap: '24px',
+    padding: 60,
+    sectionGap: 40,
+    textGap: 24,
   };
   
   // Base card style - fixed dimensions, black background
@@ -162,7 +162,7 @@ export function PublicShareImage({ payload, width = 1200, height = 628 }: Public
     color: '#ffffff',
     display: 'flex',
     flexDirection: 'column',
-    padding: spacing.padding,
+    padding: `${spacing.padding}px`,
     boxSizing: 'border-box',
     fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     position: 'relative',
@@ -174,7 +174,7 @@ export function PublicShareImage({ payload, width = 1200, height = 628 }: Public
   return (
     <div style={cardStyle}>
       {/* Header - Brand */}
-      <div style={{ marginBottom: spacing.sectionGap }}>
+      <div style={{ marginBottom: `${spacing.sectionGap}px` }}>
         <div style={typography.brand}>
           Story of Emergence
         </div>
@@ -183,27 +183,27 @@ export function PublicShareImage({ payload, width = 1200, height = 628 }: Public
       {/* Main content area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         {/* Insight sentence - primary content */}
-        <div style={{ marginBottom: spacing.textGap }}>
+        <div style={{ marginBottom: `${spacing.textGap}px` }}>
           <p style={typography.insight}>
             {capsule.insightSentence}
           </p>
         </div>
         
         {/* Context hint - subtle */}
-        <div style={{ marginBottom: spacing.sectionGap }}>
+        <div style={{ marginBottom: `${spacing.sectionGap}px` }}>
           <p style={typography.context}>
             {formatContextHint(contextHint)} · {formatTemporalContext(capsule.temporalContext)}
           </p>
         </div>
         
         {/* Emergence Map Visualization - compact */}
-        <div style={{ marginBottom: spacing.sectionGap }}>
+        <div style={{ marginBottom: `${spacing.sectionGap}px` }}>
           <EmergenceMapViz map={emergenceMap} width={width - spacing.padding * 2} height={200} />
         </div>
       </div>
       
       {/* Footer - minimal, observational */}
-      <div style={{ marginTop: 'auto', paddingTop: spacing.sectionGap }}>
+      <div style={{ marginTop: 'auto', paddingTop: `${spacing.sectionGap}px` }}>
         <p style={typography.footer}>
           Derived from encrypted private journal
         </p>
