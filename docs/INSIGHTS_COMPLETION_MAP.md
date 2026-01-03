@@ -121,3 +121,9 @@
 - **Rule:** No new features, no expansion. This is a finished artifact.
 - **Evidence:** Comment at top of file: "Locked as v1: No new features, no expansion. This is a finished artifact."
 
+### Weekly Lens - Frozen
+- **File:** `src/app/insights/weekly/page.tsx`
+- **Status:** Frozen as trust surface (January 2025)
+- **Rule:** No window tweaks, filtering changes, or UX micro-adjustments. Only new insight recipes allowed.
+- **Evidence:** `docs/WEEKLY_LENS_FREEZE.md` - Full freeze policy document
+
