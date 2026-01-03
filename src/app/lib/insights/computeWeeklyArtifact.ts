@@ -117,6 +117,7 @@ export function computeWeeklyArtifact(args: {
       evidence: events.slice(0, 3).map((e) => ({
         entryId: (e as any).id ?? `event-${events.indexOf(e)}`,
         timestamp: typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString(),
+        preview: 'Reflection', // Safe label, no reliance on title field
       })),
       computedAt: new Date().toISOString(),
     } as InsightCard);
