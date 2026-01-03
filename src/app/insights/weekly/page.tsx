@@ -109,6 +109,13 @@ export default function WeeklyPage() {
         return d >= start && d < end;
       });
 
+      // Temporary assertion log
+      console.log("WEEKLY CHECK", {
+        reflections: reflections.length,
+        eventsInWindow: events.length,
+        sample: reflections.slice(0, 3).map((r) => r.createdAt),
+      });
+
       if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
       // Compute weekly artifact with filtered events
@@ -124,8 +131,13 @@ export default function WeeklyPage() {
 
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
+      const normalizedCards = cards.map(normalizeInsightCard);
+      
+      // Temporary guard log after compute
+      console.log("WEEKLY CARDS", normalizedCards.length, normalizedCards);
+      
       return {
-        weeklyCards: cards.map(normalizeInsightCard),
+        weeklyCards: normalizedCards,
         eventsInWindow: events.length,
       };
     } catch (err) {
