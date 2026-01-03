@@ -12,6 +12,8 @@
  * This file re-exports it for backward compatibility.
  */
 
+import type { ShareArtifact } from '@/lib/artifacts/types';
+
 export type { ShareArtifact } from '@/lib/artifacts/types';
 
 // Legacy type alias for backward compatibility

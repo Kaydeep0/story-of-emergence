@@ -429,7 +429,7 @@ export function SharePackBuilder({
   };
 
   const buildCurrentSharePack = (sel: SharePackSelection): SharePack => {
-    return buildSharePack({
+    const pack = buildSharePack({
       year,
       selection: sel,
       platform: mapPlatform(platform),
@@ -443,6 +443,18 @@ export function SharePackBuilder({
       distributionResult,
       windowDistribution,
     });
+
+    return {
+      ...pack,
+      oneSentenceSummary: (pack as any).oneSentenceSummary ?? '',
+      keyNumbers: (pack as any).keyNumbers ?? {
+        frequency: 0,
+        spikeCount: 0,
+        concentration: 0,
+      },
+      generatedAt: (pack as any).generatedAt ?? new Date().toISOString(),
+      privacyLabel: (pack as any).privacyLabel ?? 'Derived from encrypted private journal',
+    } as SharePack;
   };
 
   const handleGenerate = () => {
