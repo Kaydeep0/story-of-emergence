@@ -105,7 +105,7 @@ function adaptToContractPack(legacyPack: LegacySharePack, distributionHint?: "no
 export function renderSharePack(
   pack: ContractSharePack | LegacySharePack, 
   frame: ShareFrame
-): JSX.Element {
+) {
   // Convert legacy pack to contract pack if needed
   const contractPack: ContractSharePack = 'platform' in pack 
     ? adaptToContractPack(pack as LegacySharePack, pack.distributionLabel === 'Normal' ? 'normal' : pack.distributionLabel === 'Log Normal' ? 'log-normal' : pack.distributionLabel === 'Power Law' ? 'power-law' : null)

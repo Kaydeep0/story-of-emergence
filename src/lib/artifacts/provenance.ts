@@ -22,6 +22,7 @@ function formatDateRange(
   
   if (firstDate === lastDate) {
     // Single date
+    if (!firstDate) return 'Date range not available';
     try {
       const date = new Date(firstDate);
       if (!isNaN(date.getTime())) {

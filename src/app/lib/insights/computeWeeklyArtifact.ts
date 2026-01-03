@@ -129,21 +129,15 @@ export function computeWeeklyArtifact(args: {
   const artifactId = `weekly-${startDateStr}-${endDateStr}`;
   
   const artifact: InsightArtifact = {
-    id: artifactId,
     horizon: 'weekly',
     window: {
-      startISO: windowStart.toISOString(),
-      endISO: windowEnd.toISOString(),
+      kind: 'week',
+      start: windowStart.toISOString(),
+      end: windowEnd.toISOString(),
       timezone,
     },
-    createdAtISO: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
     cards,
-    meta: {
-      wallet,
-      entriesCount: entriesCount ?? windowEntries.length,
-      eventsCount: eventsCount ?? events.length,
-      version: 1,
-    },
   };
   
   return artifact;

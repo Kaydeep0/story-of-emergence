@@ -7,28 +7,12 @@
  * All fields must be present. Missing values must be null, not undefined.
  * 
  * This contract is locked and must not change without explicit versioning.
+ * 
+ * NOTE: ShareArtifact type is now defined in @/lib/artifacts/types.ts
+ * This file re-exports it for backward compatibility.
  */
 
-export type ShareArtifact = {
-  kind: 'lifetime' | 'weekly' | 'yearly';
-  generatedAt: string; // ISO
-  wallet: string;
-  artifactId: string; // Deterministic SHA-256 hash
-
-  inventory: {
-    totalReflections: number;
-    firstReflectionDate: string | null;
-    lastReflectionDate: string | null;
-    distinctMonths: number;
-  };
-
-  signals: Array<{
-    id: string;
-    label: string;
-    confidence: number; // 0–1
-    evidenceCount: number;
-  }>;
-};
+export type { ShareArtifact } from '@/lib/artifacts/types';
 
 // Legacy type alias for backward compatibility
 export type LifetimeArtifact = ShareArtifact;

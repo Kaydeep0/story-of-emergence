@@ -189,9 +189,11 @@ export async function unwrapCapsuleKeyFromWallet(
   const keyBytes = await decryptFromWallet(wrappedKey, recipientWallet);
 
   // Import as AES-GCM key
+  // Use slice to ensure ArrayBuffer (not SharedArrayBuffer)
+  const buffer = keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength);
   return crypto.subtle.importKey(
     'raw',
-    keyBytes.buffer,
+    buffer,
     'AES-GCM',
     false,
     ['encrypt', 'decrypt']

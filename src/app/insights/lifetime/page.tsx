@@ -34,40 +34,16 @@ function safeDate(value: unknown): Date | null {
 
 export default function LifetimePage() {
   const { address, isConnected } = useAccount();
-  
-  // Route gate: show safe placeholder if feature flag is false
-  // This prevents crashes while keeping the route accessible
-  if (!FEATURE_LIFETIME_INVENTORY) {
-    return (
-      <div className="min-h-screen bg-black text-white">
-        <section className="max-w-2xl mx-auto px-4 py-12">
-          <h1 className="text-2xl font-normal text-center mb-3">Lifetime</h1>
-          <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity across all time</p>
-          <InsightsTabs />
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
-            <p className="text-sm text-white/60 mb-4">
-              Lifetime insights are coming soon. Keep writing and we will build your long arc.
-            </p>
-            <a
-              href="/insights/summary"
-              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
-            >
-              Back to Summary
-            </a>
-          </div>
-        </section>
-      </div>
-    );
-  }
-  const wallet = address || '';
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allReflections, setAllReflections] = useState<any[]>([]);
+  const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
 
   const connected = isConnected && !!address;
+  const wallet = address || '';
 
   useEffect(() => {
     setMounted(true);
@@ -122,6 +98,35 @@ export default function LifetimePage() {
       cancelled = true;
     };
   }, [mounted, connected, address, encryptionReady, sessionKey, encryptionError]);
+
+  // Route gate: show safe placeholder if feature flag is false
+  // This prevents crashes while keeping the route accessible
+  if (!mounted) {
+    return null;
+  }
+
+  if (!FEATURE_LIFETIME_INVENTORY) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <section className="max-w-2xl mx-auto px-4 py-12">
+          <h1 className="text-2xl font-normal text-center mb-3">Lifetime</h1>
+          <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity across all time</p>
+          <InsightsTabs />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+            <p className="text-sm text-white/60 mb-4">
+              Lifetime insights are coming soon. Keep writing and we will build your long arc.
+            </p>
+            <a
+              href="/insights/summary"
+              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              Back to Summary
+            </a>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   // Group reflections by year and assemble candidates
   const { reflectionMetas, deterministicCandidates } = useMemo(() => {

@@ -18,6 +18,7 @@ import type { DistributionResult, WindowDistribution } from '../../../lib/insigh
 import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 // Phase 3.2: Use canonical SharePack contract and renderer
 import { buildYearlySharePack, type SharePack as CanonicalSharePack, type YearlyInsightData } from '../../../lib/share/sharePack';
+import type { SharePack } from '@/app/lib/share/sharePack';
 import { renderSharePack, type SharePackFrame } from '../../../lib/share/renderSharePack';
 import { buildSharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
 import { renderSharePack as legacyRenderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';

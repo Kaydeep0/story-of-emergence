@@ -100,15 +100,18 @@ export default function WeeklyPage() {
       const end = new Date(start);
       end.setDate(start.getDate() + 7);
 
-      // Convert all reflections to events format
+      // Convert all reflections to UnifiedInternalEvent format
+      const walletAlias = address.toLowerCase();
       const eventsAll = reflections.map((r) => ({
-        eventAt: new Date(r.createdAt),
-        kind: 'written' as const,
-        sourceKind: r.sourceKind ?? 'journal' as const,
+        id: r.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: new Date(r.createdAt).toISOString(),
+        eventKind: 'reflection_written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: r.plaintext ?? '',
+        length: (r.plaintext ?? '').length,
         sourceId: r.sourceId ?? null,
-        plaintext: r.plaintext,
-        length: r.plaintext.length,
-        topics: [], // Will be extracted by engine if needed
+        topics: [],
       }));
 
       // Filter events to weekly window (engine expects pre-filtered events)

@@ -44,26 +44,26 @@ function generateId(year: number, walletAddress: string, summary: string): strin
  * @param pack SharePack object (without checksum)
  * @returns Checksum string
  */
-function generateChecksum(pack: Omit<SharePack, 'checksum' | 'id' | 'createdAt'>): string {
+function generateChecksum(pack: any): string {
   // Create deterministic string representation
   const content = JSON.stringify({
-    scope: pack.scope,
-    title: normalizeText(pack.title),
-    summary: normalizeText(pack.summary),
-    moments: pack.moments.map(m => ({
-      headline: normalizeText(m.headline),
-      summary: normalizeText(m.summary),
-      confidence: m.confidence,
-    })).sort((a, b) => a.headline.localeCompare(b.headline)),
-    shifts: pack.shifts.map(s => ({
-      scope: s.scope,
-      direction: s.direction,
-      headline: normalizeText(s.headline),
-      summary: normalizeText(s.summary),
-    })).sort((a, b) => a.headline.localeCompare(b.headline)),
-    density: pack.density,
-    cadence: pack.cadence,
-    confidence: pack.confidence,
+    scope: pack.scope ?? '',
+    title: normalizeText(pack.title ?? ''),
+    summary: normalizeText(pack.summary ?? ''),
+    moments: (pack.moments ?? []).map((m: any) => ({
+      headline: normalizeText(m.headline ?? ''),
+      summary: normalizeText(m.summary ?? ''),
+      confidence: m.confidence ?? 'low',
+    })).sort((a: any, b: any) => a.headline.localeCompare(b.headline)),
+    shifts: (pack.shifts ?? []).map((s: any) => ({
+      scope: s.scope ?? '',
+      direction: s.direction ?? '',
+      headline: normalizeText(s.headline ?? ''),
+      summary: normalizeText(s.summary ?? ''),
+    })).sort((a: any, b: any) => a.headline.localeCompare(b.headline)),
+    density: pack.density ?? '',
+    cadence: pack.cadence ?? '',
+    confidence: pack.confidence ?? 'low',
   });
   
   return simpleHash(content);
@@ -123,7 +123,7 @@ export function generateSharePack(
     : 'low';
   
   // Build pack without checksum
-  const packWithoutChecksum: Omit<SharePack, 'checksum' | 'id' | 'createdAt'> = {
+  const packWithoutChecksum: any = {
     scope: 'year',
     title,
     summary,

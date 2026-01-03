@@ -41,7 +41,7 @@ const FRAME_PRESETS: Record<SharePackFrame, { width: number; height: number }> =
 export function renderSharePack(
   pack: SharePack,
   opts: { frame: SharePackFrame }
-): JSX.Element {
+) {
   const { frame } = opts;
   const dimensions = FRAME_PRESETS[frame];
 

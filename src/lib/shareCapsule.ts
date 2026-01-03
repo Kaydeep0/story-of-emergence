@@ -16,9 +16,11 @@ import type { ShareArtifact } from './artifacts/types';
 import { aesGcmEncryptText, aesGcmDecryptText } from './crypto';
 import { u8ToArrayBuffer } from './crypto';
 
+export type ShareArtifactKind = ShareArtifact['kind'];
+
 export type ShareCapsule = {
   artifactId: string;
-  kind: 'weekly' | 'yearly' | 'lifetime';
+  kind: ShareArtifactKind;
   encryptedPayload: string; // AES-GCM encrypted artifact JSON
   recipient: string; // wallet or public key (string for now)
   createdAt: string; // ISO timestamp

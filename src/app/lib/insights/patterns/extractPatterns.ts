@@ -22,8 +22,8 @@ export function extractPatternsFromArtifact(
   artifact: InsightArtifact
 ): InsightPatternSet {
   const patterns: InsightPattern[] = [];
-  const windowStartISO = artifact.window.startISO;
-  const windowEndISO = artifact.window.endISO;
+  const windowStartISO = artifact.window.start;
+  const windowEndISO = artifact.window.end;
   
   // Extract patterns from cards
   for (const card of artifact.cards) {

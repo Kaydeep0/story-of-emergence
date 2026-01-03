@@ -18,7 +18,7 @@ import { LENSES } from '../lib/lensContract';
 import { InsightCardSkeleton } from '../components/InsightsSkeleton';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { InsightDrawer, normalizeInsight } from '../components/InsightDrawer';
-import { YearSelector } from '../components/YearSelector';
+import YearSelector from '../components/YearSelector';
 
 /**
  * Group reflections by year
@@ -67,6 +67,7 @@ export default function YearOverYearPage() {
     let cancelled = false;
 
     async function loadReflections() {
+      if (!address || !sessionKey) return;
       try {
         setLoading(true);
         setError(null);

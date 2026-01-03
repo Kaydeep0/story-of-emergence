@@ -48,8 +48,7 @@ export function computeAllInsights(
   if (options.fromYear !== undefined && options.toYear !== undefined) {
     yearOverYear = computeYearOverYearCard(
       reflections,
-      options.fromYear,
-      options.toYear
+      { fromYear: options.fromYear, toYear: options.toYear }
     );
   }
   
