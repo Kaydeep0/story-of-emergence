@@ -444,8 +444,24 @@ export function SharePackBuilder({
       windowDistribution,
     });
 
-    return {
-      ...pack,
+    const normalizeDistributionLabel = (
+      v: any
+    ): 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' | undefined => {
+      if (!v) return undefined;
+
+      const s = String(v).trim().toLowerCase();
+
+      if (s === 'normal') return 'normal';
+      if (s === 'log normal' || s === 'lognormal') return 'lognormal';
+      if (s === 'power law' || s === 'powerlaw') return 'powerlaw';
+      if (s === 'mixed') return 'mixed';
+      if (s === 'none') return 'none';
+
+      return undefined;
+    };
+
+    const merged = {
+      ...(pack as any),
       oneSentenceSummary: (pack as any).oneSentenceSummary ?? '',
       keyNumbers: (pack as any).keyNumbers ?? {
         frequency: 0,
@@ -454,7 +470,10 @@ export function SharePackBuilder({
       },
       generatedAt: (pack as any).generatedAt ?? new Date().toISOString(),
       privacyLabel: (pack as any).privacyLabel ?? 'Derived from encrypted private journal',
-    } as SharePack;
+      // ✅ critical: normalize to canonical union expected by SharePack
+      distributionLabel: normalizeDistributionLabel((pack as any).distributionLabel) ?? 'none',
+    };
+    return merged as unknown as SharePack;
   };
 
   const handleGenerate = () => {
