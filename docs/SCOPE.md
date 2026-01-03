@@ -4,24 +4,37 @@ Last updated: January 2, 2026
 
 ## Product Definition
 
-Story of Emergence is a private, wallet-bound personal intelligence system that transforms encrypted, owner-controlled life data into time-based signals and narrative lenses, while allowing meaning to travel outward through derived artifacts without exposing the raw vault.
+Story of Emergence is a private wallet-bound personal intelligence system that transforms encrypted owner-controlled life data into time-based signals and narrative lenses, and allows meaning to travel outward through derived artifacts without exposing the raw vault.
 
 ---
 
-## Core Features
+## Non-Negotiable Guarantees
 
-### 1. Encrypted Ledger (Reflections)
+- Wallet equals identity
+- Consent signature equals authority
+- Deterministic session key derivation
+- Client-side AES-GCM encryption
+- Supabase stores ciphertext only
+- Decryption only in browser memory
+- All insights computed locally
+- No server-side inference
+- No cross-user analytics
+- Export is always possible
+- Sharing defaults to derived artifacts only
+
+---
+
+## Scope by System View
+
+### Raw View
 **Status:** COMPLETE and FROZEN
 
-- Wallet identity via RainbowKit + Wagmi
-- Consent signature establishes encryption authority
-- Session key derived deterministically from signature
-- Client-side AES-GCM encryption and decryption
-- Supabase stores ciphertext only (RLS locked to wallet)
-- Reflections CRUD working end-to-end
-- Soft delete / restore patterns
-- Pagination, empty states, loading states, toasts
-- Export possible at all times
+- Encrypted reflections ledger
+- Create, read, update, delete for reflections
+- Multi-draft support
+- Soft delete, restore, hard delete
+- Pagination and search
+- Export decrypted JSON client-side
 
 **Routes:**
 - `/` - Home/Reflections view
@@ -29,93 +42,73 @@ Story of Emergence is a private, wallet-bound personal intelligence system that 
 
 ---
 
-### 2. Insights System
-**Status:** PARTIALLY COMPLETE
+### Observer View
+**Status:** FUNCTIONAL
 
-#### Canonical Insight Engine
-**Location:** `src/app/lib/insights/computeInsightsForWindow.ts`
+- Insight recipes for time-based observation
+- Weekly summaries
+- Timeline spikes
+- Always-on summary
+- Pattern extraction and evidence surfacing
+- Internal events logging
 
-**Current State:**
-- Engine exists and is the intended single source of truth
-- Weekly lens fully routes through engine
-- Summary and Timeline have engine stubs (cards empty, computed separately)
-- Yearly, Lifetime, YoY throw errors if called through engine
+**Implementation:**
+- Canonical engine: `src/app/lib/insights/computeInsightsForWindow.ts`
+- Weekly lens routes through engine ✅
+- Summary/Timeline have engine stubs (computed separately)
+- Yearly/Lifetime/YoY use direct compute functions
 
-**Pages Using Canonical Engine:**
-- ✅ Weekly (`/insights/weekly`) - Uses `computeInsightsForWindow` with horizon `'weekly'`
-
-**Pages NOT Using Canonical Engine (Direct Compute):**
-- ⚠️ Summary (`/insights/summary`) - Uses `computeSummaryInsights` directly
-- ⚠️ Timeline (`/insights/timeline`) - Uses `computeTimelineInsights` directly
-- ⚠️ Year over Year (`/insights/yoy`) - Uses `computeYearOverYearCard` directly
-- ⚠️ Distributions (`/insights/distributions`) - Uses `computeDistributionLayer` directly
-- ⚠️ Yearly (`/insights/yearly`) - Uses distribution compute directly
-- ⚠️ Lifetime (`/insights/lifetime`) - Uses its own compute path
-
-**Insight Routes:**
-- `/insights` - Redirects to `/insights/summary`
+**Routes:**
 - `/insights/weekly` - Weekly lens (uses canonical engine)
 - `/insights/summary` - Summary lens (direct compute)
 - `/insights/timeline` - Timeline lens (direct compute)
-- `/insights/yearly` - Yearly lens (direct compute)
-- `/insights/yearly-wrap` - Yearly wrap view
-- `/insights/distributions` - Distributions analysis
-- `/insights/yoy` - Year over Year comparison
-- `/insights/lifetime` - Lifetime signal inventory
-- `/insights/arc` - Stub (not available)
-- `/insights/compare` - Comparison view
-- `/insights/year/[year]` - Stub (not available)
-
-**Lens Contract:**
-- Defined in `src/app/insights/lib/lensContract.ts`
-- Maps lens keys to routes and status
-- All lenses marked as 'available' but engine support varies
+- `/insights/distributions` - Distribution analysis
 
 ---
 
-### 3. Sources System
+### Narrative Views
 **Status:** FUNCTIONAL
 
-- External sources CRUD (notes, articles, etc.)
-- Source metadata stored encrypted
-- Reflection-source linking via `reflection_sources` table
-- Backlinks from sources to reflections
+- Weekly narrative cards with narrative blocks
+- Summary narrative surfacing when available
+- Yearly narrative lens and yearly wrap
+- Lifetime narrative lens
+- Year over year lens
 
 **Routes:**
-- `/sources` - Sources list page
-- `/sources/[sourceId]` - Source detail page with linked reflections
+- `/insights/yearly` - Yearly lens
+- `/insights/yearly-wrap` - Yearly wrap view
+- `/insights/lifetime` - Lifetime signal inventory
+- `/insights/yoy` - Year over Year comparison
 
-**Components:**
-- `SourceCard`, `SourceForm`, `SourceLinkMenu`
-- `SourceCardWithBacklinks` (sources detail page)
-- `LinkedSourcesBacklinks` (reflections view)
+**Current State:**
+- Weekly has full narrative support via canonical engine
+- Summary/Timeline narratives computed separately
+- Yearly/Lifetime/YoY use dedicated compute paths
 
 ---
 
-### 4. Sharing System
+### Sharing View
 **Status:** PARTIALLY COMPLETE
 
-#### Public Sharing
-- Public share image rendering (`PublicShareImage` component)
-- Public share routes: `/share/year/[slug]`
-- Base64url-encoded payload slugs
-- Read-only, no wallet context required
+- Derived share artifacts
+- Share pack selection and rendering
+- Caption helpers
+- Share routes and capsule endpoints
+- Shared tab and shared open flows
+- Guardrails and privacy language
 
-#### Private Sharing (Capsules)
-- Encrypted capsule system
-- Capsule API routes: `/api/capsules`, `/api/capsules/[capsuleId]`
-- ShareCapsuleDialog component
-- ShareActionsBar component
-- Capsule opening routes: `/shared/open`, `/shared/open/[id]`
-- Wallet-to-wallet sharing routes: `/shared/wallet/[id]`
-
-**Sharing Routes:**
+**Routes:**
 - `/share/[capsuleId]` - Legacy share pack renderer
 - `/share/year/[slug]` - Public year share page
 - `/shared` - Shared items landing
 - `/shared/open` - Open capsule from URL param
 - `/shared/open/[id]` - Open capsule by ID
 - `/shared/wallet/[id]` - Wallet share page (stub)
+
+**API Routes:**
+- `/api/capsules` - Create capsule (POST)
+- `/api/capsules/[capsuleId]` - Get capsule (GET)
 
 **Remaining Work:**
 - Preview = export rendering contract
@@ -124,66 +117,66 @@ Story of Emergence is a private, wallet-bound personal intelligence system that 
 
 ---
 
-### 5. API Routes
+### Sources System
 **Status:** FUNCTIONAL
 
-- `/api/capsules` - Create capsule (POST)
-- `/api/capsules/[capsuleId]` - Get capsule (GET)
-- `/api/events/log` - Internal events logging (POST)
-- `/api/summary` - Summary API endpoint
-- `/api/timeline` - Timeline API endpoint
+- Sources list and source detail pages
+- External sources schema and ingestion placeholders
+- Linkage between sources and reflections is a future graph invariant
+
+**Routes:**
+- `/sources` - Sources list page
+- `/sources/[sourceId]` - Source detail page with linked reflections
+
+**Current Implementation:**
+- External sources CRUD (notes, articles, etc.)
+- Source metadata stored encrypted
+- Reflection-source linking via `reflection_sources` table
+- Backlinks from sources to reflections
 
 ---
 
-## Architecture Components
+## Graph Model Direction
+
+- Reflections can link many-to-many with sources
+- Reflections can link to reflections
+- Tags are lightweight nodes
+- All relationships computed and stored encrypted client-side
+
+**Current State:**
+- Reflection-source linking exists (`reflection_sources` table) ✅
+- Reflection-reflection linking exists (`reflection_links` table, deprecated)
+- Tags: Not yet implemented
+- Graph traversal: Future work
+
+---
+
+## Out of Scope (Current Phase)
+
+- Server-side inference
+- Cross-user aggregation
+- Auto-posting to social platforms from desktop web
+- Mobile app (web-only)
+- Imports pipeline (sources are manual entry only)
+- Graph traversal and relationship insights (future)
+
+---
+
+## Architecture Notes
 
 ### Canonical Compute Rule
 **Rule:** All insight windows must route through the canonical engine (`computeInsightsForWindow`) and artifact model.
 
 **Current Violations:**
 - Summary, Timeline, Yearly, Lifetime, YoY, Distributions all compute directly
-- These need to be migrated to use `computeInsightsForWindow` with proper artifact generation
+- Only Weekly lens fully routes through canonical engine
+- Migration needed for all except Weekly
 
 ### Data Flow
 1. **Reflections** → Loaded via `rpcFetchEntries` → Decrypted client-side
 2. **Insights** → Should route through `computeInsightsForWindow` → Returns `InsightArtifact`
 3. **Sharing** → Artifacts converted to `ShareArtifact` → Rendered as images/captions
 4. **Sources** → External sources stored encrypted → Linked to reflections
-
-### Graph Model Direction
-- Reflection-source linking exists (`reflection_sources` table)
-- Reflection-reflection linking exists (`reflection_links` table, deprecated)
-- Future: Graph traversal for relationship insights
-
----
-
-## Non-Negotiable System Principles
-
-### Identity and Authority
-- Wallet equals identity
-- Consent signature equals authority
-- Session key derived deterministically from signature
-- No cross-user analytics and no cross-wallet data access
-
-### Crypto and Data Handling
-- All user content encrypted client-side using AES-GCM
-- Supabase stores ciphertext only
-- Decryption happens only in browser memory
-- Never send plaintext to any server route
-- Never add server-side inference or server-side embedding
-
-### Computation
-- All insights computed locally in the browser
-- Insight computation must run through the canonical insight engine path
-- Views must not call recipe compute functions directly
-
-### Sharing
-- Default sharing is derived artifacts only
-- Raw journal text is never shared by default
-- Any raw text inclusion requires explicit opt-in UI and clear labeling
-- Sharing must remain honest on web platforms
-  - Support download, copy caption, and Web Share API where available
-  - Cannot pretend to auto-post to Instagram or TikTok from a desktop web app
 
 ---
 
@@ -200,16 +193,3 @@ Story of Emergence is a private, wallet-bound personal intelligence system that 
 - All tables locked to wallet address via RLS
 - No cross-wallet access possible
 - RLS policies must not be changed without explicit approval
-
----
-
-## Out of Scope (Current Phase)
-
-- Lifetime lens full implementation (signal inventory exists, full narrative not yet)
-- Private sharing capsules full UI (API exists, UI partial)
-- Imports pipeline (sources are manual entry only)
-- Graph traversal and relationship insights
-- Server-side computation or inference
-- Cross-wallet features
-- Mobile app (web-only)
-
