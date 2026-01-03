@@ -33,6 +33,7 @@ function safeDate(value: unknown): Date | null {
 }
 
 export default function LifetimePage() {
+  // All hooks must be declared at the top, before any early returns
   const { address, isConnected } = useAccount();
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
 
@@ -41,9 +42,13 @@ export default function LifetimePage() {
   const [error, setError] = useState<string | null>(null);
   const [allReflections, setAllReflections] = useState<any[]>([]);
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
+  const [artifact, setArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
 
   const connected = isConnected && !!address;
   const wallet = address || '';
+
+  // Compute readiness flags (used to gate logic inside hooks)
+  const isReady = mounted && connected && !!address && encryptionReady && !!sessionKey && FEATURE_LIFETIME_INVENTORY;
 
   useEffect(() => {
     setMounted(true);
@@ -51,8 +56,7 @@ export default function LifetimePage() {
 
   // Load all reflections
   useEffect(() => {
-    if (!mounted || !connected || !address) return;
-    if (!encryptionReady || !sessionKey) {
+    if (!isReady) {
       if (encryptionError) {
         setError(encryptionError);
       }
@@ -97,40 +101,11 @@ export default function LifetimePage() {
     return () => {
       cancelled = true;
     };
-  }, [mounted, connected, address, encryptionReady, sessionKey, encryptionError]);
-
-  // Route gate: show safe placeholder if feature flag is false
-  // This prevents crashes while keeping the route accessible
-  if (!mounted) {
-    return null;
-  }
-
-  if (!FEATURE_LIFETIME_INVENTORY) {
-    return (
-      <div className="min-h-screen bg-black text-white">
-        <section className="max-w-2xl mx-auto px-4 py-12">
-          <h1 className="text-2xl font-normal text-center mb-3">Lifetime</h1>
-          <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity across all time</p>
-          <InsightsTabs />
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
-            <p className="text-sm text-white/60 mb-4">
-              Lifetime insights are coming soon. Keep writing and we will build your long arc.
-            </p>
-            <a
-              href="/insights/summary"
-              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
-            >
-              Back to Summary
-            </a>
-          </div>
-        </section>
-      </div>
-    );
-  }
+  }, [isReady, address, sessionKey, encryptionError]);
 
   // Group reflections by year and assemble candidates
   const { reflectionMetas, deterministicCandidates } = useMemo(() => {
-    if (allReflections.length === 0) {
+    if (!isReady || allReflections.length === 0) {
       return { reflectionMetas: [], deterministicCandidates: [] };
     }
 
@@ -187,15 +162,34 @@ export default function LifetimePage() {
     }
 
     return { reflectionMetas, deterministicCandidates: allCandidates };
-  }, [allReflections]);
+  }, [isReady, allReflections]);
 
   // Build inventory (pure function, deterministic)
   const inventory = useMemo(() => {
+    if (!isReady) {
+      return buildLifetimeSignalInventory({
+        reflections: [],
+        candidates: [],
+      });
+    }
     return buildLifetimeSignalInventory({
       reflections: reflectionMetas,
       candidates: deterministicCandidates,
     });
-  }, [reflectionMetas, deterministicCandidates]);
+  }, [isReady, reflectionMetas, deterministicCandidates]);
+
+  // Generate artifact for caption and share (async)
+  useEffect(() => {
+    if (!isReady || !wallet || inventory.totalReflections === 0) {
+      setArtifact(null);
+      return;
+    }
+    
+    generateLifetimeArtifact(inventory, wallet).then(setArtifact).catch((err) => {
+      console.error('Failed to generate artifact', err);
+      setArtifact(null);
+    });
+  }, [isReady, inventory, wallet]);
 
   // Format date to YYYY-MM using safe date helper
   // Returns empty string for invalid dates (never shows "unknown")
@@ -208,20 +202,33 @@ export default function LifetimePage() {
     return `${year}-${month}`;
   };
 
-  // Generate artifact for caption and share (async)
-  const [artifact, setArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
-  
-  useEffect(() => {
-    if (!FEATURE_LIFETIME_INVENTORY || !wallet || inventory.totalReflections === 0) {
-      setArtifact(null);
-      return;
-    }
-    
-    generateLifetimeArtifact(inventory, wallet).then(setArtifact).catch((err) => {
-      console.error('Failed to generate artifact', err);
-      setArtifact(null);
-    });
-  }, [inventory, wallet]);
+  // Now early returns are safe because all hooks have run
+  if (!mounted) {
+    return null;
+  }
+
+  if (!FEATURE_LIFETIME_INVENTORY) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <section className="max-w-2xl mx-auto px-4 py-12">
+          <h1 className="text-2xl font-normal text-center mb-3">Lifetime</h1>
+          <p className="text-center text-sm text-white/50 mb-8">Your encrypted activity across all time</p>
+          <InsightsTabs />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+            <p className="text-sm text-white/60 mb-4">
+              Lifetime insights are coming soon. Keep writing and we will build your long arc.
+            </p>
+            <a
+              href="/insights/summary"
+              className="inline-block px-4 py-2 text-sm text-white/80 hover:text-white border border-white/20 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              Back to Summary
+            </a>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   // Generate simple PNG image from Lifetime data
   const generateLifetimeImage = async (): Promise<Blob> => {
@@ -402,10 +409,6 @@ export default function LifetimePage() {
       }
     }
   };
-
-  if (!mounted) {
-    return null;
-  }
 
   if (!connected) {
     return (
