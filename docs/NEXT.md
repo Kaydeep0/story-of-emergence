@@ -2,77 +2,63 @@
 
 Last updated: January 2, 2026
 
-## Immediate Next Task
+---
 
-### Task: Verify and Migrate Summary Lens to Canonical Engine
+## Priority Order
 
-**Goal:** Ensure Summary lens routes through `computeInsightsForWindow` instead of calling `computeSummaryInsights` directly.
-
-**Current State:**
-- Summary page (`src/app/insights/summary/page.tsx`) calls `computeSummaryInsights` directly
-- Canonical engine (`computeInsightsForWindow`) has a stub for 'summary' horizon that returns empty cards
-- Summary needs proper artifact generation similar to Weekly
-
-**Files to Touch:**
-1. `src/app/lib/insights/computeInsightsForWindow.ts` - Add `computeSummaryArtifact` function
-2. `src/app/lib/insights/computeSummaryArtifact.ts` - Create new file (or add to existing)
-3. `src/app/insights/summary/page.tsx` - Replace `computeSummaryInsights` call with `computeInsightsForWindow`
-
-**What You Will NOT Touch:**
-- Encryption primitives
-- RLS policies
-- Database schema
-- Other insight pages (Timeline, Yearly, etc.)
-- Distribution computation logic (only how it's called)
-
-**Risk Check:**
-- Low risk: Summary already works, this is a refactor to use canonical path
-- Must preserve all existing Summary cards and behavior
-- Must ensure artifact shape matches what Summary expects
-
-**Success Checks:**
-- `npm run typecheck` passes
-- `npm run build` passes
-- Summary page renders same cards as before
-- Summary page uses `computeInsightsForWindow` with horizon `'summary'`
-- No direct calls to `computeSummaryInsights` from Summary page
-
-**Definition of Done:**
-- Summary lens routes through canonical engine
-- Summary artifact generated properly
-- All Summary cards render correctly
-- Typecheck and build pass
-- No regression in Summary functionality
+### 1. Documentation Discipline
+- Keep `docs/SCOPE.md`, `docs/STATUS.md`, `docs/NEXT.md` accurate after every session
 
 ---
 
-## Subsequent Tasks (In Order)
+## Next Smallest Build Task
 
-### Task 2: Migrate Timeline Lens to Canonical Engine
-**Goal:** Timeline uses `computeInsightsForWindow` with horizon `'timeline'`
-**Files:** `computeInsightsForWindow.ts`, create `computeTimelineArtifact.ts`, `src/app/insights/timeline/page.tsx`
-**Risk:** Medium (Timeline has more complex card types)
+### Objective
+Make sure every insight window routes through the canonical insight engine and no page calls recipe compute functions directly.
 
-### Task 3: Complete Share Preview = Export Contract
-**Goal:** Share preview renders exactly what export/download produces
-**Files:** Share rendering components, export functions
-**Risk:** Low (UI consistency)
+### Definition of Done
+- Weekly, Summary, Yearly, Lifetime, Year over Year all use the engine entry point
+- No `page.tsx` imports `computeTimelineSpikes` or `computeAlwaysOnSummary` directly
+- `typecheck` passes
+- `build` passes
 
-### Task 4: Add Platform Presets for Sharing
-**Goal:** Pre-configured frame sizes and formats for different platforms
-**Files:** Share components, share configuration
-**Risk:** Low (new feature, additive)
+### Files Likely Involved
+- `src/app/lib/insightEngine.ts`
+- `src/app/lib/insights/computeInsightsForWindow.ts`
+- `src/app/insights/*` page components
 
-### Task 5: Migrate Yearly, Lifetime, YoY to Canonical Engine (If Applicable)
-**Goal:** Determine if these lenses should route through engine or remain separate
-**Files:** Engine entry point, lens pages
-**Risk:** High (architectural decision needed)
+### Smoke Checks
+- Load each insights page without console errors
+- Confirm narratives still render on weekly when present
+- Confirm summary renders even when narratives are absent
 
 ---
 
-## Notes
+## Current State
 
-- Do not start Task 2 until Task 1 is complete and verified
-- Each task should be completed, tested, and committed before moving to next
-- If a task reveals architectural issues, stop and document before proceeding
+**Using Canonical Engine:**
+- ✅ Weekly (`/insights/weekly`) - Uses `computeInsightsForWindow` with horizon `'weekly'`
 
+**NOT Using Canonical Engine (Direct Compute):**
+- ⚠️ Summary (`/insights/summary`) - Uses `computeSummaryInsights` directly
+- ⚠️ Timeline (`/insights/timeline`) - Uses `computeTimelineInsights` directly
+- ⚠️ Year over Year (`/insights/yoy`) - Uses `computeYearOverYearCard` directly
+- ⚠️ Distributions (`/insights/distributions`) - Uses `computeDistributionLayer` directly
+- ⚠️ Yearly (`/insights/yearly`) - Uses distribution compute directly
+- ⚠️ Lifetime (`/insights/lifetime`) - Uses its own compute path
+
+**Engine Status:**
+- Engine exists: `src/app/lib/insights/computeInsightsForWindow.ts`
+- Weekly horizon fully supported with pattern narratives
+- Summary/Timeline horizons have stubs (empty cards, computed separately)
+- Yearly/Lifetime/YoY horizons throw errors if called through engine
+
+---
+
+## Migration Strategy
+
+1. **Start with Summary** - Most similar to Weekly, already has artifact generation
+2. **Then Timeline** - More complex card types, but similar structure
+3. **Then Yearly/Lifetime/YoY** - Determine if they should route through engine or remain separate
+
+**Note:** Do not start next task until current task is complete and verified.
