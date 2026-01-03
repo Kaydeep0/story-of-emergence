@@ -9,6 +9,8 @@ import { computeWeeklyArtifact } from './computeWeeklyArtifact';
 import { computeSummaryArtifact } from './computeSummaryArtifact';
 import { computeTimelineArtifact } from './computeTimelineArtifact';
 import { computeYearlyArtifact } from './computeYearlyArtifact';
+import { computeLifetimeArtifact } from './computeLifetimeArtifact';
+import { computeYoYArtifact } from './computeYoYArtifact';
 import { extractPatternsFromArtifact } from './patterns/extractPatterns';
 import { snapshotPatterns } from '../patternMemory/patternSnapshot';
 import { analyzePatternDeltas } from '../patternMemory/patternDelta';
@@ -35,6 +37,8 @@ export function computeInsightsForWindow(args: {
   entriesCount?: number;
   eventsCount?: number;
   previousSnapshots?: Array<import('../patternMemory/patternSnapshot').PatternSnapshot>;
+  fromYear?: number;
+  toYear?: number;
 }): InsightArtifact {
   const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [] } = args;
   
@@ -80,8 +84,29 @@ export function computeInsightsForWindow(args: {
       entriesCount,
       eventsCount,
     });
+  } else if (horizon === 'lifetime') {
+    artifact = computeLifetimeArtifact({
+      events,
+      windowStart,
+      windowEnd,
+      timezone,
+      wallet,
+      entriesCount,
+      eventsCount,
+    });
+  } else if (horizon === 'yoy') {
+    artifact = computeYoYArtifact({
+      events,
+      windowStart,
+      windowEnd,
+      timezone,
+      wallet,
+      entriesCount,
+      eventsCount,
+      fromYear: args.fromYear,
+      toYear: args.toYear,
+    });
   } else {
-    // Lifetime, yoy: Not supported through engine yet (use separate pages)
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
   }
   

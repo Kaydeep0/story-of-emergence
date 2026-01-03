@@ -10,9 +10,9 @@ import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
 import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
 import { useReflectionLinks } from '../../lib/reflectionLinks';
-import { computeYearOverYearCard } from '../../lib/insights/computeYearOverYear';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
 import type { ReflectionEntry } from '../../lib/insights/types';
-import type { YearOverYearCard } from '../../lib/insights/computeYearOverYear';
+import type { YearOverYearCard } from '../../lib/insights/types';
 import { InsightsTabs } from '../components/InsightsTabs';
 import { LENSES } from '../lib/lensContract';
 import { InsightCardSkeleton } from '../components/InsightsSkeleton';
@@ -119,42 +119,72 @@ export default function YearOverYearPage() {
     }
   }, [availableYears, year1, year2]);
 
-  // Compute year-over-year card
+  // Compute year-over-year card via canonical engine
   useEffect(() => {
-    if (reflections.length === 0 || year1 === null || year2 === null) {
+    if (reflections.length === 0 || year1 === null || year2 === null || !address) {
       setYoyCard(null);
       return;
     }
 
     try {
-      const year1Reflections = reflections.filter(r => {
-        const year = new Date(r.createdAt).getFullYear();
-        return year === year1;
-      });
-      const year2Reflections = reflections.filter(r => {
-        const year = new Date(r.createdAt).getFullYear();
-        return year === year2;
+      // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
+      const walletAlias = address.toLowerCase();
+      const events = reflections.map((r) => ({
+        id: r.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: new Date(r.createdAt).toISOString(),
+        eventKind: 'written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: r.plaintext ?? '',
+        length: (r.plaintext ?? '').length,
+        sourceId: r.sourceId ?? null,
+        topics: [],
+      }));
+
+      // Determine window: use all available reflections (YoY spans all time)
+      const dates = reflections.map((r) => new Date(r.createdAt));
+      const windowEnd = dates.length > 0 
+        ? new Date(Math.max(...dates.map(d => d.getTime())))
+        : new Date();
+      const windowStart = dates.length > 0
+        ? new Date(Math.min(...dates.map(d => d.getTime())))
+        : new Date(windowEnd.getTime() - 10 * 365 * 24 * 60 * 60 * 1000); // Default to 10 years back
+
+      // Compute YoY artifact via canonical engine with selected years
+      const artifact = computeInsightsForWindow({
+        horizon: 'yoy',
+        events,
+        windowStart,
+        windowEnd,
+        wallet: address ?? undefined,
+        entriesCount: reflections.length,
+        eventsCount: events.length,
+        fromYear: year1,
+        toYear: year2,
       });
 
-      // Guard: both years must have entries
-      if (year1Reflections.length === 0 || year2Reflections.length === 0) {
-        setYoyCard(null);
-        return;
-      }
-
-      const card = computeYearOverYearCard(reflections, { fromYear: year1, toYear: year2 });
+      // Extract YearOverYearCard from artifact card metadata
+      const cards = artifact.cards ?? [];
+      const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
       
-      // Guard: ensure card has valid data and never shows inverted values
-      if (card && card.evidence && card.evidence.length > 0) {
-        setYoyCard(card);
+      if (yoyCardData && (yoyCardData as any)._yoyCard) {
+        const card = (yoyCardData as any)._yoyCard as YearOverYearCard;
+        
+        // Guard: ensure card has valid data and never shows inverted values
+        if (card && card.evidence && card.evidence.length > 0) {
+          setYoyCard(card);
+        } else {
+          setYoyCard(null);
+        }
       } else {
+        // No card generated (likely because one or both years have no entries)
         setYoyCard(null);
       }
     } catch (err) {
       console.error('Failed to compute year-over-year insights:', err);
       setYoyCard(null);
     }
-  }, [reflections, year1, year2]);
+  }, [reflections, year1, year2, address]);
 
   if (!mounted) return null;
 

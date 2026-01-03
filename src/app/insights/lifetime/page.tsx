@@ -12,17 +12,14 @@ import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
-import { assembleYearNarrative } from '../../../lib/narrative/assembleYearNarrativeDeterministic';
-import { buildLifetimeSignalInventory, generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
+import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
+import { generateLifetimeArtifact } from '../../../lib/lifetimeSignalInventory';
+import type { LifetimeSignalInventory } from '../../../lib/lifetimeSignalInventory';
 import { generateLifetimeCaption } from '../../../lib/artifacts/lifetimeCaption';
 import { generateProvenanceLine } from '../../../lib/artifacts/provenance';
 import { FEATURE_LIFETIME_INVENTORY } from '../../../lib/featureFlags';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 import { InsightsTabs } from '../components/InsightsTabs';
-import type {
-  ReflectionMeta,
-  DeterministicCandidate,
-} from '../../../lib/lifetimeSignalInventory';
 
 /**
  * Safe date parsing - returns null for invalid dates
@@ -41,6 +38,7 @@ export default function LifetimePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allReflections, setAllReflections] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<LifetimeSignalInventory | null>(null);
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
   const [artifact, setArtifact] = useState<import('../../../lib/lifetimeArtifact').ShareArtifact | null>(null);
 
@@ -103,84 +101,72 @@ export default function LifetimePage() {
     };
   }, [isReady, address, sessionKey, encryptionError]);
 
-  // Group reflections by year and assemble candidates
-  const { reflectionMetas, deterministicCandidates } = useMemo(() => {
-    if (!isReady || allReflections.length === 0) {
-      return { reflectionMetas: [], deterministicCandidates: [] };
+  // Compute lifetime inventory via canonical engine
+  useEffect(() => {
+    if (!isReady || allReflections.length === 0 || !address) {
+      setInventory(null);
+      return;
     }
 
-    // Convert to ReflectionMeta format with normalized timestamps
-    // Prefer created_at, fallback to createdAt, exclude invalid dates
-    const reflectionMetas: ReflectionMeta[] = allReflections
-      .map((item) => {
-        const timestamp = (item as any).created_at ?? (item as any).createdAt;
-        const date = safeDate(timestamp);
-        if (!date) return null;
-        return {
-          id: item.id,
-          createdAt: date.toISOString(),
-        };
-      })
-      .filter((x): x is ReflectionMeta => x !== null);
+    try {
+      // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
+      const walletAlias = address.toLowerCase();
+      const events = allReflections.map((item) => ({
+        id: item.id ?? crypto.randomUUID(),
+        walletAlias,
+        eventAt: ((item as any).created_at ?? (item as any).createdAt ?? new Date().toISOString()),
+        eventKind: 'written' as const,
+        sourceKind: 'journal' as const,
+        plaintext: item.plaintext || '',
+        length: (item.plaintext || '').length,
+        sourceId: (item as any).sourceId ?? null,
+        topics: [],
+      }));
 
-    // Group by year
-    const byYear = new Map<number, Array<{ id: string; created_at: string; text: string }>>();
-    for (const item of allReflections) {
-      const year = new Date(item.created_at).getFullYear();
-      if (!byYear.has(year)) {
-        byYear.set(year, []);
-      }
-      byYear.get(year)!.push({
-        id: item.id,
-        created_at: item.created_at,
-        text: item.plaintext || '',
-      });
-    }
-
-    // Assemble narrative for each year and collect candidates
-    const allCandidates: DeterministicCandidate[] = [];
-    for (const [year, yearReflections] of byYear.entries()) {
-      const narrativeDraft = assembleYearNarrative(year, yearReflections);
+      // Determine window: use all available reflections (lifetime spans all time)
+      // Use earliest and latest reflection dates, or default to last 10 years
+      const dates = allReflections
+        .map((item) => safeDate((item as any).created_at ?? (item as any).createdAt))
+        .filter((d): d is Date => d !== null);
       
-      // Convert NarrativeCandidate to DeterministicCandidate
-      for (const candidate of narrativeDraft.candidates) {
-        // Map section names: 'themes' -> 'theme', 'transitions' -> 'transition', 'anchors' -> 'anchor'
-        const categoryMap: Record<string, 'theme' | 'transition' | 'anchor'> = {
-          themes: 'theme',
-          transitions: 'transition',
-          anchors: 'anchor',
-        };
-        
-        allCandidates.push({
-          id: `${year}-${candidate.section}-${candidate.text.slice(0, 20)}`,
-          label: candidate.text,
-          category: categoryMap[candidate.section] || 'theme',
-          reflectionIds: candidate.sourceReflectionIds,
-          confidence: candidate.confidence,
-        });
-      }
-    }
+      const windowEnd = dates.length > 0 
+        ? new Date(Math.max(...dates.map(d => d.getTime())))
+        : new Date();
+      const windowStart = dates.length > 0
+        ? new Date(Math.min(...dates.map(d => d.getTime())))
+        : new Date(windowEnd.getTime() - 10 * 365 * 24 * 60 * 60 * 1000); // Default to 10 years back
 
-    return { reflectionMetas, deterministicCandidates: allCandidates };
-  }, [isReady, allReflections]);
-
-  // Build inventory (pure function, deterministic)
-  const inventory = useMemo(() => {
-    if (!isReady) {
-      return buildLifetimeSignalInventory({
-        reflections: [],
-        candidates: [],
+      // Compute lifetime artifact via canonical engine
+      const artifact = computeInsightsForWindow({
+        horizon: 'lifetime',
+        events,
+        windowStart,
+        windowEnd,
+        wallet: address ?? undefined,
+        entriesCount: allReflections.length,
+        eventsCount: events.length,
       });
+
+      // Extract LifetimeSignalInventory from artifact card metadata
+      const cards = artifact.cards ?? [];
+      const lifetimeCard = cards.find((c) => c.kind === 'distribution');
+      
+      if (lifetimeCard && (lifetimeCard as any)._lifetimeInventory) {
+        const inventoryData = (lifetimeCard as any)._lifetimeInventory as LifetimeSignalInventory;
+        setInventory(inventoryData);
+      } else {
+        // No data in window
+        setInventory(null);
+      }
+    } catch (err) {
+      console.error('Failed to compute lifetime insights:', err);
+      setInventory(null);
     }
-    return buildLifetimeSignalInventory({
-      reflections: reflectionMetas,
-      candidates: deterministicCandidates,
-    });
-  }, [isReady, reflectionMetas, deterministicCandidates]);
+  }, [isReady, allReflections, address]);
 
   // Generate artifact for caption and share (async)
   useEffect(() => {
-    if (!isReady || !wallet || inventory.totalReflections === 0) {
+    if (!isReady || !wallet || !inventory || inventory.totalReflections === 0) {
       setArtifact(null);
       return;
     }
@@ -255,8 +241,10 @@ export default function LifetimePage() {
     // Subtitle
     ctx.font = '24px sans-serif';
     ctx.fillStyle = '#cccccc';
-    ctx.fillText(`Generated from ${inventory.totalReflections} reflections`, 60, 130);
-    ctx.fillText(`Found ${inventory.signals.length} structural signals`, 60, 170);
+    if (inventory) {
+      ctx.fillText(`Generated from ${inventory.totalReflections} reflections`, 60, 130);
+      ctx.fillText(`Found ${inventory.signals.length} structural signals`, 60, 170);
+    }
 
     // Table header
     let y = 250;
@@ -271,7 +259,7 @@ export default function LifetimePage() {
     // Table rows (first 10 signals)
     ctx.font = '16px sans-serif';
     ctx.fillStyle = '#cccccc';
-    const signalsToShow = inventory.signals.slice(0, 10);
+    const signalsToShow = inventory?.signals.slice(0, 10) ?? [];
     for (let i = 0; i < signalsToShow.length; i++) {
       y += 40;
       const signal = signalsToShow[i];
@@ -529,7 +517,7 @@ export default function LifetimePage() {
         )}
 
         {/* Structural Table */}
-        {inventory.totalReflections === 0 || inventory.signals.length === 0 ? (
+        {!inventory || inventory.totalReflections === 0 || inventory.signals.length === 0 ? (
           <div className="py-12 text-center">
             <h2 className="text-sm text-white/60 mb-2">No lifetime signals yet.</h2>
             <p className="text-xs text-white/40">
