@@ -109,12 +109,6 @@ export default function WeeklyPage() {
         return d >= start && d < end;
       });
 
-      // Temporary debug log
-      console.log("weekly window", start.toISOString(), end.toISOString(), {
-        reflections: reflections.length,
-        events: events.length,
-      });
-
       if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
 
       // Compute weekly artifact with filtered events
