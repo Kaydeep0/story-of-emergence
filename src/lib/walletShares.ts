@@ -2,7 +2,7 @@
 // API functions for creating and reading wallet-based shares
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ShareArtifact } from './artifacts/lifetimeArtifact';
+import type { ShareArtifact } from './artifacts/types';
 import { generateContentKey, encryptSlice } from './sharing';
 import { wrapCapsuleKeyToWallet } from './walletEncryption';
 

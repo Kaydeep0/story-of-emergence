@@ -7,7 +7,7 @@
  * Same text across Weekly, Yearly, Lifetime.
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from './types';
 
 /**
  * Format date range for provenance line

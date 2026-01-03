@@ -11,7 +11,7 @@
  * - Stable and deterministic
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from './types';
 
 /**
  * Format date from ISO string to YYYY-MM-DD

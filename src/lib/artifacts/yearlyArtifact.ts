@@ -5,7 +5,7 @@
  * Uses the same contract as Lifetime artifacts.
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from './types';
 import type { ReflectionEntry } from '../../app/lib/insights/types';
 import type { DistributionResult } from '../../app/lib/insights/distributionLayer';
 import { generateArtifactId } from './artifactId';

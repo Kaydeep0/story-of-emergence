@@ -9,7 +9,7 @@ import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 import { getSupabaseForWallet } from '../../../lib/supabase';
 import { getWalletShare, decryptWalletShare } from '../../../lib/walletShares';
-import type { ShareArtifact } from '../../../lib/artifacts/lifetimeArtifact';
+import type { ShareArtifact } from '../../../lib/artifacts/types';
 
 export default function WalletSharePage() {
   const params = useParams();

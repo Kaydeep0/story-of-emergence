@@ -5,7 +5,7 @@
  * TODO: Implement proper timeline artifact generation
  */
 
-import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
+import type { ShareArtifact } from '../../../lib/artifacts/types';
 import type { ReflectionEntry } from '../insights/types';
 import { generateLifetimeArtifact } from '../../../lib/artifacts/lifetimeArtifact';
 

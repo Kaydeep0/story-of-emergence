@@ -5,7 +5,7 @@
  * Uses the same contract as Lifetime artifacts.
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from './types';
 import type { WeeklyInsight } from '../../app/lib/weeklyInsights';
 import { generateArtifactId } from './artifactId';
 

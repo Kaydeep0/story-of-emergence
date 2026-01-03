@@ -5,7 +5,7 @@
  * Uses the same contract as other artifacts.
  */
 
-import type { ShareArtifact } from '../lifetimeArtifact';
+import type { ShareArtifact } from './types';
 import type { ReflectionEntry } from '../../app/lib/insights/types';
 import { generateArtifactId } from './artifactId';
 

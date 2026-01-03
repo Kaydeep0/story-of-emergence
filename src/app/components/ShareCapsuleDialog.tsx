@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { ShareArtifact } from '../../lib/lifetimeArtifact';
+import type { ShareArtifact } from '../../lib/artifacts/types';
 import { generateArtifactPNG, generateArtifactFilename, buildShareCaption } from '../insights/components/ShareActionsBar';
 
 type ShareCapsuleDialogProps = {

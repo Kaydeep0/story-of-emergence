@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import type { ShareArtifact } from '../../../lib/lifetimeArtifact';
+import type { ShareArtifact } from '../../../lib/artifacts/types';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
 import { buildPublicShareUrl } from '../../lib/share/encodePublicSharePayload';

@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import type { ShareArtifact } from '../../../lib/artifacts/lifetimeArtifact';
+import type { ShareArtifact } from '../../../lib/artifacts/types';
 import { getSupabaseForWallet } from '../../../lib/supabase';
 import { createWalletShare } from '../../../lib/walletShares';
 import { checkWalletEncryptionSupport } from '../../../lib/walletEncryption';
