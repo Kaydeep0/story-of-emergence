@@ -270,8 +270,16 @@ export function computeDistributionLayer(
     dayCounts.push({ date, count: dayEntries.length });
   }
   
-  // Sort by count descending for top days
-  const sortedByCount = [...dayCounts].sort((a, b) => b.count - a.count);
+  // Sort by count descending, then date descending (most recent wins ties)
+  // This ensures deterministic tie-breaking: Dec 28 beats Dec 27 when both have 24 entries
+  const sortedByCount = [...dayCounts].sort((a, b) => {
+    const countDiff = b.count - a.count;
+    if (countDiff !== 0) {
+      return countDiff; // Count descending
+    }
+    // Tie-break: date descending (most recent wins)
+    return b.date.localeCompare(a.date);
+  });
   const topDays = sortedByCount.slice(0, 10);
   
   // Get daily counts array (for variance calculation)
