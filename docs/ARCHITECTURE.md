@@ -36,7 +36,13 @@ Share pack builder creates encrypted capsules. Capsule contains kind, payload wi
 
 ### 2.8 Graph and Links Layer
 
-Reflection graph built locally using TF IDF cosine similarity and temporal proximity. Edges weighted 70 percent lexical, 30 percent time. Graph cached encrypted in localStorage keyed by wallet and scope. Clusters computed via connected components with progressive weight threshold. Meaning bridges detect semantic signals between reflection pairs. Bridges stored encrypted in reflection_link_bridges table. Pins system stores encrypted derived artifacts for clusters, threads, and bridges.
+Reflection graph built locally using TF IDF cosine similarity and temporal proximity. Signal edges weighted 70 percent lexical, 30 percent time. Graph cached encrypted in localStorage keyed by wallet and scope. Clusters computed via connected components with progressive weight threshold. Reason edges produced by meaning bridge system detect semantic signals between reflection pairs. Reason edges stored encrypted in reflection_link_bridges table. Pins system stores encrypted derived artifacts for clusters, threads, and bridges.
+
+### 2.9 Signal Edges vs Reason Edges
+
+Signal edges are cheap detectors that propose candidate connections. They use lexical overlap via TF IDF cosine similarity, temporal proximity within 30 days, shared source detection, and tag overlap. Signal edges include a weight value and reasons array with strings like lexical or time. They are stored in encrypted graph cache in localStorage.
+
+Reason edges are structured explanations of why two reflections connect, written like causal narratives. They answer why beyond mere similarity. Reason edges contain title, claim, consequences, frame, echoes, and detected signals. They are stored encrypted in reflection_link_bridges table. Similarity is the signal. Reasoning is the product.
 
 ## 3. Exact Runtime Flow
 
@@ -72,9 +78,87 @@ User clicks share button. ShareActionsBar shows options. Copy caption copies tex
 
 User disconnects wallet via RainbowKit. Wagmi clears connection state. useEncryptionSession detects wallet change. Session cleared from sessionStorage. aesKey set to null. Ready state set to false. All decrypted data remains in React state until component unmounts. No explicit key zeroing but keys are CryptoKey objects managed by browser.
 
-## 4. Data Model Inventory
+## 4. Signal Edges vs Reason Edges
 
-### 4.1 entries
+### 4.1 Signal Edges
+
+Signal edges represent detected similarity between reflections. They are computed locally using TF IDF cosine similarity and temporal proximity. Edges are weighted 70 percent lexical similarity, 30 percent temporal proximity. Signal edges include a weight value and reasons array containing strings like lexical or time. Signal edges are stored in encrypted graph cache in localStorage. They are used for graph visualization and cluster computation. Signal edges are cheap detectors that propose candidate connections.
+
+### 4.2 Reason Edges
+
+Reason edges represent semantic bridges between reflection pairs. They are produced by analyzing signal edges and building meaning bridges. Reason edges contain structured explanations including claims, evidence, consequences, and frames. Reason edges are stored encrypted in reflection_link_bridges table. They answer why two reflections connect beyond mere similarity. Similarity is the signal. Reasoning is the product.
+
+### 4.3 Reason Edge Payload Schema
+
+The encrypted payload stored in reflection_link_bridges ciphertext column follows this JSON schema based on the MeaningBridge type:
+
+```typescript
+{
+  title: string;                    // Short title like "Scale breaks intuition"
+  claim: string;                    // Main claim about the connection
+  translation?: string;             // Optional translation of key numbers/units
+  consequences: string[];           // Array of consequence statements
+  frame: string;                    // Framing statement about causality
+  echoes: string[];                 // Array of echo statements from each reflection
+  signals: Array<{                  // Detected semantic signals
+    kind: "scale" | "systems" | "trust" | "policy" | "incentives" | "time" | "source" | "numbers";
+    score: number;
+    hits: string[];
+  }>;
+  createdAtIso: string;            // ISO timestamp when bridge was created
+  version: number;                 // Schema version, currently 1
+}
+```
+
+This payload is encrypted using AES GCM with the user's wallet derived key before storage. The encryption envelope includes ciphertext, IV, algorithm, and version fields stored separately in the table.
+
+### 4.4 Worked Example: Farzi to Dhurandhar Connection
+
+Reflection A contains text about Farzi counterfeit scale mentioning billions and crores. Reflection B contains text about Dhurandhar systems and currency policy. Signal edge detects lexical overlap on scale and systems keywords plus temporal proximity. Reason edge payload constructed:
+
+```json
+{
+  "title": "Scale breaks intuition",
+  "claim": "These reflections connect through a chain: a trigger, a translation into scale, then second order effects on systems, policy, and trust.",
+  "translation": "Key numbers and units detected: billion, crore, million, scale.",
+  "consequences": [
+    "Billion level scale changes behavior from incremental to structural.",
+    "Large flows can distort measurement and policy transmission."
+  ],
+  "frame": "This bridge links a concrete trigger to a system level frame. The connection is not just shared words, it is shared causality.",
+  "echoes": [
+    "From A: Farzi reflection first sentence about scale and systems...",
+    "From B: Dhurandhar reflection first sentence about policy and trust..."
+  ],
+  "signals": [
+    {
+      "kind": "scale",
+      "score": 0.75,
+      "hits": ["billion", "scale", "magnitude"]
+    },
+    {
+      "kind": "systems",
+      "score": 0.68,
+      "hits": ["system", "networks", "feedback"]
+    },
+    {
+      "kind": "numbers",
+      "score": 0.60,
+      "hits": ["billion", "crore", "million"]
+    }
+  ],
+  "createdAtIso": "2024-01-15T10:30:00.000Z",
+  "version": 1
+}
+```
+
+This payload is JSON stringified, encrypted with AES GCM, and stored in reflection_link_bridges table with separate ciphertext and IV columns.
+
+## 5. Data Model Inventory
+
+### 5.1 entries
+
+Status: TBD. RPC functions list_entries and insert_entry are called in code but table creation and RPC definitions not found in verified migrations.
 
 Purpose: Stores encrypted reflection entries.
 
@@ -86,7 +170,7 @@ RLS policy pattern: SELECT, INSERT, UPDATE, DELETE policies check lower wallet_a
 
 RPC functions: list_entries takes wallet and include_deleted boolean, returns rows ordered by created_at desc. insert_entry takes wallet and ciphertext, returns id. soft_delete_entry sets deleted_at. restore_entry clears deleted_at. delete_entry hard deletes row.
 
-### 4.2 internal_events
+### 5.2 internal_events
 
 Purpose: Stores encrypted internal event payloads for insight computation.
 
@@ -98,7 +182,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: insert_internal_event takes wallet, event_at, ciphertext, version. list_internal_events takes wallet, limit, offset, returns rows ordered by event_at desc. list_internal_events_by_range takes wallet, start, end timestamps.
 
-### 4.3 shares
+### 5.3 shares
 
 Purpose: Stores encrypted share capsules for wallet to wallet sharing.
 
@@ -110,7 +194,9 @@ RLS policy pattern: SELECT allows owner to see sent shares, recipient to see rec
 
 RPC functions: list_shares_by_owner takes wallet, limit, offset. list_shares_by_recipient takes wallet, limit, offset, filters revoked_at null. insert_share takes owner, recipient, capsule jsonb. get_share takes share_id, verifies recipient matches header.
 
-### 4.4 reflection_links
+### 5.4 reflection_links
+
+Status: Verified table exists in migration 009_reflection_links.sql. RPC function list_reflection_links is called in code but definition not found in verified migrations. Marked TBD.
 
 Purpose: Links reflections to external sources.
 
@@ -120,9 +206,9 @@ Plaintext vs ciphertext: All columns plaintext. Links are metadata only.
 
 RLS policy pattern: All policies verify wallet_address matches header.
 
-RPC functions: list_reflection_links takes wallet parameter w, limit, offset. Returns rows with wallet_address, reflection_id, source_id.
+RPC functions: list_reflection_links takes wallet parameter w, limit, offset. Returns rows with wallet_address, reflection_id, source_id. Status TBD.
 
-### 4.5 reflection_sources
+### 5.5 reflection_sources
 
 Purpose: Stores external source metadata.
 
@@ -134,7 +220,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: list_reflection_sources takes wallet parameter w. Returns source rows.
 
-### 4.6 external_entries
+### 5.6 external_entries
 
 Purpose: Stores external entries imported from sources.
 
@@ -146,7 +232,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: list_external_entries takes wallet parameter w. Returns external entry rows.
 
-### 4.7 contacts
+### 5.7 contacts
 
 Purpose: Stores encrypted contact information.
 
@@ -158,7 +244,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: list_contacts takes wallet parameter w, limit, offset. Returns encrypted contact rows. Client decrypts ciphertext.
 
-### 4.8 capsules
+### 5.8 capsules
 
 Purpose: Stores encrypted capsule payloads for advanced sharing.
 
@@ -170,7 +256,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: list_capsules takes wallet parameter w. get_capsule takes capsule_id, verifies wallet matches.
 
-### 4.9 derived_artifacts
+### 5.9 derived_artifacts
 
 Purpose: Stores encrypted pin payloads for clusters, threads, and bridges.
 
@@ -182,7 +268,7 @@ RLS policy pattern: All policies verify wallet_address matches header.
 
 RPC functions: insert_derived_artifact takes wallet, kind, scope, ciphertext, version, returns id. list_derived_artifacts takes wallet, kind nullable, limit, offset. update_derived_artifact takes wallet, id, ciphertext. delete_derived_artifact takes wallet, id.
 
-### 4.10 reflection_link_bridges
+### 5.10 reflection_link_bridges
 
 Purpose: Stores encrypted semantic bridges between reflection pairs.
 
@@ -194,9 +280,9 @@ RLS policy pattern: All policies verify wallet_address matches header. Unique in
 
 RPC functions: list_reflection_link_bridges takes wallet parameter w, limit, offset, returns rows ordered by updated_at desc.
 
-## 5. Code Map
+## 6. Code Map
 
-### 5.1 Key Directories
+### 6.1 Key Directories
 
 src/app: Next.js App Router pages and API routes. All pages are client components using use client directive. API routes handle server side Supabase calls with wallet header extraction.
 
@@ -210,7 +296,7 @@ src/app/insights: Insights lens pages. Weekly, Summary, Timeline, Yearly, Distri
 
 src/app/reflections: Reflection views. Mind view shows force directed graph. Thread view shows narrative chains. Pins view shows saved artifacts.
 
-### 5.2 App Router Pages
+### 6.2 App Router Pages
 
 /: Home page with reflection editor and list. HomeClient component handles all interaction.
 
@@ -240,7 +326,7 @@ src/app/reflections: Reflection views. Mind view shows force directed graph. Thr
 
 /sources: External sources management.
 
-### 5.3 Core Libraries
+### 6.3 Core Libraries
 
 src/lib/crypto.ts: AES GCM encryption and decryption. Key derivation from signature. Envelope format helpers. Legacy format support.
 
@@ -250,7 +336,7 @@ src/app/lib/supabase.ts: Supabase client singleton. getSupabaseForWallet creates
 
 src/app/lib/useEncryptionSession.ts: React hook for encryption session management. Handles signature request, key derivation, session storage, consent expiration.
 
-### 5.4 Hooks
+### 6.4 Hooks
 
 useAccount: Wagmi hook for wallet connection state and address.
 
@@ -262,7 +348,7 @@ useNarrativeTone: Custom hook for narrative tone preference with localStorage pe
 
 useDensity: Custom hook for density mode preference with localStorage persistence.
 
-### 5.5 Crypto Utilities
+### 6.5 Crypto Utilities
 
 aesGcmEncryptText: Encrypts plaintext string, returns v1 format string with IV and tag.
 
@@ -274,7 +360,7 @@ encryptJSON: Wraps JSON object encryption. Handles circular references.
 
 decryptJSON: Wraps JSON decryption. Falls back to legacy base64 decode.
 
-### 5.6 Insight Engine Modules
+### 6.6 Insight Engine Modules
 
 src/app/lib/insights/computeInsightsForWindow.ts: Canonical insight computation function. Takes entries and window, returns InsightArtifact.
 
@@ -286,7 +372,7 @@ src/app/lib/insights/alwaysOnSummary.ts: Summary insight computation. Compares c
 
 src/lib/artifacts: Artifact builders for each lens. WeeklyArtifact, SummaryArtifact, TimelineArtifact, YearlyArtifact, LifetimeArtifact.
 
-### 5.7 Share Pack Builder
+### 6.7 Share Pack Builder
 
 src/app/lib/shares.ts: Share creation and listing. rpcInsertShare, rpcListShares, rpcGetShare.
 
@@ -294,7 +380,7 @@ src/lib/sharing.ts: Capsule encryption and key wrapping. wrapKeyForRecipient, un
 
 src/app/insights/components/ShareActionsBar.tsx: Unified share actions component. Copy caption, download PNG, share to wallet, send privately.
 
-### 5.8 Reflection Links and Mind View Modules
+### 6.8 Reflection Links and Mind View Modules
 
 src/lib/graph/buildReflectionGraph.ts: Graph builder using TF IDF and temporal proximity. Returns Edge array with weights and reasons.
 
@@ -312,73 +398,127 @@ src/app/lib/meaningBridges/storage.ts: Encrypted bridge storage and retrieval.
 
 src/app/reflections/mind/page.tsx: Mind view page with ForceGraph2D. Handles node focus, edge hover, bridge display.
 
-## 6. Cryptography Boundary
+## 7. Cryptography Boundary
 
-### 6.1 Where Plaintext Exists
+### 7.1 Where Plaintext Exists
 
 Plaintext exists only in browser memory after decryption. React component state holds decrypted reflections. CryptoKey objects exist in JavaScript memory. Session storage holds signature hex and consent timestamp, not the key itself.
 
-### 6.2 Where Ciphertext Exists
+### 7.2 Where Ciphertext Exists
 
 Ciphertext stored in Supabase database columns. Ciphertext transmitted over HTTPS in request bodies. Ciphertext cached in localStorage for graph edges and pin payloads. Ciphertext in sessionStorage for relationship graphs.
 
-### 6.3 How Keys Are Stored in Memory
+### 7.3 How Keys Are Stored in Memory
 
 AES GCM keys stored as CryptoKey objects in React state. Keys never serialized to strings. Keys accessible only to components with access to useEncryptionSession hook. Keys cleared when wallet disconnects or session expires.
 
-### 6.4 What Never Leaves the Device
+### 7.4 What Never Leaves the Device
 
 Encryption keys never leave the browser. Plaintext reflections never sent to server. Decrypted insights computed entirely client side. Wallet private keys never accessed by application.
 
-### 6.5 Threat Model Assumptions
+### 7.5 Threat Model Assumptions
 
 Assumes browser is trusted environment. Assumes HTTPS prevents man in the middle attacks. Assumes Supabase RLS policies correctly enforce wallet scoping. Assumes wallet extension securely manages private keys. Does not protect against compromised browser or device. Does not protect against malicious browser extensions. Server side admins cannot read plaintext but can see ciphertext and metadata.
 
-## 7. Known Gotchas
+## 8. Known Gotchas
 
-### 7.1 Wallet Not Ready Race
+### 8.1 Wallet Not Ready Race
 
 Components may render before wallet connects. useEncryptionSession hook handles this with ready state. Early returns prevent RPC calls without wallet. Some components show loading state until wallet ready.
 
-### 7.2 JWT Wallet Address Dependency
+### 8.2 JWT Wallet Address Dependency
 
 RLS policies use get_wallet_from_header function, not JWT claims. This allows anon role access. x wallet address header must be set on all Supabase clients. Server side API routes extract header from request and pass to Supabase client.
 
-### 7.3 RLS vs Anon Role Differences
+### 8.3 RLS vs Anon Role Differences
 
 All RPC functions use SECURITY DEFINER to bypass RLS on function execution. Functions manually verify wallet matches header. This allows anon role to execute functions. Direct table access would require authenticated role with JWT claims.
 
-### 7.4 SSR vs Client Boundaries
+### 8.4 SSR vs Client Boundaries
 
 All pages use use client directive. No server side rendering of sensitive data. API routes run on server but only handle metadata queries. Encryption and decryption always client side.
 
-### 7.5 Turbopack Quirks
+### 8.5 Turbopack Quirks
 
 Next.js Turbopack may cache modules incorrectly during development. Restart dev server if imports fail. Dynamic imports used for heavy libraries like react force graph 2d.
 
-## 8. Current State Marker
+## 9. Verified Capabilities Today
 
-### 8.1 Phase Map Anchor
+### 9.1 Wallet and Encryption
 
-Insights v1 is complete. All seven lenses functional and consistent. Sharing system operational. Graph and mind view operational. Pins system operational. Bridge system operational.
+- [x] Wallet connection via Wagmi and RainbowKit functional
+- [x] Consent signature flow derives AES GCM key
+- [x] Key cached in sessionStorage with expiration
+- [x] Encryption and decryption work client side
 
-### 8.2 Which Phases Are Complete
+### 9.2 Data Storage
 
-Phase One: Wallet connect, encryption, entry storage, RLS enforcement. Complete.
+- [x] internal_events table exists with RLS policies
+- [x] shares table exists with capsule JSONB column
+- [x] reflection_links table exists
+- [x] reflection_sources table exists
+- [x] external_entries table exists as entries_external
+- [x] contacts table exists
+- [x] capsules table exists
+- [x] derived_artifacts table exists
+- [x] reflection_link_bridges table exists
+- [ ] entries table RPCs called but table definition not verified in migrations
 
-Phase Two: Sharing system, capsules, external sources. Complete.
+### 9.3 Insights Engine
 
-Phase Three: Insights engine, all seven lenses, distribution analysis. Complete.
+- [x] computeInsightsForWindow function exists and routes to lens artifacts
+- [x] Weekly, Summary, Timeline, Yearly, Distributions, YoY, Lifetime lenses render
+- [x] Distribution layer computes frequency patterns
+- [x] ShareActionsBar component unified across lenses
+- [x] InsightSignalCard component renders cards
 
-Phase Four: Graph building, clustering, mind view, thread view. Complete.
+### 9.4 Graph and Mind View
 
-Phase Five: Meaning bridges, bridge pinning. Complete.
+- [x] buildReflectionGraph function computes signal edges
+- [x] Graph cache stores edges encrypted in localStorage
+- [x] Cluster computation via connected components works
+- [x] Mind view renders force directed graph
+- [x] Thread view shows connected reflections
+- [x] Meaning bridges build and store reason edges
+- [x] Bridge pinning saves to derived_artifacts
 
-### 8.3 What Is Currently Being Built Next
+### 9.5 Sharing
 
-Share export consistency polish. PNG export standardization across lenses. Debug panel gating improvements.
+- [x] Share creation encrypts capsules
+- [x] Share listing works for owner and recipient
+- [x] PNG export via html2canvas functional
+- [x] Share to wallet dialog exists
 
-### 8.4 Insights v1 Status
+### 9.6 RPC Functions Verified
 
-All seven Insights lenses complete and consistent. Weekly, Summary, Timeline, Yearly, Distributions, YoY, Lifetime all functional. Canonical computeInsightsForWindow engine used throughout. ShareActionsBar unified across lenses. Deterministic computation verified. Empty state handling graceful. Reflections fallback prevents stuck states.
+- [x] insert_internal_event exists
+- [x] list_internal_events exists
+- [x] list_internal_events_by_range exists
+- [x] list_shares_by_owner exists
+- [x] list_shares_by_recipient exists
+- [x] insert_share exists
+- [x] get_share exists
+- [x] list_external_entries exists
+- [x] list_contacts exists
+- [x] get_capsule exists
+- [x] insert_derived_artifact exists
+- [x] list_derived_artifacts exists
+- [x] update_derived_artifact exists
+- [x] delete_derived_artifact exists
+- [x] list_reflection_link_bridges exists
+- [ ] list_entries called but definition not verified
+- [ ] insert_entry called but definition not verified
+- [ ] list_reflection_links called but definition not verified
+
+## 10. Future Tables and RPCs
+
+The following are referenced in code but not verified in migrations. They may exist in unverified migrations or be planned for future implementation.
+
+### 10.1 entries Table
+
+RPC functions list_entries, insert_entry, soft_delete_entry, restore_entry, delete_entry are called in src/app/lib/entries.ts but table creation and RPC definitions not found in verified migrations.
+
+### 10.2 list_reflection_links RPC
+
+Function is called in src/app/lib/reflectionLinks.ts but definition not found in migration 009_reflection_links.sql which only creates the table.
 
