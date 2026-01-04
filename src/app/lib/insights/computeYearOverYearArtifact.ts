@@ -1,4 +1,4 @@
-// src/app/lib/insights/computeYoYArtifact.ts
+// src/app/lib/insights/computeYearOverYearArtifact.ts
 // Compute Year-over-Year InsightArtifact with resilience for empty years
 // Part of Canonical Insight Engine Consolidation
 
@@ -141,7 +141,7 @@ function createYoYCard(
  * 
  * Returns InsightArtifact with YoY card
  */
-export function computeYoYArtifact(args: {
+export function computeYearOverYearArtifact(args: {
   events: (InternalEvent | UnifiedInternalEvent)[];
   windowStart: Date;
   windowEnd: Date;
@@ -172,7 +172,7 @@ export function computeYoYArtifact(args: {
   // Hard fallback: If eventsToReflectionEntries returns empty but we have reflections, build entries directly
   if (allReflectionEntries.length === 0 && reflections && reflections.length > 0) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[computeYoYArtifact] Using reflection fallback: eventsToReflectionEntries returned empty, building from reflections', {
+      console.warn('[computeYearOverYearArtifact] Using reflection fallback: eventsToReflectionEntries returned empty, building from reflections', {
         eventsCount: events.length,
         reflectionsCount: reflections.length,
       });

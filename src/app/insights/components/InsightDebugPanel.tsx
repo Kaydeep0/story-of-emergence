@@ -3,7 +3,8 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { InsightArtifactDebug } from '../../lib/insights/artifactTypes';
 
 interface InsightDebugPanelProps {
@@ -11,11 +12,19 @@ interface InsightDebugPanelProps {
 }
 
 export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const debugParam = searchParams?.get('debug') === '1';
+  const isDev = process.env.NODE_ENV === 'development';
+  // Show debug only in dev mode OR when debug=1 query param is present
+  const showDebug = isDev || debugParam;
+  const [isOpen, setIsOpen] = useState(showDebug);
 
   if (!debug) {
     return null;
   }
+
+  // Show content if debug is enabled (dev mode or debug=1 param) and toggle is open
+  const shouldShowContent = showDebug && isOpen;
 
   return (
     <div className="mb-4">
@@ -23,10 +32,10 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
         onClick={() => setIsOpen(!isOpen)}
         className="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 bg-white/5 transition-colors"
       >
-        {isOpen ? '▼' : '▶'} Debug
+        {shouldShowContent ? '▼' : '▶'} Debug
       </button>
       
-      {isOpen && (
+      {shouldShowContent && (
         <div className="mt-2 rounded-lg border border-white/10 bg-black/60 p-4 text-xs font-mono">
           <div className="space-y-1 text-white/70">
             {/* Reflection Intake Counters */}

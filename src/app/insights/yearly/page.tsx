@@ -20,6 +20,7 @@ import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights
 import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
 import { computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from '../../lib/insights/distributionLayer';
+import { getEventTimestampMs, isWithinRange, dateToMs } from '../../lib/insights/eventTimestampHelpers';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
@@ -133,11 +134,12 @@ export default function YearlyWrapPage() {
 
     try {
       // Convert reflections to UnifiedInternalEvent format (same pattern as Weekly/Summary/Timeline)
+      // Source of truth: ReflectionEntry.createdAt (ISO string) -> eventAt (ISO string)
       const walletAlias = address.toLowerCase();
-      const events = reflections.map((r) => ({
+      const eventsAll = reflections.map((r) => ({
         id: r.id ?? crypto.randomUUID(),
         walletAlias,
-        eventAt: new Date(r.createdAt).toISOString(),
+        eventAt: new Date(r.createdAt).toISOString(), // Same timestamp pipeline as Weekly/Timeline
         eventKind: 'written' as const,
         sourceKind: 'journal' as const,
         plaintext: r.plaintext ?? '',
@@ -155,7 +157,36 @@ export default function YearlyWrapPage() {
       windowStart.setDate(windowStart.getDate() - 365);
       windowStart.setHours(0, 0, 0, 0); // Start of day 365 days ago
 
-      // Compute yearly artifact via canonical engine
+      // Filter events to window using shared helpers (same as Weekly)
+      const windowStartMs = dateToMs(windowStart);
+      const windowEndMs = dateToMs(windowEnd);
+      const events = eventsAll.filter((e) => {
+        try {
+          const eventMs = getEventTimestampMs(e);
+          return isWithinRange(eventMs, windowStartMs, windowEndMs);
+        } catch (err) {
+          // Skip events with invalid timestamps
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Yearly] Skipping event with invalid timestamp:', e.id, err);
+          }
+          return false;
+        }
+      });
+
+      // Dev-only logging: verify filtering
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Yearly] Event filtering:', {
+          eventsAllCount: eventsAll.length,
+          eventsInWindowCount: events.length,
+          windowStartIso: windowStart.toISOString(),
+          windowEndIso: windowEnd.toISOString(),
+          windowStartMs,
+          windowEndMs,
+        });
+      }
+
+      // Compute yearly artifact via canonical engine with filtered events
+      // Pass reflections as fallback in case eventsToReflectionEntries fails
       const artifact = computeInsightsForWindow({
         horizon: 'yearly',
         events,
@@ -165,23 +196,95 @@ export default function YearlyWrapPage() {
         entriesCount: reflections.length,
         eventsCount: events.length,
         reflectionsLoaded: reflections.length,
-        eventsGenerated: events.length,
-      });
+        eventsGenerated: eventsAll.length, // Total events generated before filtering
+        reflections: reflections.map((r) => ({
+          id: r.id,
+          createdAt: r.createdAt,
+          plaintext: r.plaintext ?? '',
+        })),
+      } as any);
 
       // Store artifact for debug panel
       setInsightArtifact(artifact);
 
       // Extract DistributionResult and WindowDistribution from artifact card metadata
       const cards = artifact.cards ?? [];
+      
+      // Dev log: Card kinds before search (same pattern as Distributions)
+      if (process.env.NODE_ENV === 'development') {
+        const allCardKinds = cards.map(c => c.kind);
+        console.log('[Yearly Wrap] Card extraction - before search:', {
+          cardsLength: cards.length,
+          allCardKinds,
+        });
+      }
+      
+      // Search for card with kind 'distribution' (matches computeYearlyArtifact)
       const yearlyCard = cards.find((c) => c.kind === 'distribution');
       
-      if (yearlyCard && (yearlyCard as any)._distributionResult && (yearlyCard as any)._windowDistribution) {
-        const distributionResult = (yearlyCard as any)._distributionResult as DistributionResult;
-        const windowDistribution = (yearlyCard as any)._windowDistribution as WindowDistribution;
-        setDistributionResult(distributionResult);
-        setWindowDistribution(windowDistribution);
+      // Dev-only logging: verify extraction and card shape
+      if (process.env.NODE_ENV === 'development') {
+        // Log the full card object to see its shape (safe in dev)
+        if (yearlyCard) {
+          console.log('[Yearly Wrap] Full card object:', {
+            id: yearlyCard.id,
+            kind: yearlyCard.kind,
+            title: yearlyCard.title,
+            explanation: yearlyCard.explanation,
+            evidenceCount: yearlyCard.evidence?.length ?? 0,
+            computedAt: yearlyCard.computedAt,
+            allKeys: Object.keys(yearlyCard),
+            hasDistributionResult: '_distributionResult' in yearlyCard,
+            hasWindowDistribution: '_windowDistribution' in yearlyCard,
+            distributionResultType: typeof (yearlyCard as any)._distributionResult,
+            windowDistributionType: typeof (yearlyCard as any)._windowDistribution,
+            distributionResultTotalEntries: (yearlyCard as any)._distributionResult?.totalEntries,
+            windowDistributionClassification: (yearlyCard as any)._windowDistribution?.classification,
+          });
+        }
+        
+        const allCardKinds = cards.map(c => c.kind);
+        console.log('[Yearly Wrap] Artifact extraction debug:', {
+          cardsLength: cards.length,
+          allCardKinds, // Log all kinds to see what's actually in the artifact
+          searchingForKind: 'distribution',
+          yearlyCardExists: !!yearlyCard,
+          yearlyCardKind: yearlyCard?.kind,
+          hasDistributionResult: !!(yearlyCard as any)?._distributionResult,
+          hasWindowDistribution: !!(yearlyCard as any)?._windowDistribution,
+          eventCount: events.length,
+          eventsInWindow: events.filter(e => {
+            const eventDate = new Date(e.eventAt);
+            return eventDate >= windowStart && eventDate <= windowEnd;
+          }).length,
+        });
+      }
+      
+      // Extract distribution objects from card metadata
+      // Yearly uses the same compute path as Distributions, so distributions are always created
+      // If card exists, metadata should always be present (card is only created if distributions exist)
+      if (yearlyCard) {
+        const cardMeta = yearlyCard as any;
+        if (cardMeta._distributionResult && cardMeta._windowDistribution) {
+          const distributionResult = cardMeta._distributionResult as DistributionResult;
+          const windowDistribution = cardMeta._windowDistribution as WindowDistribution;
+          setDistributionResult(distributionResult);
+          setWindowDistribution(windowDistribution);
+        } else {
+          // Card exists but metadata missing - this shouldn't happen but handle gracefully
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Yearly Wrap] Card exists but metadata missing:', {
+              cardId: yearlyCard.id,
+              cardKeys: Object.keys(yearlyCard),
+              hasDistributionResult: '_distributionResult' in cardMeta,
+              hasWindowDistribution: '_windowDistribution' in cardMeta,
+            });
+          }
+          setDistributionResult(null);
+          setWindowDistribution(null);
+        }
       } else {
-        // No data in window
+        // Card doesn't exist - distributions weren't computed (likely totalEntries === 0)
         setDistributionResult(null);
         setWindowDistribution(null);
       }
@@ -485,15 +588,84 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!loading && !error && (!distributionResult || distributionResult.totalEntries === 0) && (
+        {/* Empty State - Only show if no data loaded/generated */}
+        {!loading && !error && (() => {
+          const debug = insightArtifact?.debug;
+          const reflectionsLoaded = debug?.reflectionsLoaded ?? 0;
+          const eventsGenerated = debug?.eventsGenerated ?? 0;
+          const eventCount = debug?.eventCount ?? 0;
+          
+          // Dev-only logging: gate values
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Yearly Wrap] Empty state gate:', {
+              reflectionsLoaded,
+              eventsGenerated,
+              eventCount,
+              shouldShowEmpty: reflectionsLoaded === 0 || eventsGenerated === 0 || eventCount === 0,
+            });
+          }
+          
+          // Show empty state ONLY if no data at all (do not block on artifact shape)
+          return reflectionsLoaded === 0 || eventsGenerated === 0 || eventCount === 0;
+        })() && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70">No reflections found in the last 365 days. Start writing to see your yearly wrap.</p>
           </div>
         )}
 
+        {/* Yearly wrap still forming - Data exists but artifact incomplete */}
+        {!loading && !error && (() => {
+          const debug = insightArtifact?.debug;
+          const eventCount = debug?.eventCount ?? 0;
+          const cards = insightArtifact?.cards ?? [];
+          const yearlyCard = cards.find((c) => c.kind === 'distribution');
+          const hasYearlyCard = !!yearlyCard;
+          
+          // Dev-only logging: gate values
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Yearly Wrap] Still forming gate:', {
+              eventCount,
+              cardsLength: cards.length,
+              yearlyCardExists: hasYearlyCard,
+              yearlyCardKind: yearlyCard?.kind,
+              shouldShowStillForming: eventCount > 0 && !hasYearlyCard,
+            });
+          }
+          
+          // Show this state ONLY if eventCount > 0 but yearly card doesn't exist
+          // This means distribution computation failed
+          return eventCount > 0 && !hasYearlyCard;
+        })() && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
+            <p className="text-white/70 mb-2">Yearly wrap is still forming. Data is present.</p>
+            <p className="text-sm text-white/50">See debug panel above for details.</p>
+          </div>
+        )}
+
         {/* Yearly Wrap Content - Organized for clarity and completeness */}
-        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && windowDistribution && (
+        {!loading && !error && (() => {
+          const debug = insightArtifact?.debug;
+          const eventCount = debug?.eventCount ?? 0;
+          const cards = insightArtifact?.cards ?? [];
+          const yearlyCard = cards.find((c) => c.kind === 'distribution');
+          const hasYearlyCard = !!yearlyCard;
+          
+          // Dev-only logging: gate values
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Yearly Wrap] Content render gate:', {
+              eventCount,
+              cardsLength: cards.length,
+              yearlyCardExists: hasYearlyCard,
+              yearlyCardKind: yearlyCard?.kind,
+              // Render if card exists - distribution objects are used but not required for gate
+              shouldRenderContent: eventCount > 0 && hasYearlyCard,
+            });
+          }
+          
+          // Gate on card existence only: if card exists, render (even if distributions are missing)
+          // UI components handle missing distributions gracefully with null checks
+          return eventCount > 0 && hasYearlyCard;
+        })() && (
           <div className="space-y-8">
             {/* Header: Year and context */}
             <div className="space-y-2">
@@ -504,14 +676,16 @@ export default function YearlyWrapPage() {
             </div>
 
             {/* 1️⃣ IDENTITY: One-sentence summary with year */}
-            <IdentityLine
-              totalEntries={distributionResult.totalEntries}
-              activeDays={computeActiveDays(distributionResult.dailyCounts)}
-              spikeRatio={distributionResult.stats.spikeRatio}
-              top10PercentShare={distributionResult.stats.top10PercentDaysShare}
-              classification={windowDistribution.classification}
-              onSentenceChange={setIdentitySentence}
-            />
+            {distributionResult && windowDistribution && (
+              <IdentityLine
+                totalEntries={distributionResult.totalEntries}
+                activeDays={computeActiveDays(distributionResult.dailyCounts)}
+                spikeRatio={distributionResult.stats.spikeRatio}
+                top10PercentShare={distributionResult.stats.top10PercentDaysShare}
+                classification={windowDistribution.classification}
+                onSentenceChange={setIdentitySentence}
+              />
+            )}
 
             {/* Share Actions Bar - Public share link */}
             {publicSharePayload && (
@@ -572,15 +746,17 @@ export default function YearlyWrapPage() {
             )}
 
             {/* 2️⃣ DISTRIBUTION: Pattern label and key numbers */}
-            <UnderlyingRhythmCard
-              distributionResult={distributionResult}
-              windowDistribution={windowDistribution}
-              mostCommonDayCount={mostCommonDayCount}
-              formatClassification={formatClassification}
-            />
+            {distributionResult && windowDistribution && (
+              <UnderlyingRhythmCard
+                distributionResult={distributionResult}
+                windowDistribution={windowDistribution}
+                mostCommonDayCount={mostCommonDayCount}
+                formatClassification={formatClassification}
+              />
+            )}
 
             {/* 3️⃣ BEHAVIOR: Visual representation of your year */}
-            {distributionResult.dailyCounts.length > 0 && (
+            {distributionResult && distributionResult.dailyCounts.length > 0 && (
               <div className="rounded-2xl border border-white/10 bg-black/40 p-6">
                 <p className="text-sm text-white/70 mb-4 italic">This is how your attention actually moved.</p>
                 <YearShapeGlyph
@@ -633,7 +809,7 @@ export default function YearlyWrapPage() {
               identitySentence={identitySentence || 'My year in reflection.'}
               archetype={archetype?.name}
               yearShape={
-                distributionResult.dailyCounts.length > 0
+                distributionResult && distributionResult.dailyCounts.length > 0
                   ? {
                       dailyCounts: distributionResult.dailyCounts,
                       topSpikeDates: getTopSpikeDates(distributionResult, 3),
@@ -644,15 +820,19 @@ export default function YearlyWrapPage() {
                 date: m.date,
                 preview: m.preview,
               }))}
-              numbers={{
-                totalEntries: distributionResult.totalEntries,
-                activeDays: computeActiveDays(distributionResult.dailyCounts),
-                spikeRatio: distributionResult.stats.spikeRatio,
-              }}
+              numbers={
+                distributionResult
+                  ? {
+                      totalEntries: distributionResult.totalEntries,
+                      activeDays: computeActiveDays(distributionResult.dailyCounts),
+                      spikeRatio: distributionResult.stats.spikeRatio,
+                    }
+                  : undefined
+              }
               mirrorInsight={narrativeInsight?.explanation}
               entries={reflections}
-              distributionResult={distributionResult}
-              windowDistribution={windowDistribution}
+              distributionResult={distributionResult ?? undefined}
+              windowDistribution={windowDistribution ?? undefined}
               encryptionReady={encryptionReady}
             />
 

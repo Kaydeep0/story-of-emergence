@@ -61,7 +61,7 @@ function createYearlyNarrativeCard(
 
   return {
     id: `yearly-wrap-${Date.now()}`,
-    kind: 'distribution',
+    kind: 'distribution', // Must match InsightKind union
     title,
     explanation: body,
     evidence: topSpikeDates.slice(0, 3).map((date, idx) => {
@@ -95,8 +95,10 @@ export function computeYearlyArtifact(args: {
   wallet?: string;
   entriesCount?: number;
   eventsCount?: number;
+  /** Fallback: reflections to use if eventsToReflectionEntries returns empty */
+  reflections?: Array<{ id: string; createdAt: string; plaintext: string }>;
 }): InsightArtifact {
-  const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount } = args;
+  const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, reflections } = args;
   
   // Dev-only logging for Yearly compute path
   if (process.env.NODE_ENV === 'development') {
@@ -142,7 +144,23 @@ export function computeYearlyArtifact(args: {
   }
   
   // Convert events to ReflectionEntry format (only journal events)
-  const allReflectionEntries = eventsToReflectionEntries(events);
+  let allReflectionEntries = eventsToReflectionEntries(events);
+  
+  // Hard fallback: If eventsToReflectionEntries returns empty but we have reflections, build entries directly
+  if (allReflectionEntries.length === 0 && reflections && reflections.length > 0) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[computeYearlyArtifact] Using reflection fallback: eventsToReflectionEntries returned empty, building from reflections', {
+        eventsCount: events.length,
+        reflectionsCount: reflections.length,
+      });
+    }
+    
+    allReflectionEntries = reflections.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt, // keep as ISO
+      plaintext: r.plaintext ?? '',
+    }));
+  }
   
   // NOTE: Do NOT pre-filter entries here. computeDistributionLayer and computeWindowDistribution
   // will filter themselves using their own window calculations. Pre-filtering causes double-filtering
@@ -154,11 +172,61 @@ export function computeYearlyArtifact(args: {
   const windowDistribution = computeWindowDistribution(allReflectionEntries, 365);
   
   // Create narrative card from distribution results
+  // Note: computeDistributionLayer always returns a DistributionResult (never null), even with 0 entries
+  // computeWindowDistribution always returns a WindowDistribution (never null)
+  // So distributionResult and windowDistribution are always defined
   const cards: InsightCard[] = [];
   
-  // Only create card if we have data
-  if (distributionResult.totalEntries > 0) {
-    cards.push(createYearlyNarrativeCard(distributionResult, windowDistribution));
+  // Dev-only logging: verify inputs before card creation
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[YearlyArtifact] Before card creation:', {
+      distributionResultExists: !!distributionResult,
+      distributionResultTotalEntries: distributionResult?.totalEntries,
+      windowDistributionExists: !!windowDistribution,
+      windowDistributionClassification: windowDistribution?.classification,
+      willCreateCard: distributionResult.totalEntries > 0,
+      // Confirm distributions are always created (same compute path as Distributions page)
+      usingSameComputePath: true,
+    });
+  }
+  
+  // Robustness rule: If events exist and reflections exist, always create a Yearly card
+  // Card creation must key off entries existing (not just distributionResult.totalEntries)
+  // This ensures card is created even if event mapping produces zero entries but reflections exist
+  const hasEntries = allReflectionEntries.length > 0;
+  const hasEvents = (eventsCount ?? events.length) > 0;
+  
+  // Create card if we have entries OR if we have events (fallback ensures entries exist)
+  if (hasEntries && (distributionResult.totalEntries > 0 || hasEvents)) {
+    const card = createYearlyNarrativeCard(distributionResult, windowDistribution);
+    
+    // Dev-only logging: verify card shape after creation
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[YearlyArtifact] Card created:', {
+        cardId: card.id,
+        cardKind: card.kind,
+        hasDistributionResult: '_distributionResult' in card,
+        hasWindowDistribution: '_windowDistribution' in card,
+        distributionResultTotalEntries: card._distributionResult?.totalEntries,
+        windowDistributionClassification: card._windowDistribution?.classification,
+        distributionResultKeys: card._distributionResult ? Object.keys(card._distributionResult) : null,
+        windowDistributionKeys: card._windowDistribution ? Object.keys(card._windowDistribution) : null,
+      });
+    }
+    
+    cards.push(card);
+  } else {
+    // Dev-only logging: card not created because totalEntries === 0
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[YearlyArtifact] Card NOT created - totalEntries is 0:', {
+        distributionResultTotalEntries: distributionResult.totalEntries,
+        allReflectionEntriesCount: allReflectionEntries.length,
+        windowEntriesCount: allReflectionEntries.filter((entry) => {
+          const createdAt = new Date(entry.createdAt);
+          return createdAt >= windowStart && createdAt <= windowEnd;
+        }).length,
+      });
+    }
   }
   
   const artifact: InsightArtifact = {
@@ -172,6 +240,28 @@ export function computeYearlyArtifact(args: {
     createdAt: new Date().toISOString(),
     cards,
   };
+  
+  // Dev-only logging: artifact shape
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[YearlyArtifact Debug] Keys on the artifact:', Object.keys(artifact));
+    
+    if (artifact.cards && artifact.cards.length > 0) {
+      const firstCard = artifact.cards[0];
+      console.log('[YearlyArtifact Debug] Keys on artifact.cards[0]:', Object.keys(firstCard));
+      console.log('[YearlyArtifact Debug] Card kind:', firstCard.kind);
+      
+      // Log metadata keys (fields starting with _)
+      const metadataKeys = Object.keys(firstCard).filter(key => key.startsWith('_'));
+      console.log('[YearlyArtifact Debug] Keys on artifact.cards[0] metadata (fields starting with _):', metadataKeys);
+      
+      // Log all card kinds in artifact
+      const allKinds = artifact.cards.map(c => c.kind);
+      console.log('[YearlyArtifact Debug] All card kinds in artifact:', allKinds);
+    } else {
+      console.log('[YearlyArtifact Debug] artifact.cards is empty or undefined');
+      console.log('[YearlyArtifact Debug] distributionResult.totalEntries:', distributionResult.totalEntries);
+    }
+  }
   
   return artifact;
 }

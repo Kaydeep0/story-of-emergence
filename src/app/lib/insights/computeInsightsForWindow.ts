@@ -79,6 +79,8 @@ export function computeInsightsForWindow(args: {
       eventsCount,
     });
   } else if (horizon === 'yearly') {
+    // Extract reflections from args if available (for fallback)
+    const reflections = (args as any).reflections as Array<{ id: string; createdAt: string; plaintext: string }> | undefined;
     artifact = computeYearlyArtifact({
       events,
       windowStart,
@@ -87,8 +89,11 @@ export function computeInsightsForWindow(args: {
       wallet,
       entriesCount,
       eventsCount,
+      reflections,
     });
   } else if (horizon === 'lifetime') {
+    // Extract reflections from args if available (for fallback)
+    const reflections = (args as any).reflections as Array<{ id: string; createdAt: string; plaintext: string }> | undefined;
     artifact = computeLifetimeArtifact({
       events,
       windowStart,
@@ -97,8 +102,11 @@ export function computeInsightsForWindow(args: {
       wallet,
       entriesCount,
       eventsCount,
+      reflections,
     });
   } else if (horizon === 'yoy') {
+    // Extract reflections from args if available (for fallback)
+    const reflections = (args as any).reflections as Array<{ id: string; createdAt: string; plaintext: string }> | undefined;
     artifact = computeYoYArtifact({
       events,
       windowStart,
@@ -109,8 +117,11 @@ export function computeInsightsForWindow(args: {
       eventsCount,
       fromYear: args.fromYear,
       toYear: args.toYear,
+      reflections,
     });
   } else if (horizon === 'distributions') {
+    // Extract reflections from args if available (for fallback)
+    const reflections = (args as any).reflections as Array<{ id: string; createdAt: string; plaintext: string }> | undefined;
     artifact = computeDistributionsArtifact({
       events,
       windowStart,
@@ -119,6 +130,7 @@ export function computeInsightsForWindow(args: {
       wallet,
       entriesCount,
       eventsCount,
+      reflections,
     });
   } else {
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);

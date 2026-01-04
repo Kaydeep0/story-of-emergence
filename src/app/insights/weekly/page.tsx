@@ -15,6 +15,7 @@ import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights
 import { useReflectionLinks } from '../../lib/reflectionLinks';
 import { computeInsightsForWindow } from '../../lib/insights/computeInsightsForWindow';
 import { getWindowStartEnd } from '../../lib/insights/timeWindows';
+import { getEventTimestampMs, isWithinRange, dateToMs } from '../../lib/insights/eventTimestampHelpers';
 import type { ReflectionEntry } from '../../lib/insights/types';
 import { InsightsTabs } from '../components/InsightsTabs';
 import { LENSES } from '../lib/lensContract';
@@ -117,10 +118,20 @@ export default function WeeklyPage() {
         topics: [],
       }));
 
-      // Filter events to weekly window (engine expects pre-filtered events)
+      // Filter events to weekly window using shared helpers (engine expects pre-filtered events)
+      const startMs = dateToMs(start);
+      const endMs = dateToMs(end);
       const events = eventsAll.filter((e) => {
-        const dt = new Date(e.eventAt);
-        return dt >= start && dt < end;
+        try {
+          const eventMs = getEventTimestampMs(e);
+          return isWithinRange(eventMs, startMs, endMs);
+        } catch (err) {
+          // Skip events with invalid timestamps
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Weekly] Skipping event with invalid timestamp:', e.id, err);
+          }
+          return false;
+        }
       });
 
       if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };

@@ -134,7 +134,7 @@ export default function TimelinePage() {
     try {
       // Convert reflections to UnifiedInternalEvent format (same pattern as Weekly/Summary)
       const walletAlias = address.toLowerCase();
-      const events = reflections.map((r) => ({
+      const eventsBeforeFilter = reflections.map((r) => ({
         id: r.id ?? crypto.randomUUID(),
         walletAlias,
         eventAt: new Date(r.createdAt).toISOString(),
@@ -146,11 +146,27 @@ export default function TimelinePage() {
         topics: [],
       }));
 
+      // Dev-only logging: verify no silent filtering
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Timeline Debug] Event count before filter:', eventsBeforeFilter.length);
+      }
+
       // Determine window: use all available reflections (or last 90 days)
       const now = new Date();
       const windowEnd = now;
       const windowStart = new Date(now);
       windowStart.setDate(windowStart.getDate() - 90);
+
+      // No date/type/limit filtering applied - events passed directly to engine
+      const events = eventsBeforeFilter;
+
+      // Dev-only logging: verify no filtering occurred
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Timeline Debug] Event count after filter:', events.length);
+        if (events.length !== eventsBeforeFilter.length) {
+          console.warn('[Timeline Debug] WARNING: Events were filtered! Before:', eventsBeforeFilter.length, 'After:', events.length);
+        }
+      }
 
       // Compute timeline artifact via canonical engine
       const artifact = computeInsightsForWindow({

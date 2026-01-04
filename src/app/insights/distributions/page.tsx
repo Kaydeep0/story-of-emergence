@@ -99,6 +99,14 @@ export default function DistributionsPage() {
       return;
     }
 
+    // Dev log: Start compute
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Distributions Page] Start compute:', {
+        reflectionsCount: reflections.length,
+        address: address,
+      });
+    }
+
     try {
       // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
       const walletAlias = address.toLowerCase();
@@ -115,6 +123,7 @@ export default function DistributionsPage() {
       }));
 
       // Determine window: use all available reflections (distributions analyzes all data)
+      // Use the same timestamp source as event generation (r.createdAt -> eventAt)
       const dates = reflections.map((r) => new Date(r.createdAt));
       const windowEnd = dates.length > 0 
         ? new Date(Math.max(...dates.map(d => d.getTime())))
@@ -122,8 +131,34 @@ export default function DistributionsPage() {
       const windowStart = dates.length > 0
         ? new Date(Math.min(...dates.map(d => d.getTime())))
         : new Date(windowEnd.getTime() - 365 * 24 * 60 * 60 * 1000); // Default to 1 year back
+      
+      // Dev log: Window boundaries (aligned with event timestamps)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Distributions Page] Window boundaries:', {
+          windowStart: windowStart.toISOString(),
+          windowEnd: windowEnd.toISOString(),
+          reflectionsCount: reflections.length,
+          eventsCount: events.length,
+          // Show sample event timestamps
+          sampleEventEventAt: events.length > 0 ? events[0].eventAt : null,
+          sampleReflectionCreatedAt: reflections.length > 0 ? reflections[0].createdAt : null,
+          // Verify alignment
+          firstEventTimestamp: events.length > 0 ? new Date(events[0].eventAt).toISOString() : null,
+          firstReflectionTimestamp: reflections.length > 0 ? new Date(reflections[0].createdAt).toISOString() : null,
+        });
+      }
+
+      // Dev log: Before compute
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Distributions Page] Before computeInsightsForWindow:', {
+          eventsCount: events.length,
+          windowStart: windowStart.toISOString(),
+          windowEnd: windowEnd.toISOString(),
+        });
+      }
 
       // Compute distributions artifact via canonical engine
+      // Pass reflections as fallback in case eventsToReflectionEntries fails
       const artifact = computeInsightsForWindow({
         horizon: 'distributions',
         events,
@@ -134,15 +169,60 @@ export default function DistributionsPage() {
         eventsCount: events.length,
         reflectionsLoaded: reflections.length,
         eventsGenerated: events.length,
-      });
+        reflections: reflections.map((r) => ({
+          id: r.id,
+          createdAt: r.createdAt,
+          plaintext: r.plaintext ?? '',
+        })),
+      } as any);
+
+      // Dev log: Artifact created
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Distributions Page] Artifact created with cardsLength:', artifact.cards?.length ?? 0, {
+          horizon: artifact.horizon,
+          cardsLength: artifact.cards?.length ?? 0,
+          cardKinds: artifact.cards?.map(c => c.kind) ?? [],
+          debugEventCount: artifact.debug?.eventCount,
+        });
+      }
 
       // Store artifact for debug panel
       setInsightArtifact(artifact);
 
+      // Dev log: Artifact stored
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Distributions Page] Artifact stored in state');
+      }
+
       // Extract data structures from artifact card metadata
-      // Look for card with kind 'distribution' (created by computeDistributionsArtifact)
+      // Look for card with kind 'distribution' (standardized)
       const cards = artifact.cards ?? [];
+      
+      // Dev log: Card kinds before search
+      if (process.env.NODE_ENV === 'development') {
+        const allCardKinds = cards.map(c => c.kind);
+        console.log('[Distributions Page] Card extraction - before search:', {
+          cardsLength: cards.length,
+          allCardKinds,
+        });
+      }
+      
+      // Standardized to 'distribution' kind
       const distributionsCard = cards.find((c) => c.kind === 'distribution');
+      
+      // Dev log: Card extraction
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Distributions Page] Card extraction:', {
+          cardsLength: cards.length,
+          distributionsCardExists: !!distributionsCard,
+          distributionsCardKind: distributionsCard ? (distributionsCard.kind as string) : null,
+          distributionsCardId: distributionsCard?.id,
+          distributionsCardKeys: distributionsCard ? Object.keys(distributionsCard) : [],
+          hasDistributionResult: distributionsCard ? '_distributionResult' in distributionsCard : false,
+          hasWindowDistributions: distributionsCard ? '_windowDistributions' in distributionsCard : false,
+          hasDistributionInsight: distributionsCard ? '_distributionInsight' in distributionsCard : false,
+        });
+      }
       
       if (distributionsCard) {
         const cardWithMeta = distributionsCard as InsightCard & {
@@ -151,24 +231,62 @@ export default function DistributionsPage() {
           _distributionInsight?: InsightCard | null;
         };
         
+        // Dev log: Metadata extraction
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Distributions Page] Metadata extraction:', {
+            distributionResultExists: !!cardWithMeta._distributionResult,
+            distributionResultTotalEntries: cardWithMeta._distributionResult?.totalEntries,
+            windowDistributionsLength: cardWithMeta._windowDistributions?.length ?? 0,
+            distributionInsightExists: !!cardWithMeta._distributionInsight,
+            distributionInsightTitle: cardWithMeta._distributionInsight?.title,
+          });
+        }
+        
         // Extract metadata - these keys match what computeDistributionsArtifact writes
         setDistributionResult(cardWithMeta._distributionResult ?? null);
         setDistributions(cardWithMeta._windowDistributions ?? []);
         setDistributionInsight(cardWithMeta._distributionInsight ?? null);
+
+        // Dev log: State updated
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Distributions Page] State updated (UI will receive artifact)');
+        }
       } else {
         // No card generated (likely no entries in window or computation failed)
+        // Dev log: No card
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Distributions Page] No distributions card found:', {
+            cardsLength: cards.length,
+            allCardKinds: cards.map(c => c.kind),
+            windowEntriesCount: events.length, // This is approximate - actual filtering happens in artifact builder
+          });
+        }
+        
         // Always set to empty/null to ensure consistent state
         setDistributions([]);
         setDistributionResult(null);
         setDistributionInsight(null);
       }
     } catch (err) {
-      console.error('Failed to compute distributions insights:', err);
+      console.error('[Distributions Page] Failed to compute distributions insights:', err);
       setDistributions([]);
       setDistributionResult(null);
       setDistributionInsight(null);
     }
   }, [reflections, address]);
+
+  // Dev log: State changes (UI received artifact)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Distributions Page] UI received artifact (state updated):', {
+        hasDistributionResult: !!distributionResult,
+        hasDistributionInsight: !!distributionInsight,
+        distributionsLength: distributions.length,
+        distributionResultTotalEntries: distributionResult?.totalEntries,
+        distributionInsightTitle: distributionInsight?.title,
+      });
+    }
+  }, [distributionResult, distributionInsight, distributions]);
 
   // Format date for display
   const formatDate = (dateStr: string): string => {
@@ -303,100 +421,144 @@ export default function DistributionsPage() {
           </div>
         )}
 
-        {/* Empty State */}
-        {!loading && !error && reflections.length === 0 && (
-          <div className="rounded-2xl border border-white/10 p-6 text-center">
-            <p className="text-white/70">No reflections found. Start writing to see distribution analysis.</p>
-          </div>
-        )}
+        {/* Render gating based on eventCount and card existence */}
+        {(() => {
+          const eventCount = insightArtifact?.debug?.eventCount ?? 0;
+          const cards = insightArtifact?.cards ?? [];
+          // Standardized to 'distribution' kind
+          const distributionsCard = cards.find((c) => c.kind === 'distribution');
+          const hasDistributionCard = Boolean(distributionsCard);
+          
+          // Dev log: Card search
+          if (process.env.NODE_ENV === 'development') {
+            const allCardKinds = cards.map(c => c.kind);
+            console.log('[Distributions Page] Card search:', {
+              cardsLength: cards.length,
+              allCardKinds,
+              distributionsCardExists: hasDistributionCard,
+              distributionsCardKind: distributionsCard ? distributionsCard.kind : null,
+            });
+          }
 
-        {/* Minimum Entries Guard - only show if no distribution content */}
-        {!loading && !error && reflections.length > 0 && reflections.length < 7 && !distributionResult && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
-            <p className="text-sm text-white/60">
-              Not enough data yet for a stable distribution profile. Keep writing for a few more days.
-            </p>
-          </div>
-        )}
-
-        {/* Missing Metadata State - guaranteed base render when metadata is missing */}
-        {!loading && !error && reflections.length >= 7 && !distributionResult && !distributionInsight && distributions.length === 0 && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
-            <p className="text-white/70 mb-2">Distribution analysis is being computed.</p>
-            <p className="text-sm text-white/50">
-              {insightArtifact ? 'Check the debug panel above for details.' : 'Please wait...'}
-            </p>
-          </div>
-        )}
-
-        {/* Distribution Stats */}
-        {!loading && !error && distributionResult && distributionResult.totalEntries > 0 && (
-          <div className="mb-8 space-y-4">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h2 className="text-lg font-semibold mb-4">Distribution Profile (30 days)</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Most Common Day Count</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.mostCommonDayCount}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Variance</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
-                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
-                  <div className="text-xs text-white/40 mt-1">max day / median day</div>
-                </div>
-                <div>
-                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
-                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
-                  <div className="text-xs text-white/40 mt-1">power law signal</div>
-                </div>
+          // Empty state: eventCount === 0
+          if (!loading && !error && eventCount === 0) {
+            return (
+              <div className="rounded-2xl border border-white/10 p-6 text-center">
+                <p className="text-white/70">No reflections found. Start writing to see distribution analysis.</p>
               </div>
-            </div>
+            );
+          }
 
-            {/* Top Days List */}
-            {distributionResult.topDays.length > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                <h3 className="text-md font-semibold mb-3">Top Days</h3>
-                <div className="space-y-2">
-                  {distributionResult.topDays.slice(0, 10).map((day, idx) => (
-                    <div key={day.date} className="flex items-center justify-between text-sm">
-                      <span className="text-white/70">{formatDate(day.date)}</span>
-                      <span className="text-white/90 font-medium">{day.count} entries</span>
+          // Computing placeholder: eventCount > 0 AND no distribution card exists
+          if (!loading && !error && eventCount > 0 && !hasDistributionCard) {
+            return (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
+                <p className="text-white/70 mb-2">Distribution analysis is being computed.</p>
+                <p className="text-sm text-white/50">
+                  {insightArtifact ? 'Check the debug panel above for details.' : 'Please wait...'}
+                </p>
+              </div>
+            );
+          }
+
+          // Otherwise render the page (eventCount > 0 AND hasDistributionCard)
+          return null;
+        })()}
+
+        {/* Distribution Content - render when card exists, with null-safe guards */}
+        {(() => {
+          const eventCount = insightArtifact?.debug?.eventCount ?? 0;
+          const cards = insightArtifact?.cards ?? [];
+          // Standardized to 'distribution' kind
+          const distributionsCard = cards.find((c) => c.kind === 'distribution');
+          const hasDistributionCard = Boolean(distributionsCard);
+          
+          // Dev log: Card search
+          if (process.env.NODE_ENV === 'development') {
+            const allCardKinds = cards.map(c => c.kind);
+            console.log('[Distributions Page] Content render card search:', {
+              cardsLength: cards.length,
+              allCardKinds,
+              distributionsCardExists: hasDistributionCard,
+              distributionsCardKind: distributionsCard ? distributionsCard.kind : null,
+            });
+          }
+
+          // Only render content if eventCount > 0 AND card exists
+          if (loading || error || eventCount === 0 || !hasDistributionCard) {
+            return null;
+          }
+
+          return (
+            <>
+              {/* Distribution Stats - null-safe guard */}
+              {distributionResult && distributionResult.totalEntries > 0 && (
+                <div className="mb-8 space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <h2 className="text-lg font-semibold mb-4">Distribution Profile (30 days)</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm text-white/60 mb-1">Most Common Day Count</div>
+                        <div className="text-2xl font-bold text-white">{distributionResult.stats.mostCommonDayCount}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-white/60 mb-1">Variance</div>
+                        <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
+                        <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
+                        <div className="text-xs text-white/40 mt-1">max day / median day</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
+                        <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
+                        <div className="text-xs text-white/40 mt-1">power law signal</div>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Top Days List - null-safe guard */}
+                  {distributionResult.topDays && distributionResult.topDays.length > 0 && (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                      <h3 className="text-md font-semibold mb-3">Top Days</h3>
+                      <div className="space-y-2">
+                        {distributionResult.topDays.slice(0, 10).map((day, idx) => (
+                          <div key={day.date} className="flex items-center justify-between text-sm">
+                            <span className="text-white/70">{formatDate(day.date)}</span>
+                            <span className="text-white/90 font-medium">{day.count} entries</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
 
-        {/* Distribution Insight Card */}
-        {!loading && !error && distributionInsight && (
-          <div className="mb-8">
-            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
-              {/* Card header */}
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-orange-200">{distributionInsight.title}</h3>
+              {/* Distribution Insight Card - null-safe guard */}
+              {distributionInsight && (
+                <div className="mb-8">
+                  <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
+                    {/* Card header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-orange-200">{distributionInsight.title}</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                      </div>
+                    </div>
+
+                    {/* Explanation */}
+                    <p className="text-sm text-white/70">{distributionInsight.explanation}</p>
+
+                    {/* Computed locally badge */}
+                    <p className="text-xs text-white/40">Computed locally</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                </div>
-              </div>
+              )}
 
-              {/* Explanation */}
-              <p className="text-sm text-white/70">{distributionInsight.explanation}</p>
-
-              {/* Computed locally badge */}
-              <p className="text-xs text-white/40">Computed locally</p>
-            </div>
-          </div>
-        )}
-
-        {/* Distributions Table */}
-        {!loading && !error && distributions.length > 0 && (
+              {/* Distributions Table - null-safe guard */}
+              {distributions && distributions.length > 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
             <table className="w-full">
               <thead>
@@ -423,7 +585,7 @@ export default function DistributionsPage() {
                       </span>
                     </td>
                     <td className="p-4 text-white/70 text-sm">
-                      {dist.topSpikeDates.length > 0 ? (
+                      {dist.topSpikeDates && dist.topSpikeDates.length > 0 ? (
                         <ul className="space-y-1">
                           {dist.topSpikeDates.map((date, idx) => (
                             <li key={idx}>{formatDate(date)}</li>
@@ -433,13 +595,16 @@ export default function DistributionsPage() {
                         <span className="text-white/40">No spikes</span>
                       )}
                     </td>
-                    <td className="p-4 text-white/70 text-sm">{dist.explanation}</td>
+                    <td className="p-4 text-white/70 text-sm">{dist.explanation || 'No explanation available'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
+              )}
+            </>
+          );
+        })()}
       </section>
     </main>
   );

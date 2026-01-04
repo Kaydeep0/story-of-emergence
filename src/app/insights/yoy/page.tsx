@@ -125,16 +125,18 @@ export default function YearOverYearPage() {
     }
   }, [availableYears, year1, year2]);
 
-  // Compute year-over-year card via canonical engine with timeout protection
+  // Compute year-over-year card via canonical engine with proper state machine
   useEffect(() => {
+    // Early return if prerequisites not met
     if (reflections.length === 0 || year1 === null || year2 === null || !address) {
       setYoyCard(null);
       setComputeError(null);
       setIsComputing(false);
+      setInsightArtifact(null);
       return;
     }
 
-    // Reset state
+    // Reset state - set loading BEFORE compute
     setComputeError(null);
     setIsComputing(true);
     setYoyCard(null);
@@ -157,6 +159,16 @@ export default function YearOverYearPage() {
     // Wrap compute in async function to handle timeout
     const computeAsync = async () => {
       try {
+        // Dev log: Start compute
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[YoY] start compute with yearA, yearB, reflectionsCount, eventsCount:', {
+            yearA: year1,
+            yearB: year2,
+            reflectionsCount: reflections.length,
+            eventsCount: reflections.length,
+          });
+        }
+
         // Convert reflections to UnifiedInternalEvent format (same pattern as other lenses)
         const walletAlias = address.toLowerCase();
         const events = reflections.map((r) => ({
@@ -181,6 +193,7 @@ export default function YearOverYearPage() {
           : new Date(windowEnd.getTime() - 10 * 365 * 24 * 60 * 60 * 1000); // Default to 10 years back
 
         // Compute YoY artifact via canonical engine with selected years
+        // Pass reflections as fallback in case eventsToReflectionEntries fails
         const artifact = computeInsightsForWindow({
           horizon: 'yoy',
           events,
@@ -193,32 +206,52 @@ export default function YearOverYearPage() {
           toYear: year2,
           reflectionsLoaded: reflections.length,
           eventsGenerated: events.length,
-        });
+          reflections: reflections.map((r) => ({
+            id: r.id,
+            createdAt: r.createdAt,
+            plaintext: r.plaintext ?? '',
+          })),
+        } as any);
+
+        // Dev log: Artifact created
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[YoY] artifact created with cardsLength and cardKinds:', {
+            cardsLength: artifact.cards?.length ?? 0,
+            cardKinds: artifact.cards?.map(c => c.kind) ?? [],
+          });
+        }
 
         // Clear timeout if computation completes
         clearTimeout(timeoutId);
         setIsComputing(false);
 
-        // Store artifact for debug panel
+        // Store artifact for debug panel IMMEDIATELY
         setInsightArtifact(artifact);
+
+        // Dev log: State set
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[YoY] state set after setArtifact');
+        }
 
         // Extract YearOverYearCard from artifact card metadata
         const cards = artifact.cards ?? [];
         const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
         
+        // Always extract card if it exists (even if one year is empty)
         if (yoyCardData && (yoyCardData as any)._yoyCard) {
           const card = (yoyCardData as any)._yoyCard as YearOverYearCard;
-          
-          // Guard: ensure card has valid data and never shows inverted values
-          if (card && card.evidence && card.evidence.length > 0) {
-            setYoyCard(card);
-            setComputeError(null);
-          } else {
-            setYoyCard(null);
-          }
+          setYoyCard(card);
+          setComputeError(null);
         } else {
-          // No card generated (likely because one or both years have no entries)
+          // No card generated - this should not happen with new resilient builder
+          // But handle gracefully
           setYoyCard(null);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[YoY] No card found in artifact:', {
+              cardsLength: cards.length,
+              cardKinds: cards.map(c => c.kind),
+            });
+          }
         }
       } catch (err) {
         // Clear timeout on error
@@ -405,33 +438,92 @@ export default function YearOverYearPage() {
                   </button>
                 </div>
               </div>
-            ) : isComputing && year1 !== null && year2 !== null ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-                <p className="text-sm text-white/60">
-                  Computing comparison between {year1} and {year2}...
-                </p>
-              </div>
-            ) : year1 !== null && year2 !== null ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-                <p className="text-sm text-white/60">
-                  {(() => {
-                    const year1Reflections = reflections.filter(r => {
-                      const year = new Date(r.createdAt).getFullYear();
-                      return year === year1;
-                    });
-                    const year2Reflections = reflections.filter(r => {
-                      const year = new Date(r.createdAt).getFullYear();
-                      return year === year2;
-                    });
-                    
-                    if (year1Reflections.length === 0 || year2Reflections.length === 0) {
-                      return `Not enough data yet to compare these years.`;
-                    }
-                    return `Preparing comparison...`;
-                  })()}
-                </p>
-              </div>
-            ) : null}
+            ) : (() => {
+              // Dev log: Render gate
+              if (process.env.NODE_ENV === 'development') {
+                const cards = insightArtifact?.cards ?? [];
+                const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
+                const hasYoYCard = !!(yoyCardData && (yoyCardData as any)._yoyCard);
+                console.log('[YoY] render gate with hasYoYCard and loading and error:', {
+                  hasYoYCard,
+                  loading,
+                  isComputing,
+                  error: error ?? null,
+                  computeError: computeError ? (computeError as { message: string }).message : null,
+                  cardsLength: cards.length,
+                });
+              }
+
+              // Show loading state
+              if (isComputing) {
+                return (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                    <p className="text-sm text-white/60">
+                      Computing comparison between {year1} and {year2}...
+                    </p>
+                  </div>
+                );
+              }
+
+              // Show error state
+              if (computeError) {
+                return null; // Error UI is handled above
+              }
+
+              // Show card if it exists
+              if (yoyCard) {
+                return null; // Card UI is handled above
+              }
+
+              // Show friendly message if no card (should not happen with resilient builder, but handle gracefully)
+              const cards = insightArtifact?.cards ?? [];
+              const yoyCardData = cards.find((c) => c.kind === 'year_over_year');
+              if (!yoyCardData) {
+                const year1Reflections = reflections.filter(r => {
+                  const year = new Date(r.createdAt).getFullYear();
+                  return year === year1;
+                });
+                const year2Reflections = reflections.filter(r => {
+                  const year = new Date(r.createdAt).getFullYear();
+                  return year === year2;
+                });
+                
+                if (year1Reflections.length === 0 && year2Reflections.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                      <p className="text-sm text-white/60">
+                        No data available for {year1} or {year2}.
+                      </p>
+                    </div>
+                  );
+                } else if (year1Reflections.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                      <p className="text-sm text-white/60">
+                        No data available for {year1}. {year2} has {year2Reflections.length} reflection{year2Reflections.length !== 1 ? 's' : ''}.
+                      </p>
+                    </div>
+                  );
+                } else if (year2Reflections.length === 0) {
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                      <p className="text-sm text-white/60">
+                        No data available for {year2}. {year1} has {year1Reflections.length} reflection{year1Reflections.length !== 1 ? 's' : ''}.
+                      </p>
+                    </div>
+                  );
+                }
+              }
+
+              // Fallback: should not reach here with resilient builder
+              return (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                  <p className="text-sm text-white/60">
+                    Preparing comparison...
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         )}
 
