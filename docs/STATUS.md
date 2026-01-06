@@ -151,6 +151,12 @@ Distribution:
 
 **What moved forward today**
 
+- Legacy code removed (796 lines deleted, replaced with safe redirects)
+- Governance documents created (cleanup plan, vault invariants)
+
+**Tooling**
+
+Snapshot graduated from existence checks to semantic drift detection (redirect safety, invariants awareness).
 
 **What is still blocked**
 
