@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "validate-bridges": "tsx src/app/lib/meaningBridges/validateBridges.dev.ts",
-    "schema:check": "tsx scripts/checkSchema.ts"
+    "schema:check": "tsx scripts/checkSchema.ts",
+    "snapshot": "node scripts/capabilitySnapshot.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.8",
