@@ -148,6 +148,49 @@ These invariants define what must always be true about Story of Emergence. They 
 
 ---
 
+## 6. Vault Invariants
+
+**Rule**: The Vault layer (entries storage and RPC surface) must maintain strict invariants for security, consistency, and discoverability.
+
+**Why**: As contributors increase, the Vault layer must remain stable and predictable. These invariants prevent accidental regressions and ensure the canonical RPC surface is always discoverable.
+
+**Enforcement**:
+- Entries RPCs are append-first, wallet-scoped
+- No RPC takes raw entry text
+- All mutations require wallet header
+- Historical migrations are never edited
+- Canonical RPC surface lives in 023+
+
+**Invariant Details**:
+
+- **Entries RPCs are append-first, wallet-scoped**: All RPC functions operate on a single wallet's data. The `list_entries` function returns entries ordered by `created_at DESC` (newest first). All functions accept `w text` as the first parameter (wallet address).
+
+- **No RPC takes raw entry text**: All entry content must be encrypted client-side before calling RPCs. The `insert_entry` function accepts `cipher text` (encrypted ciphertext), never plaintext. This enforces client-side encryption.
+
+- **All mutations require wallet header**: All RPC functions validate wallet ownership via `get_wallet_from_header()`. The `w` parameter must match the `x-wallet-address` header. This prevents cross-wallet data access.
+
+- **Historical migrations are never edited**: Migration files `001` through `022` are historical records. They are never modified, even if they contain deprecated code. New changes go in new migration files (`023+`).
+
+- **Canonical RPC surface lives in 023+**: The complete, canonical RPC surface for entries is declared in `023_entries_rpcs.sql`. This file is the single source of truth for the Vault layer API contract. All 5 functions (`list_entries`, `insert_entry`, `soft_delete_entry`, `restore_entry`, `delete_entry`) are re-declared here for discoverability.
+
+**Violation Examples**:
+- ❌ Adding a new RPC function to `022_create_entries_table.sql` instead of creating `024_new_function.sql`
+- ❌ Modifying an existing RPC function signature in `022` instead of creating a new migration
+- ❌ Creating an RPC that accepts plaintext entry content
+- ❌ Creating an RPC that doesn't validate wallet ownership
+- ❌ Creating an RPC that operates across multiple wallets
+
+**Correct Patterns**:
+- ✅ All new RPC functions go in new migration files (`024+`)
+- ✅ Canonical RPC surface is re-declared in `023_entries_rpcs.sql`
+- ✅ All entry content is encrypted client-side before RPC calls
+- ✅ All RPCs validate wallet via `get_wallet_from_header()`
+- ✅ All RPCs are `SECURITY DEFINER` with `SET search_path = public`
+
+**Architecture Reference**: See `supabase/migrations/023_entries_rpcs.sql` for the canonical RPC surface. See `docs/CLEANUP_PLAN.md` for migration safety guidelines.
+
+---
+
 ## How to Use This Document
 
 ### For Code Reviews
@@ -158,6 +201,7 @@ Before approving any PR, verify:
 3. Does this change avoid prescriptive language? (Check explanation generation)
 4. Does this change log exclusions? (Verify coverage checks and orphan logging)
 5. Does this change respect the one-brain principle? (Verify no source data modification)
+6. Does this change respect Vault invariants? (Verify RPCs are wallet-scoped, encrypted, and migrations are append-only)
 
 ### For New Features
 
@@ -191,7 +235,7 @@ If performance degrades:
 
 ---
 
-**Last Updated**: 2024-01-15  
+**Last Updated**: 2026-01-06  
 **Maintained By**: Engineering Team  
 **Review Frequency**: Before every major release
 
