@@ -3,26 +3,31 @@
 // Phase 3.2: Contract-only step - no UI, no rendering, no platform logic
 
 /**
- * SharePack - Canonical type for shareable artifact derived from Yearly insights
+ * SharePack Contract
+ * 
+ * SharePack is a representation of observed structure,
+ * not a prescription or call to action.
+ * 
+ * SharePack - Universal payload type for all lenses (Weekly, Summary, Timeline, Yearly, Distributions, YoY, Lifetime)
  * 
  * This is the single source of truth for what can be shared.
  * All fields are derived from encrypted private journal data.
  * No raw reflection text, wallet addresses, or internal IDs.
  */
 export type SharePack = {
-  /** Year this pack represents */
-  year: number;
+  /** Lens type that generated this pack */
+  lens: 'weekly' | 'summary' | 'timeline' | 'yearly' | 'distributions' | 'yoy' | 'lifetime';
   
-  /** One sentence summary of the year */
+  /** One sentence summary */
   oneSentenceSummary: string;
   
-  /** Archetype classification (e.g., "The Quiet Builder", "The Pattern Seeker") */
+  /** Archetype classification (e.g., "The Quiet Builder", "The Pattern Seeker") - optional for non-yearly lenses */
   archetype: string | null;
   
   /** Distribution pattern label */
   distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none';
   
-  /** Key numbers summarizing the year */
+  /** Key numbers summarizing the period */
   keyNumbers: {
     /** Frequency: total number of reflections */
     frequency: number;
@@ -30,6 +35,8 @@ export type SharePack = {
     spikeCount: number;
     /** Concentration: share of activity in top 10% of days */
     concentration: number;
+    /** Active days: number of days with at least one reflection */
+    activeDays?: number;
   };
   
   /** Top moments (ids only, no raw text) */
@@ -40,7 +47,7 @@ export type SharePack = {
     date: string;
   }>;
   
-  /** Mirror insight - wholesome reflection on the year */
+  /** Mirror insight - wholesome reflection on the period */
   mirrorInsight: string | null;
   
   /** ISO timestamp when pack was generated */
@@ -49,11 +56,20 @@ export type SharePack = {
   /** Static privacy label - always the same */
   privacyLabel: 'Derived from encrypted private journal';
   
-  // Optional fields for extended SharePack (used by generateSharePack)
+  /** Year for yearly lens, or period identifier for other lenses */
+  year?: number;
+  
+  /** Period start date (ISO string) */
+  periodStart?: string;
+  
+  /** Period end date (ISO string) */
+  periodEnd?: string;
+  
+  // Optional fields for extended SharePack
   id?: string;
   createdAt?: number;
   checksum?: string;
-  scope?: 'year' | 'week' | 'month';
+  scope?: 'year' | 'week' | 'month' | 'lifetime';
   title?: string;
   summary?: string;
   moments?: Array<{
@@ -70,6 +86,9 @@ export type SharePack = {
   density?: string;
   cadence?: string;
   confidence?: 'high' | 'medium' | 'low';
+  
+  /** Lens-specific metadata (optional, for future extensions) */
+  lensMetadata?: Record<string, unknown>;
 };
 
 /**
@@ -126,11 +145,36 @@ export type YearlyInsightData = {
 };
 
 /**
- * Build a SharePack from yearly insight data
+ * Lens state data structure - what each lens provides to build SharePack
+ */
+export type LensState = {
+  lens: 'weekly' | 'summary' | 'timeline' | 'yearly' | 'distributions' | 'yoy' | 'lifetime';
+  
+  // Core metrics (required)
+  oneSentenceSummary: string;
+  entryCount: number;
+  activeDays?: number;
+  distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none';
+  concentrationShareTop10PercentDays?: number;
+  spikeCount?: number;
+  
+  // Optional fields
+  year?: number;
+  periodStart?: string;
+  periodEnd?: string;
+  archetype?: string | null;
+  keyMoments?: Array<{ date: string; summary?: string }>;
+  mirrorInsight?: string | null;
+  generatedAt?: string;
+  
+  // Lens-specific metadata
+  lensMetadata?: Record<string, unknown>;
+};
+
+/**
+ * Build a SharePack from lens state
  * 
- * Pure function - deterministic, no side effects, no network calls.
- * Uses already-computed Yearly Wrap data only.
- * Does not recompute insights.
+ * Universal builder for all lenses. Pure function - deterministic, no side effects.
  * 
  * Rules:
  * - No JSX
@@ -139,35 +183,40 @@ export type YearlyInsightData = {
  * - No side effects
  * - Deterministic output
  * 
- * @param yearlyInsightData - Pre-computed yearly insight data
+ * @param lensState - Pre-computed lens state data
  * @returns SharePack object conforming to the canonical contract
  */
-export function buildYearlySharePack(yearlyInsightData: YearlyInsightData): SharePack {
+export function buildSharePackForLens(lensState: LensState): SharePack {
   const {
-    year,
+    lens,
     oneSentenceSummary,
-    archetype,
-    distributionLabel,
     entryCount,
     activeDays,
-    concentrationShareTop10PercentDays,
-    spikeCount,
+    distributionLabel,
+    concentrationShareTop10PercentDays = 0,
+    spikeCount = 0,
+    year,
+    periodStart,
+    periodEnd,
+    archetype,
     keyMoments = [],
     mirrorInsight,
     generatedAt,
-  } = yearlyInsightData;
+    lensMetadata,
+  } = lensState;
 
-  // Sort keyMoments by date for stable ordering (ensures IDs remain stable across runs)
+  // Sort keyMoments by date for stable ordering
   const sortedMoments = [...keyMoments].sort((a, b) => a.date.localeCompare(b.date));
 
   // Transform keyMoments to topMoments format (ids only, no raw text)
+  const momentIdPrefix = year ? `moment-${year}` : `moment-${lens}`;
   const topMoments: SharePack['topMoments'] = sortedMoments.map((moment, index) => ({
-    id: `moment-${year}-${index}`,
+    id: `${momentIdPrefix}-${index}`,
     date: moment.date,
   }));
 
   const sharePack: SharePack = {
-    year,
+    lens,
     oneSentenceSummary,
     archetype: archetype ?? null,
     distributionLabel,
@@ -175,12 +224,42 @@ export function buildYearlySharePack(yearlyInsightData: YearlyInsightData): Shar
       frequency: entryCount,
       spikeCount,
       concentration: concentrationShareTop10PercentDays,
+      activeDays,
     },
     topMoments,
     mirrorInsight: mirrorInsight ?? null,
     generatedAt: generatedAt ?? new Date().toISOString(),
     privacyLabel: 'Derived from encrypted private journal',
+    year,
+    periodStart,
+    periodEnd,
+    scope: lens === 'yearly' ? 'year' : lens === 'weekly' ? 'week' : lens === 'lifetime' ? 'lifetime' : 'month',
+    lensMetadata,
   };
 
   return sharePack;
+}
+
+/**
+ * Build a SharePack from yearly insight data (backward compatibility)
+ * 
+ * @deprecated Use buildSharePackForLens instead
+ * @param yearlyInsightData - Pre-computed yearly insight data
+ * @returns SharePack object conforming to the canonical contract
+ */
+export function buildYearlySharePack(yearlyInsightData: YearlyInsightData): SharePack {
+  return buildSharePackForLens({
+    lens: 'yearly',
+    oneSentenceSummary: yearlyInsightData.oneSentenceSummary,
+    entryCount: yearlyInsightData.entryCount,
+    activeDays: yearlyInsightData.activeDays,
+    distributionLabel: yearlyInsightData.distributionLabel,
+    concentrationShareTop10PercentDays: yearlyInsightData.concentrationShareTop10PercentDays,
+    spikeCount: yearlyInsightData.spikeCount,
+    year: yearlyInsightData.year,
+    archetype: yearlyInsightData.archetype,
+    keyMoments: yearlyInsightData.keyMoments,
+    mirrorInsight: yearlyInsightData.mirrorInsight,
+    generatedAt: yearlyInsightData.generatedAt,
+  });
 }

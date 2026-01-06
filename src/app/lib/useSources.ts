@@ -17,7 +17,7 @@
 
 import type { ExternalEntry } from '../../lib/sources';
 import { getSupabaseForWallet } from './supabase';
-import { getLocalExternalEntries } from './sources';
+// getLocalExternalEntries removed - use listSources from sources.ts instead
 
 /**
  * Temporary mock function that returns 3 fake external entries for testing
@@ -78,9 +78,8 @@ export async function listExternalEntries(walletAddress: string) {
     }
   }
 
-  const combined = [...data, ...getLocalExternalEntries(walletAddress)];
-
-  return combined.map((row: any) => {
+  // Note: getLocalExternalEntries removed - all sources now come from database
+  return data.map((row: any) => {
     // Extract URL and notes from snippet if it contains "URL:"
     let url: string | null = null;
     let notes: string | null = null;

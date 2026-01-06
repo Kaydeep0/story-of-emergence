@@ -80,21 +80,15 @@ export function VaultHealthPanel({ isOpen, onClose }: { isOpen: boolean; onClose
         // Session memory
         const sessionMemoryActive = wasHereRecently();
         
-        // Active capsules count (sent by this wallet)
+        // Active wallet shares count (sent by this wallet)
+        // ⚠️ DEPRECATED: Previously used capsules table, now uses wallet_shares
         let activeCapsulesCount: number | null = null;
         try {
-          const supabase = getSupabaseForWallet(wallet);
-          const { count, error } = await supabase
-            .from('capsules')
-            .select('*', { count: 'exact', head: true })
-            .eq('sender_wallet', wallet)
-            .or('expires_at.is.null,expires_at.gt.now()');
-          
-          if (!error && count !== null) {
-            activeCapsulesCount = count;
-          }
+          const { listWalletSharesSent } = await import('../../lib/wallet_shares');
+          const shares = await listWalletSharesSent(wallet, { limit: 1000 });
+          activeCapsulesCount = shares.filter(s => !s.revoked_at && (!s.expires_at || new Date(s.expires_at) > new Date())).length;
         } catch (err) {
-          console.error('Failed to fetch capsule count:', err);
+          console.error('Failed to fetch wallet shares count:', err);
           // Don't set error, just leave as null
         }
         

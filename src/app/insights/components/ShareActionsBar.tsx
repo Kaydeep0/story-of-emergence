@@ -12,10 +12,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { ShareArtifact } from '../../../lib/artifacts/types';
+import type { SharePack } from '../../lib/share/sharePack';
 import { ShareCapsuleDialog } from '../../components/ShareCapsuleDialog';
 import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
 import { buildPublicShareUrl } from '../../lib/share/encodePublicSharePayload';
 import { ShareToWalletDialog } from './ShareToWalletDialog';
+import { buildShareTextFromPack } from '../../lib/share/buildShareText';
+import { SharePackRenderer } from '../../lib/share/SharePackRenderer';
+import { toPng } from 'html-to-image';
 
 /**
  * Canonical privacy label string
@@ -29,7 +33,10 @@ const PRIVACY_LABEL = 'Private reflection · Generated from encrypted data';
 const SHARE_CONFIRMED_KEY = 'soe_share_confirmed';
 
 export interface ShareActionsBarProps {
-  artifact: ShareArtifact | null;
+  /** SharePack - Universal payload from any lens (preferred) */
+  sharePack?: SharePack | null;
+  /** Legacy ShareArtifact - deprecated, use sharePack instead */
+  artifact?: ShareArtifact | null;
   senderWallet: string | undefined;
   encryptionReady: boolean;
   onSendPrivately?: () => void; // Optional callback for external dialog handling
@@ -525,7 +532,7 @@ function ShareConfirmationModal({
   );
 }
 
-export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns, publicSharePayload }: ShareActionsBarProps) {
+export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionReady, onSendPrivately, fallbackPatterns, publicSharePayload }: ShareActionsBarProps) {
   const [showCapsuleDialog, setShowCapsuleDialog] = useState(false);
   const [showWalletDialog, setShowWalletDialog] = useState(false);
   const [linkedInCaptionCopied, setLinkedInCaptionCopied] = useState(false);
@@ -533,6 +540,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
+  const pngRendererRef = useRef<HTMLDivElement>(null);
 
   // Close share menu when clicking outside
   useEffect(() => {
@@ -551,20 +559,23 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   }, [showShareMenu]);
 
   // Phase 3.4: Buttons must be visible but disabled when vault is not ready
-  // Only return null if both artifact and publicSharePayload are missing (no data to share at all)
+  // Only return null if both sharePack/artifact and publicSharePayload are missing (no data to share at all)
   // Also check if onSendPrivately is provided (for Weekly view)
-  const hasPrivateShare = artifact !== null || onSendPrivately !== undefined;
+  const hasPrivateShare = sharePack !== null || artifact !== null || onSendPrivately !== undefined;
   const hasPublicShare = publicSharePayload !== null && publicSharePayload !== undefined;
   
   if (!hasPrivateShare && !hasPublicShare) {
     return null;
   }
 
-  // Handle both artifact-based and publicSharePayload-based sharing
-  const caption = artifact ? buildShareCaption(artifact, fallbackPatterns) : '';
-  const hasContent = artifact 
+  // Build caption from SharePack (preferred) or artifact (legacy)
+  const caption = sharePack 
+    ? buildShareTextFromPack('instagram', sharePack).caption
+    : (artifact ? buildShareCaption(artifact, fallbackPatterns) : '');
+  
+  const hasContent = sharePack !== null || (artifact 
     ? hasShareableContent(artifact, fallbackPatterns) 
-    : (publicSharePayload !== null && publicSharePayload !== undefined);
+    : (publicSharePayload !== null && publicSharePayload !== undefined));
   const shareConfirmed = hasShareConfirmed();
   
   // Phase 3.4: Disable sharing when vault is not ready
@@ -642,13 +653,36 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   };
 
   const handleDownloadImage = async () => {
-    if (!artifact) return;
+    if (!sharePack && !artifact) return;
 
     const doDownload = async () => {
       try {
-        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
+        let blob: Blob;
+        let filename: string;
+        
+        if (sharePack) {
+          // Use SharePack PNG renderer
+          if (!pngRendererRef.current) {
+            toast.error('PNG renderer not ready');
+            return;
+          }
+          
+          blob = await toPng(pngRendererRef.current, {
+            backgroundColor: '#000000',
+            quality: 1.0,
+            pixelRatio: 2,
+          });
+          
+          const lens = sharePack.lens;
+          const dateStr = sharePack.generatedAt.split('T')[0];
+          filename = `soe-${lens}-${dateStr}.png`;
+        } else {
+          // Legacy artifact PNG generation
+          blob = await generateArtifactPNG(artifact!, fallbackPatterns);
+          filename = generateArtifactFilename(artifact!);
+        }
+        
         const url = URL.createObjectURL(blob);
-        const filename = generateArtifactFilename(artifact);
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
@@ -667,7 +701,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
   };
 
   const handleWebShare = async () => {
-    if (!artifact) return;
+    if (!sharePack && !artifact) return;
 
     if (!navigator.share) {
       toast('Web share not supported');
@@ -676,8 +710,31 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
 
     const doShare = async () => {
       try {
-        const blob = await generateArtifactPNG(artifact, fallbackPatterns);
-        const filename = generateArtifactFilename(artifact);
+        let blob: Blob;
+        let filename: string;
+        
+        if (sharePack) {
+          // Use SharePack PNG renderer
+          if (!pngRendererRef.current) {
+            toast.error('PNG renderer not ready');
+            return;
+          }
+          
+          blob = await toPng(pngRendererRef.current, {
+            backgroundColor: '#000000',
+            quality: 1.0,
+            pixelRatio: 2,
+          });
+          
+          const lens = sharePack.lens;
+          const dateStr = sharePack.generatedAt.split('T')[0];
+          filename = `soe-${lens}-${dateStr}.png`;
+        } else {
+          // Legacy artifact PNG generation
+          blob = await generateArtifactPNG(artifact!, fallbackPatterns);
+          filename = generateArtifactFilename(artifact!);
+        }
+        
         const file = new File([blob], filename, { type: 'image/png' });
         
         const shareData: ShareData = {
@@ -859,7 +916,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
       <div className="mb-6 space-y-3">
         {/* Primary actions row */}
         <div className="flex flex-wrap gap-2 items-center">
-          {artifact && (
+          {(sharePack || artifact) && (
             <>
               <button
                 onClick={isDisabled ? undefined : handleCopyCaption}
@@ -888,8 +945,8 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
               </button>
             </>
           )}
-          {/* Share button with menu - only show if we have public share or artifact */}
-          {(hasPublicShare || artifact) && (
+          {/* Share button with menu - only show if we have public share or sharePack/artifact */}
+          {(hasPublicShare || sharePack || artifact) && (
             <div className="relative" ref={shareMenuRef}>
               <button
                 onClick={isDisabled ? undefined : () => setShowShareMenu(!showShareMenu)}
@@ -925,7 +982,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
                       Copy link
                     </button>
                   )}
-                  {artifact && typeof navigator !== 'undefined' && 'share' in navigator && (
+                  {(sharePack || artifact) && typeof navigator !== 'undefined' && 'share' in navigator && (
                     <button
                       onClick={() => {
                         handleWebShare();
@@ -943,7 +1000,7 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
                       Native share
                     </button>
                   )}
-                  {artifact && (
+                  {(sharePack || artifact) && (
                     <>
                       {publicSharePayload || (typeof navigator !== 'undefined' && 'share' in navigator) ? (
                         <div className="border-t border-white/10 my-1"></div>
@@ -1055,10 +1112,18 @@ export function ShareActionsBar({ artifact, senderWallet, encryptionReady, onSen
         />
       )}
 
+      {/* Hidden PNG renderer for SharePack */}
+      {sharePack && (
+        <div ref={pngRendererRef} className="fixed -left-[9999px] top-0">
+          <SharePackRenderer sharePack={sharePack} mode="png" frame="square" />
+        </div>
+      )}
+      
       {/* ShareToWalletDialog - for wallet-based sharing */}
-      {showWalletDialog && artifact && senderWallet && (
+      {showWalletDialog && (sharePack || artifact) && senderWallet && (
         <ShareToWalletDialog
-          artifact={artifact}
+          sharePack={sharePack || undefined}
+          artifact={artifact || undefined}
           senderWallet={senderWallet}
           isOpen={showWalletDialog}
           onClose={() => setShowWalletDialog(false)}

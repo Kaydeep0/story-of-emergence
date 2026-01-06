@@ -2,24 +2,27 @@
 'use client';
 
 import { useState } from 'react';
-import type { SourceType } from '../lib/sources';
+import type { SourceKind } from '../lib/sources';
 
 type Props = {
-  onSubmit: (data: { title: string; kind: string; sourceId: string; notes?: string; url?: string; sourceType?: SourceType }) => Promise<void>;
+  onSubmit: (data: { title: string; kind: string; sourceId: string; notes?: string; url?: string; sourceType?: SourceKind }) => Promise<void>;
   onCancel: () => void;
 };
 
-const SOURCE_TYPE_OPTIONS: { value: SourceType; label: string }[] = [
+const SOURCE_TYPE_OPTIONS: { value: SourceKind; label: string }[] = [
   { value: 'note', label: 'Note' },
   { value: 'article', label: 'Article' },
   { value: 'link', label: 'Link' },
-  { value: 'video', label: 'Video' },
-  { value: 'post', label: 'Post' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'book', label: 'Book' },
+  { value: 'podcast', label: 'Podcast' },
+  { value: 'file', label: 'File' },
+  { value: 'other', label: 'Other' },
 ];
 
 export function SourceForm({ onSubmit, onCancel }: Props) {
   const [title, setTitle] = useState('');
-  const [sourceType, setSourceType] = useState<SourceType>('note');
+  const [sourceType, setSourceType] = useState<SourceKind>('note');
   const [url, setUrl] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [notes, setNotes] = useState('');
@@ -77,7 +80,7 @@ export function SourceForm({ onSubmit, onCancel }: Props) {
         <select
           className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
           value={sourceType}
-          onChange={(e) => setSourceType(e.target.value as SourceType)}
+          onChange={(e) => setSourceType(e.target.value as SourceKind)}
         >
           {SOURCE_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>

@@ -9,12 +9,12 @@ import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { 
-  listExternalSources, 
-  insertExternalSource,
-  deleteExternalSource,
-  type ExternalSourceDecrypted,
-  type ExternalSourceType 
-} from '../lib/externalSources';
+  listSources, 
+  insertSource,
+  deleteSource,
+  type SourceDecrypted,
+  type SourceKind 
+} from '../lib/sources';
 import { toast } from 'sonner';
 import { SourceCardWithBacklinks } from './components/SourceCardWithBacklinks';
 
@@ -23,16 +23,15 @@ export default function SourcesPage() {
   const { ready: encryptionReady, aesKey: sessionKey, error: encryptionError } = useEncryptionSession();
   
   const [mounted, setMounted] = useState(false);
-  const [sources, setSources] = useState<ExternalSourceDecrypted[]>([]);
+  const [sources, setSources] = useState<SourceDecrypted[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [formData, setFormData] = useState({
-    source_type: 'note' as ExternalSourceType,
+    kind: 'note' as SourceKind,
     title: '',
     author: '',
     url: '',
-    occurred_at_year: new Date().getFullYear(),
     notes: '',
   });
 
@@ -51,7 +50,7 @@ export default function SourcesPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await listExternalSources(address, sessionKey);
+        const data = await listSources(address, sessionKey);
         // Empty array is a valid state, not an error
         // Always default to [] - never null or undefined
         setSources(Array.isArray(data) ? data : []);
@@ -87,29 +86,27 @@ export default function SourcesPage() {
 
     try {
       setLoading(true);
-      // Write to external_sources with wallet_address included
-      await insertExternalSource(address, sessionKey, {
-        source_type: formData.source_type,
-        title: formData.title.trim(),
+      // Write to sources table
+      await insertSource(address, sessionKey, {
+        kind: formData.kind,
+        title: formData.title.trim() || null,
         author: formData.author.trim() || null,
         url: formData.url.trim() || null,
-        occurred_at_year: formData.occurred_at_year,
         metadata: {
           notes: formData.notes.trim() || undefined,
         },
       });
       
       // Refetch sources after successful insert
-      const data = await listExternalSources(address, sessionKey);
+      const data = await listSources(address, sessionKey);
       setSources(Array.isArray(data) ? data : []);
       
       // Reset form and close modal quietly
       setFormData({
-        source_type: 'note',
+        kind: 'note',
         title: '',
         author: '',
         url: '',
-        occurred_at_year: new Date().getFullYear(),
         notes: '',
       });
       setAdding(false);
@@ -129,7 +126,7 @@ export default function SourcesPage() {
     if (!confirm('Delete this source reference?')) return;
     
     try {
-      await deleteExternalSource(address, id);
+      await deleteSource(address, id);
       // Optimistically remove from list
       setSources(sources.filter(s => s.id !== id));
       // No success toast - quiet removal
@@ -201,15 +198,18 @@ export default function SourcesPage() {
             <div>
               <label className="block text-sm text-white/60 mb-1">Type</label>
               <select
-                value={formData.source_type}
-                onChange={(e) => setFormData({ ...formData, source_type: e.target.value as ExternalSourceType })}
+                value={formData.kind}
+                onChange={(e) => setFormData({ ...formData, kind: e.target.value as SourceKind })}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
               >
                 <option value="youtube">YouTube</option>
                 <option value="book">Book</option>
                 <option value="article">Article</option>
-                <option value="conversation">Conversation</option>
+                <option value="podcast">Podcast</option>
                 <option value="note">Note</option>
+                <option value="link">Link</option>
+                <option value="file">File</option>
+                <option value="other">Other</option>
               </select>
             </div>
             
@@ -246,17 +246,6 @@ export default function SourcesPage() {
               />
             </div>
             
-            <div>
-              <label className="block text-sm text-white/60 mb-1">Year</label>
-              <input
-                type="number"
-                value={formData.occurred_at_year}
-                onChange={(e) => setFormData({ ...formData, occurred_at_year: parseInt(e.target.value) || new Date().getFullYear() })}
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/20"
-                min="1900"
-                max={new Date().getFullYear() + 1}
-              />
-            </div>
             
             <div>
               <label className="block text-sm text-white/60 mb-1">Notes</label>
@@ -283,11 +272,10 @@ export default function SourcesPage() {
                 onClick={() => {
                   setAdding(false);
                   setFormData({
-                    source_type: 'note',
+                    kind: 'note',
                     title: '',
                     author: '',
                     url: '',
-                    occurred_at_year: new Date().getFullYear(),
                     notes: '',
                   });
                 }}

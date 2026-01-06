@@ -133,6 +133,36 @@ export interface ShareTexts {
   tiktokOverlay?: string[];
 }
 
+/**
+ * Build share text from SharePack (universal payload)
+ * 
+ * @param platform - Target platform
+ * @param sharePack - SharePack object from any lens
+ * @returns Platform-specific caption and overlay text
+ */
+export function buildShareTextFromPack(
+  platform: Platform,
+  sharePack: import('./sharePack').SharePack
+): ShareTexts {
+  const content: ShareContent = {
+    identitySentence: sharePack.oneSentenceSummary,
+    archetype: sharePack.archetype ?? undefined,
+    numbers: {
+      totalEntries: sharePack.keyNumbers.frequency,
+      activeDays: sharePack.keyNumbers.activeDays ?? 0,
+      spikeRatio: 0, // Not available in SharePack, can be computed if needed
+    },
+    mirrorInsight: sharePack.mirrorInsight ?? undefined,
+  };
+  
+  return buildShareText(platform, content);
+}
+
+/**
+ * Build share text from legacy ShareContent format
+ * 
+ * @deprecated Use buildShareTextFromPack instead
+ */
 export function buildShareText(
   platform: Platform,
   content: ShareContent

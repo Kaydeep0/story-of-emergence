@@ -12,6 +12,8 @@ import ExportButton from './components/ExportButton';
 import { SourceLinkMenu } from './components/SourceLinkMenu';
 import { ReflectionLinks } from '@/app/components/ReflectionLinks';
 import { LinkedSourcesBacklinks } from './components/LinkedSourcesBacklinks';
+import { linkSourceToEntry, unlinkSourceFromEntry } from './lib/entrySources';
+import { ThreadConnections } from '@/app/components/ThreadConnections';
 import {
   rpcFetchEntries,
   rpcInsertEntry,
@@ -49,10 +51,13 @@ import { incSaveCount, messageForSave } from '@/app/lib/toast';
 
 import { getSupabaseForWallet } from './lib/supabase';
 import { useEncryptionSession } from './lib/useEncryptionSession';
-import { rpcInsertShare } from './lib/shares';
+// ⚠️ DEPRECATED: rpcInsertShare uses deprecated shares table
+// TODO: Update to use wallet_shares for reflection sharing
+// import { rpcInsertShare } from './lib/shares';
 import { CapsuleAcknowledgement } from './components/vault/CapsuleAcknowledgement';
 
 type Item = {
+  kind: "reflection" | "bridge" | "pin"; // Required: ensures all items have explicit type
   id: string;
   ts: string;
   deleted_at: string | null;
@@ -118,7 +123,8 @@ useEffect(() => {
   logEvent('page_reflections');
 }, [mounted, connected, logEvent]);
 
-// Load sources for linking (using external_sources table)
+// Load sources for linking (using sources table)
+const [sourcesTableMissing, setSourcesTableMissing] = useState(false);
 useEffect(() => {
   if (!mounted || !connected || !address || !encryptionReady || !sessionKey) return;
   let cancelled = false;
@@ -128,16 +134,30 @@ useEffect(() => {
       return;
     }
     try {
-      const { listExternalSources } = await import('./lib/externalSources');
-      const data = await listExternalSources(address, sessionKey);
+      // Check if sources table exists first
+      const { checkSourcesTableExists } = await import('./lib/checkSourcesTable');
+      const tableExists = await checkSourcesTableExists(address);
+      if (!tableExists) {
+        if (!cancelled) setSourcesTableMissing(true);
+        return;
+      }
+      if (!cancelled) setSourcesTableMissing(false);
+      
+      const { listSources } = await import('./lib/sources');
+      const data = await listSources(address, sessionKey);
       if (!cancelled) setSources(data.map(s => ({
         sourceId: s.id,
         source_id: s.id,
         title: s.title,
-        kind: s.source_type,
+        kind: s.kind,
       })));
-    } catch {
-      if (!cancelled) setSources([]);
+    } catch (err: any) {
+      // Check if error is about missing table
+      if (err?.message?.includes('does not exist') || err?.code === '42P01') {
+        if (!cancelled) setSourcesTableMissing(true);
+      } else {
+        if (!cancelled) setSources([]);
+      }
     }
   }
   loadSourcesList();
@@ -267,22 +287,32 @@ const visibleItems = useMemo(
   [baseItems, searchTerm]
 );
 
+// Deduplicate visibleItems to prevent duplicate keys
+// Use kind:id composite key to handle multiple item types safely
+const visibleItemsDeduped = useMemo(() => {
+  const seen = new Set<string>();
+  return visibleItems.filter((it) => {
+    const k = `${it.kind}:${it.id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}, [visibleItems]);
+
 async function setSourceLink(reflectionId: string, sourceId: string | null): Promise<void> {
   if (!address || !sessionKey) return;
   
   try {
-    // Use reflection_sources table for persistence
-    const { linkSourceToReflection, unlinkSourceFromReflection } = await import('./lib/reflectionSources');
-    
+    // Use entry_sources table for persistence
     if (sourceId === null) {
       // Unlink: remove only the currently selected source for this reflection
       const current = getSourceIdFor(reflectionId);
       if (current) {
-        await unlinkSourceFromReflection(address, reflectionId, current);
+        await unlinkSourceFromEntry(address, reflectionId, current);
       }
     } else {
       // Link: create new link (handles duplicates gracefully)
-      await linkSourceToReflection(address, reflectionId, sourceId);
+      await linkSourceToEntry(address, reflectionId, sourceId);
     }
     
     // Update local state optimistically
@@ -412,7 +442,7 @@ useEffect(() => {
       retryTimeoutRef.current = null;
     }
   };
-}, [focusId, mounted, visibleItems.length, router]);
+}, [focusId, mounted, visibleItemsDeduped.length, router]);
 
 
 
@@ -506,6 +536,7 @@ async function loadMyReflections(reset = false) {
           : typeof i.plaintext === "string"
           ? (i.plaintext as string)
           : JSON.stringify(i.plaintext),
+      kind: 'reflection' as const, // All items from rpcFetchEntries are reflections
     }));
 
     setItems((prev) => (reset ? mapped : [...prev, ...mapped]));
@@ -734,16 +765,20 @@ async function createShare() {
       ts: sharingItem.ts,
     });
 
-    // Insert the share in Supabase using the new shares table
-    // rpcInsertShare will encrypt the plaintext using the sessionKey
-    await rpcInsertShare(
-      w, // ownerWalletAddress (lowercase)
-      recipientWalletAddress, // recipientWalletAddress (lowercase)
-      'reflection',
-      reflectionTitleOrFallback,
-      plaintextPayload,
-      sessionKey
-    );
+    // ⚠️ DEPRECATED: Reflection sharing via shares table is deprecated
+    // TODO: Implement reflection sharing via wallet_shares table
+    // For now, show error that reflection sharing needs to be migrated
+    throw new Error('Reflection sharing is temporarily unavailable. Please use insights sharing instead.');
+    
+    // OLD CODE (deprecated):
+    // await rpcInsertShare(
+    //   w, // ownerWalletAddress (lowercase)
+    //   recipientWalletAddress, // recipientWalletAddress (lowercase)
+    //   'reflection',
+    //   reflectionTitleOrFallback,
+    //   plaintextPayload,
+    //   sessionKey
+    // );
 
     // Log the share event
     logEvent('share_created');
@@ -769,6 +804,16 @@ async function createShare() {
 
   return (
     <main className="min-h-screen bg-black text-white">
+      {sourcesTableMissing && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md mx-auto px-4">
+          <div className="bg-yellow-900/90 border border-yellow-700/50 rounded-lg p-4 text-sm text-yellow-100 shadow-lg">
+            <p className="font-medium mb-1">Database migration required</p>
+            <p className="text-yellow-200/80">
+              Please run migration <code className="bg-yellow-950/50 px-1 rounded">021_create_sources_and_entry_sources.sql</code> in Supabase SQL Editor.
+            </p>
+          </div>
+        </div>
+      )}
   <HealthStrip
   showDeleted={showDeleted}
   onToggleDeleted={(v) => {
@@ -1126,21 +1171,21 @@ async function createShare() {
 {/* list area with loading + empty states */}
 {loadingList ? (
   <ReflectionsSkeleton />
-) : visibleItems.length === 0 ? (
+) : visibleItemsDeduped.length === 0 ? (
   <EmptyReflections onLoadClick={loadMyReflections} />
 ) : (
   <>
 {/* Export toolbar + card count */}
 <div className="mb-3 flex items-center justify-between text-xs text-white/50">
   <span>
-    Showing {visibleItems.length} of {items.length} reflection{items.length !== 1 ? 's' : ''}
+    Showing {visibleItemsDeduped.length} of {items.length} reflection{items.length !== 1 ? 's' : ''}
     {selectedSourceId && ` (filtered by source)`}
     {showDeleted ? " in Trash" : ""}
   </span>
 
   <ExportButton
     walletAddress={address ?? ""}
-    visibleItems={visibleItems}
+    visibleItems={visibleItemsDeduped}
     allItems={items}
   />
 </div>
@@ -1149,8 +1194,24 @@ async function createShare() {
 
     {/* cards */}
     <div className="mt-4 space-y-2">
-{visibleItems.map((it) => (
-        <div key={it.id} data-entry-id={it.id} className="rounded-xl border border-white/10 p-3">
+{/* Dev-only sanity check for duplicate keys */}
+{process.env.NODE_ENV === "development" && (() => {
+  const seen = new Set<string>();
+  for (const it of visibleItemsDeduped) {
+    const k = `${it.kind}:${it.id}`;
+    if (seen.has(k)) {
+      console.warn("DUP KEY", k, it);
+    }
+    seen.add(k);
+  }
+  return null;
+})()}
+{visibleItemsDeduped.map((it) => {
+        // Create a composite key using kind and id (deduplication ensures uniqueness)
+        // Use kind:id to handle multiple item types safely (reflection, bridge, pin, etc.)
+        const key = `${it.kind}:${it.id}`;
+        return (
+        <div key={key} data-entry-id={it.id} className="rounded-xl border border-white/10 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="text-xs text-white/50">
               {new Date(it.ts).toLocaleString()}
@@ -1221,7 +1282,7 @@ async function createShare() {
 
       {/* Linked sources backlinks (read-only) */}
       <LinkedSourcesBacklinks
-        reflectionId={it.id}
+        entryId={it.id}
         walletAddress={address ?? ''}
         sessionKey={sessionKey ?? null}
         encryptionReady={encryptionReady}
@@ -1239,8 +1300,26 @@ async function createShare() {
           deleted_at: item.deleted_at,
         }))}
       />
+
+      {/* Thread connections via narrative bridges */}
+      <ThreadConnections
+        reflectionId={it.id}
+        walletAddress={address ?? ''}
+        sessionKey={sessionKey ?? null}
+        encryptionReady={encryptionReady}
+        reflections={items
+          .filter((item) => !item.deleted_at)
+          .map((item) => ({
+            id: item.id,
+            createdAt: item.ts,
+            plaintext: item.note,
+            deletedAt: item.deleted_at || null,
+            sourceId: reflectionIdToSourceId.get(item.id),
+          }))}
+      />
         </div>
-      ))}
+        );
+      })}
     </div>
 
     {/* global Load more at the very bottom */}

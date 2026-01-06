@@ -6,12 +6,16 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { ShareArtifact } from '../../../lib/artifacts/types';
+import type { SharePack } from '../../lib/share/sharePack';
 import { getSupabaseForWallet } from '../../../lib/supabase';
 import { createWalletShare } from '../../../lib/walletShares';
 import { checkWalletEncryptionSupport } from '../../../lib/walletEncryption';
 
 type ShareToWalletDialogProps = {
-  artifact: ShareArtifact;
+  /** SharePack - Universal payload (preferred) */
+  sharePack?: SharePack;
+  /** Legacy ShareArtifact - deprecated, use sharePack instead */
+  artifact?: ShareArtifact;
   senderWallet: string;
   isOpen: boolean;
   onClose: () => void;
@@ -26,6 +30,7 @@ const EXPIRATION_OPTIONS: { value: ExpirationOption; label: string }[] = [
 ];
 
 export function ShareToWalletDialog({
+  sharePack,
   artifact,
   senderWallet,
   isOpen,
@@ -76,13 +81,33 @@ export function ShareToWalletDialog({
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       }
 
-      // Create wallet share
+      // Create wallet share - use SharePack (preferred) or artifact (legacy)
+      if (!sharePack && !artifact) {
+        toast.error('No share data available');
+        return;
+      }
+      
+      // createWalletShare accepts sharePack as optional parameter
+      // If sharePack is provided, it will be used; otherwise artifact is used
       const shareId = await createWalletShare(
         supabase,
-        artifact,
+        artifact || {
+          kind: 'summary',
+          generatedAt: new Date().toISOString(),
+          wallet: senderWallet,
+          artifactId: 'placeholder',
+          inventory: {
+            totalReflections: 0,
+            firstReflectionDate: null,
+            lastReflectionDate: null,
+            distinctMonths: 0,
+          },
+          signals: [],
+        },
         recipientWallet.trim(),
         expiresAt,
-        message.trim() || null
+        message.trim() || null,
+        sharePack || undefined
       );
 
       // Generate share link

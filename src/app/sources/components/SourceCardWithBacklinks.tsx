@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { listReflectionsForSource } from '../../lib/reflectionSources';
-import type { ExternalSourceDecrypted } from '../../lib/externalSources';
+import { listEntriesForSource } from '../../lib/entrySources';
+import type { SourceDecrypted } from '../../lib/sources';
 
 interface SourceCardWithBacklinksProps {
-  source: ExternalSourceDecrypted;
+  source: SourceDecrypted;
   walletAddress: string;
   onDelete: (id: string) => void;
 }
@@ -15,29 +15,29 @@ export function SourceCardWithBacklinks({
   walletAddress,
   onDelete,
 }: SourceCardWithBacklinksProps) {
-  const [linkedReflectionIds, setLinkedReflectionIds] = useState<string[]>([]);
+  const [linkedEntryIds, setLinkedEntryIds] = useState<string[]>([]);
   const [loadingLinks, setLoadingLinks] = useState(false);
 
   useEffect(() => {
     if (!walletAddress) {
-      setLinkedReflectionIds([]);
+      setLinkedEntryIds([]);
       return;
     }
 
-    async function loadLinkedReflections() {
+    async function loadLinkedEntries() {
       setLoadingLinks(true);
       try {
-        const reflectionIds = await listReflectionsForSource(walletAddress, source.id);
-        setLinkedReflectionIds(reflectionIds);
+        const entryIds = await listEntriesForSource(walletAddress, source.id);
+        setLinkedEntryIds(entryIds);
       } catch (err) {
-        console.error('Failed to load linked reflections', err);
-        setLinkedReflectionIds([]);
+        console.error('Failed to load linked entries', err);
+        setLinkedEntryIds([]);
       } finally {
         setLoadingLinks(false);
       }
     }
 
-    loadLinkedReflections();
+    loadLinkedEntries();
   }, [walletAddress, source.id]);
 
   return (
@@ -46,10 +46,7 @@ export function SourceCardWithBacklinks({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs px-2 py-0.5 rounded bg-white/5 text-white/60 capitalize">
-              {source.source_type}
-            </span>
-            <span className="text-xs text-white/40">
-              {source.occurred_at_year}
+              {source.kind}
             </span>
           </div>
           <h3 className="text-lg font-medium text-white/90 mb-1">
@@ -77,17 +74,17 @@ export function SourceCardWithBacklinks({
           )}
           
           {/* Linked reflections backlinks (read-only) */}
-          {!loadingLinks && linkedReflectionIds.length > 0 && (
+          {!loadingLinks && linkedEntryIds.length > 0 && (
             <div className="mt-3 pt-3 border-t border-white/5">
               <p className="text-xs text-white/50 mb-1">Echoed in</p>
               <div className="flex flex-wrap gap-1.5">
-                {linkedReflectionIds.map((reflectionId) => (
+                {linkedEntryIds.map((entryId) => (
                   <a
-                    key={reflectionId}
-                    href={`/?focus=${reflectionId}`}
+                    key={entryId}
+                    href={`/?focus=${entryId}`}
                     className="inline-flex items-center text-xs text-white/60 bg-white/5 px-2 py-0.5 rounded border border-white/10 hover:bg-white/10 transition-colors"
                   >
-                    <span className="truncate max-w-[100px]">{reflectionId.slice(0, 8)}…</span>
+                    <span className="truncate max-w-[100px]">{entryId.slice(0, 8)}…</span>
                   </a>
                 ))}
               </div>
