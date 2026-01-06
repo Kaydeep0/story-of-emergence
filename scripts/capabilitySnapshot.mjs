@@ -30,11 +30,12 @@ function findMigrationContains(substr) {
   const dir = path.join(root, "supabase/migrations");
   if (!fs.existsSync(dir)) return [];
   const matches = [];
+  const lowerSubstr = substr.toLowerCase();
   for (const file of fs.readdirSync(dir)) {
     if (!file.endsWith(".sql")) continue;
     const full = path.join(dir, file);
     const txt = fs.readFileSync(full, "utf8");
-    if (txt.includes(substr)) matches.push(file);
+    if (txt.toLowerCase().includes(lowerSubstr)) matches.push(file);
   }
   return matches;
 }
