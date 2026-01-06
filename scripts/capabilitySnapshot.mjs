@@ -40,6 +40,103 @@ function findMigrationContains(substr) {
   return matches;
 }
 
+function readFileContent(relPath) {
+  const full = path.join(root, relPath);
+  if (!fs.existsSync(full)) return null;
+  return fs.readFileSync(full, "utf8");
+}
+
+function fileContains(relPath, substr) {
+  const content = readFileContent(relPath);
+  if (!content) return false;
+  return content.toLowerCase().includes(substr.toLowerCase());
+}
+
+function checkAllFunctionsExist(filePath, functionNames) {
+  const content = readFileContent(filePath);
+  if (!content) return { found: [], missing: functionNames };
+  const lowerContent = content.toLowerCase();
+  const found = [];
+  const missing = [];
+  for (const fnName of functionNames) {
+    if (lowerContent.includes(`function public.${fnName.toLowerCase()}`) ||
+        lowerContent.includes(`function ${fnName.toLowerCase()}`)) {
+      found.push(fnName);
+    } else {
+      missing.push(fnName);
+    }
+  }
+  return { found, missing };
+}
+
+function checkLensImportsShareActionsBar(lensPath) {
+  const content = readFileContent(lensPath);
+  if (!content) return false;
+  return content.includes("ShareActionsBar") || 
+         content.includes("from") && content.includes("ShareActionsBar");
+}
+
+function checkExports(filePath, exportNames) {
+  const content = readFileContent(filePath);
+  if (!content) return { found: [], missing: exportNames };
+  const found = [];
+  const missing = [];
+  for (const expName of exportNames) {
+    if (content.includes(`export function ${expName}`) ||
+        content.includes(`export const ${expName}`) ||
+        content.includes(`export async function ${expName}`)) {
+      found.push(expName);
+    } else {
+      missing.push(expName);
+    }
+  }
+  return { found, missing };
+}
+
+function checkRouteActivelyUsed(routePath) {
+  // Check if route is actively used (referenced in code, not just comments)
+  if (!exists(routePath)) return false;
+  
+  // Check for actual usage patterns (not comments)
+  const searchPatterns = [
+    /href=["']\/shared\/open/,  // Link href
+    /router\.push\(["']\/shared\/open/,  // Router navigation
+    /useRouter.*\/shared\/open/,  // Router usage
+    /Link.*to=["']\/shared\/open/,  // Next.js Link
+  ];
+  
+  // Check common files that might reference routes
+  const checkFiles = [
+    "src/app/layout.tsx",
+    "src/app/page.tsx",
+    "src/app/shared/page.tsx",
+  ];
+  
+  // Also check all files in shared directory
+  const sharedFiles = listFiles("src/app/shared").map(f => `src/app/shared/${f}`);
+  
+  for (const checkFile of [...checkFiles, ...sharedFiles]) {
+    const content = readFileContent(checkFile);
+    if (!content) continue;
+    
+    // Skip if it's the route file itself
+    if (checkFile === routePath) continue;
+    
+    // Check for actual usage patterns (not in comments)
+    const lines = content.split("\n");
+    for (const line of lines) {
+      // Skip comment lines
+      if (line.trim().startsWith("//") || line.trim().startsWith("*")) continue;
+      
+      for (const pattern of searchPatterns) {
+        if (pattern.test(line)) return true;
+      }
+    }
+  }
+  
+  return false; // Not actively used
+}
+
 function header(title) {
   console.log(`\n${title}`);
 }
@@ -102,6 +199,20 @@ section("Vault", [
     const entryRPC = findMigrationContains("create or replace function public.list_entries");
     line(entryRPC.length > 0, "entries RPCs present", entryRPC.length ? entryRPC[0] : "not found");
   },
+  () => {
+    const rpcFile = "supabase/migrations/023_entries_rpcs.sql";
+    const canonicalRPCs = ["list_entries", "insert_entry", "soft_delete_entry", "restore_entry", "delete_entry"];
+    if (exists(rpcFile)) {
+      const check = checkAllFunctionsExist(rpcFile, canonicalRPCs);
+      if (check.missing.length === 0) {
+        line(true, "canonical RPC surface complete", `all 5 functions in 023`);
+      } else {
+        warn("canonical RPC surface incomplete", `missing: ${check.missing.join(", ")}`);
+      }
+    } else {
+      line(false, "canonical RPC surface", "023_entries_rpcs.sql not found");
+    }
+  },
 ]);
 
 section("Lens", [
@@ -113,6 +224,24 @@ section("Lens", [
   () => line(exists("src/app/insights/yearly/page.tsx"), "yearly"),
   () => line(exists("src/app/insights/yoy/page.tsx"), "yoy"),
   () => line(exists("src/app/insights/lifetime/page.tsx"), "lifetime"),
+  () => {
+    const coreLenses = ["weekly", "summary", "timeline", "distributions", "yearly", "yoy", "lifetime"];
+    const lensesWithShareActionsBar = coreLenses.filter(lens => {
+      const lensPath = `src/app/insights/${lens}/page.tsx`;
+      return exists(lensPath) && checkLensImportsShareActionsBar(lensPath);
+    });
+    const missing = coreLenses.filter(lens => {
+      const lensPath = `src/app/insights/${lens}/page.tsx`;
+      return exists(lensPath) && !checkLensImportsShareActionsBar(lensPath);
+    });
+    if (missing.length === 0 && lensesWithShareActionsBar.length === coreLenses.length) {
+      line(true, "all lenses use ShareActionsBar", `${lensesWithShareActionsBar.length}/${coreLenses.length}`);
+    } else if (lensesWithShareActionsBar.length > 0) {
+      warn("some lenses missing ShareActionsBar", missing.length > 0 ? `missing: ${missing.join(", ")}` : "");
+    } else {
+      line(false, "lenses use ShareActionsBar", "none found");
+    }
+  },
 ]);
 
 section("Meaning", [
@@ -120,6 +249,20 @@ section("Meaning", [
   () => line(threadsRoutes, "threads routes present", threadsRoutes ? "" : "missing"),
   () => line(pinsRoutes, "pins routes present", pinsRoutes ? "" : "missing"),
   () => line(mindRoute, "mind route present", mindRoute ? "" : "missing"),
+  () => {
+    const bridgeFile = "src/app/lib/meaningBridges/buildNarrativeBridge.ts";
+    const expectedExports = ["buildNarrativeBridges", "DEFAULT_BRIDGE_WEIGHTS"];
+    if (exists(bridgeFile)) {
+      const check = checkExports(bridgeFile, expectedExports);
+      if (check.missing.length === 0) {
+        line(true, "buildNarrativeBridge exports complete", check.found.join(", "));
+      } else {
+        warn("buildNarrativeBridge exports incomplete", `missing: ${check.missing.join(", ")}`);
+      }
+    } else {
+      line(false, "buildNarrativeBridge exports", "file not found");
+    }
+  },
 ]);
 
 section("Distribution", [
@@ -128,8 +271,23 @@ section("Distribution", [
   () => line(hasShareActionsBar, "Share actions bar present"),
   () => line(hasWalletSharesLib, "wallet_shares canonical library present"),
   () => {
-    if (legacyShareRoutes.length) warn("legacy share routes still present", legacyShareRoutes.join(", "));
-    else line(true, "no legacy share routes detected");
+    if (legacyShareRoutes.length) {
+      const activelyUsed = legacyShareRoutes.filter(route => checkRouteActivelyUsed(route));
+      const orphaned = legacyShareRoutes.filter(route => !checkRouteActivelyUsed(route));
+      if (orphaned.length === legacyShareRoutes.length) {
+        warn("legacy routes present but orphaned", legacyShareRoutes.map(r => {
+          const parts = r.split("/");
+          return parts[parts.length - 2] === "[id]" ? `${parts[parts.length - 3]}/[id]` : parts[parts.length - 2];
+        }).join(", "));
+      } else if (activelyUsed.length > 0) {
+        warn("legacy routes still actively referenced", activelyUsed.map(r => {
+          const parts = r.split("/");
+          return parts[parts.length - 2] === "[id]" ? `${parts[parts.length - 3]}/[id]` : parts[parts.length - 2];
+        }).join(", "));
+      }
+    } else {
+      line(true, "no legacy share routes detected");
+    }
   },
 ]);
 
