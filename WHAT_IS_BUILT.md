@@ -278,6 +278,10 @@ Story of Emergence is a privacy-first, client-side encrypted personal knowledge 
 
 **Status:** ⚠️ **Partially Working** (Multiple sharing systems exist, unclear which is canonical)
 
+> NOTE  
+> SharePack is now the canonical sharing spine across all lenses.  
+> This file will be updated with a formal SharePack capability section **after post-stability cleanup** is complete, to avoid documenting moving targets.
+
 **Known risks or bugs:**
 - Four different sharing tables (`shares`, `accepted_shares`, `wallet_shares`, `capsules`) - unclear which is primary
 - SharePack builder exists but may not be fully integrated with all sharing paths
