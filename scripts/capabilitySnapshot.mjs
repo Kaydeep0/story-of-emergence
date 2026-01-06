@@ -137,6 +137,45 @@ function checkRouteActivelyUsed(routePath) {
   return false; // Not actively used
 }
 
+function isRedirectOnly(routePath) {
+  // Check if route file is a redirect-only component (safe legacy route)
+  if (!exists(routePath)) return false;
+  
+  const content = readFileContent(routePath);
+  if (!content) return false;
+  
+  // Check for redirect patterns (router.replace or redirect() call)
+  const redirectPatterns = [
+    /router\.replace\(/,  // Next.js router.replace
+    /router\.push\(/,     // Next.js router.push (redirect)
+    /redirect\(/,         // Next.js redirect() function
+  ];
+  
+  // Check if file contains redirect patterns (not in comments)
+  const lines = content.split("\n");
+  let hasRedirect = false;
+  
+  for (const line of lines) {
+    // Skip comment lines
+    if (line.trim().startsWith("//") || line.trim().startsWith("*") || line.trim().startsWith("/**")) continue;
+    
+    for (const pattern of redirectPatterns) {
+      if (pattern.test(line)) {
+        hasRedirect = true;
+        break;
+      }
+    }
+    if (hasRedirect) break;
+  }
+  
+  // Also check if it's a simple redirect component (export default function that redirects)
+  const isSimpleRedirect = content.includes("export default function") && 
+                           (content.includes("Legacy") || content.includes("Redirect")) &&
+                           hasRedirect;
+  
+  return hasRedirect || isSimpleRedirect;
+}
+
 function header(title) {
   console.log(`\n${title}`);
 }
@@ -272,15 +311,20 @@ section("Distribution", [
   () => line(hasWalletSharesLib, "wallet_shares canonical library present"),
   () => {
     if (legacyShareRoutes.length) {
+      const redirectOnly = legacyShareRoutes.filter(route => isRedirectOnly(route));
       const activelyUsed = legacyShareRoutes.filter(route => checkRouteActivelyUsed(route));
-      const orphaned = legacyShareRoutes.filter(route => !checkRouteActivelyUsed(route));
-      if (orphaned.length === legacyShareRoutes.length) {
-        warn("legacy routes present but orphaned", legacyShareRoutes.map(r => {
+      const orphaned = legacyShareRoutes.filter(route => !checkRouteActivelyUsed(route) && !isRedirectOnly(route));
+      
+      if (redirectOnly.length === legacyShareRoutes.length) {
+        // All legacy routes are redirects only (safe)
+        line(true, "legacy routes are redirects only", "safe");
+      } else if (activelyUsed.length > 0) {
+        warn("legacy routes still actively referenced", activelyUsed.map(r => {
           const parts = r.split("/");
           return parts[parts.length - 2] === "[id]" ? `${parts[parts.length - 3]}/[id]` : parts[parts.length - 2];
         }).join(", "));
-      } else if (activelyUsed.length > 0) {
-        warn("legacy routes still actively referenced", activelyUsed.map(r => {
+      } else if (orphaned.length > 0) {
+        warn("legacy routes present but orphaned", orphaned.map(r => {
           const parts = r.split("/");
           return parts[parts.length - 2] === "[id]" ? `${parts[parts.length - 3]}/[id]` : parts[parts.length - 2];
         }).join(", "));
