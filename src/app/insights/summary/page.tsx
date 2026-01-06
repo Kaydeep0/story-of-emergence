@@ -17,7 +17,7 @@ import { buildDistributionFromReflections } from '../../lib/distributions/buildS
 import { classifyDistribution } from '../../lib/distributions/classify';
 import { generateDistributionInsight } from '../../lib/distributions/insights';
 import { generateNarrative } from '../../lib/distributions/narratives';
-import { filterEventsByWindow } from '../../lib/insights/timeWindows';
+import { filterEventsByWindow, groupByDay } from '../../lib/insights/timeWindows';
 import type { DistributionShape } from '../../lib/distributions/classify';
 import type { ReflectionEntry, InsightCard } from '../../lib/insights/types';
 import type { UnifiedSourceInsights, SourceEntryLite } from '../../lib/insights/fromSources';
@@ -28,10 +28,26 @@ import { ShareActionsBar } from '../components/ShareActionsBar';
 import { NarrativeBlock } from '../components/NarrativeBlock';
 import { InsightsSourceCard } from '../../components/InsightsSourceCard';
 import { InsightPanel } from '../components/InsightPanel';
+import { InsightSignalCard } from '../components/InsightSignalCard';
+import { MiniHistogram } from '../components/MiniHistogram';
+import { LensTransition } from '../components/LensTransition';
+import { interpretSpikeRatio, interpretTop10Share, interpretActiveDays, interpretEntryCount } from '../lib/metricInterpretations';
+import { computeDistributionLayer } from '../../lib/insights/distributionLayer';
+import { intensityFromSpikeRatio, intensityFromTop10Share, intensityFromEntryCount, type IntensityLevel } from '../lib/intensitySystem';
 import { InsightTimeline } from '../components/InsightTimeline';
 import { InsightDebugPanel } from '../components/InsightDebugPanel';
+import { ObservationalDivider } from '../components/ObservationalDivider';
+import { SessionClosing } from '../components/SessionClosing';
+import { useDensity } from '../hooks/useDensity';
+import { DensityToggle } from '../components/DensityToggle';
 import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 import { generateSummaryArtifact } from '../../lib/artifacts/summaryArtifact';
+import { useNarrativeTone } from '../hooks/useNarrativeTone';
+import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
+import { getLensPurposeCopy, getLensBoundaries } from '../lib/lensPurposeCopy';
+import { DeterminismEmergenceAxis } from '../components/DeterminismEmergenceAxis';
+import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
+import { computeActiveDays } from '../../lib/insights/distributionLayer';
 
 export default function SummaryPage() {
   const { address, isConnected } = useAccount();
@@ -48,6 +64,8 @@ export default function SummaryPage() {
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
   const [showSummaryCapsuleDialog, setShowSummaryCapsuleDialog] = useState(false);
   const [insightView, setInsightView] = useState<'panel' | 'timeline'>('panel');
+  const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
+  const { densityMode, handleDensityChange } = useDensity(address, mounted);
 
   useEffect(() => {
     setMounted(true);
@@ -277,8 +295,19 @@ export default function SummaryPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
-        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex-1 text-center">
+            <h1 className="text-2xl font-normal">{lens.label}</h1>
+            <p className="text-sm text-white/50 mt-1">{lens.description}</p>
+          </div>
+          <NarrativeToneSelector tone={narrativeTone} onToneChange={handleToneChange} />
+        </div>
+
+        {/* Why this lens exists */}
+        <div className="mb-6 pb-6 border-b border-white/10">
+          <p className="text-xs text-white/50 mb-1">Why this lens exists</p>
+          <p className="text-sm text-white/60 leading-relaxed">{getLensPurposeCopy('summary', narrativeTone)}</p>
+        </div>
 
         <InsightsTabs />
 
@@ -307,12 +336,21 @@ export default function SummaryPage() {
         {!loading && !error && reflections.length > 0 && (
           <div className="space-y-6">
             {/* Share Actions */}
-            <ShareActionsBar
-              artifact={summaryArtifact}
-              senderWallet={address}
-              encryptionReady={encryptionReady}
-              onSendPrivately={() => setShowSummaryCapsuleDialog(true)}
-            />
+            {sharePack && (
+              <ShareActionsBar
+                sharePack={sharePack}
+                senderWallet={address}
+                encryptionReady={encryptionReady}
+              />
+            )}
+
+            {/* Determinism-Emergence Axis */}
+            {reflections.length >= 10 && (
+              <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <h2 className="text-sm font-medium text-white/70 mb-4">Constraint and Freedom</h2>
+                <DeterminismEmergenceAxis reflections={reflections} narrativeTone={narrativeTone} />
+              </section>
+            )}
 
             {/* Source-driven topics */}
             <section className="rounded-2xl bg-white/3 px-6 py-5 space-y-4">
@@ -405,67 +443,193 @@ export default function SummaryPage() {
               )}
             </div>
 
+            {/* Transition to Distribution Insights */}
+            {summaryArtifactCards.length > 0 && distributionInsightCards.length > 0 && (
+              <LensTransition text="Short bursts compound into longer-term structure." />
+            )}
+
             {/* Distribution Insights Panel */}
             {distributionInsightCards.length > 0 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold flex items-center gap-2 text-zinc-50">
-                    Distribution Insights
-                  </h2>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setInsightView('panel')}
-                      className={`text-xs px-3 py-1 rounded border transition-colors ${
-                        insightView === 'panel'
-                          ? 'bg-white/10 border-white/20 text-white'
-                          : 'bg-white/5 border-white/10 text-white/60 hover:text-white/80'
-                      }`}
-                    >
-                      Panel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setInsightView('timeline')}
-                      className={`text-xs px-3 py-1 rounded border transition-colors ${
-                        insightView === 'timeline'
-                          ? 'bg-white/10 border-white/20 text-white'
-                          : 'bg-white/5 border-white/10 text-white/60 hover:text-white/80'
-                      }`}
-                    >
-                      Timeline
-                    </button>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-                  {insightView === 'panel' ? (
-                    <InsightPanel insights={distributionInsightCards.map(card => {
-                      const cardWithMeta = card as InsightCard & { _scope?: 'week' | 'month' | 'year'; _confidence?: 'low' | 'medium' | 'high' };
-                      return {
-                        id: card.id,
-                        scope: cardWithMeta._scope || 'week',
-                        headline: card.title,
-                        summary: card.explanation,
-                        confidence: cardWithMeta._confidence || 'medium',
-                      };
-                    })} />
-                  ) : (
-                    <InsightTimeline insights={distributionInsightCards.map(card => {
-                      const cardWithMeta = card as InsightCard & { _scope?: 'week' | 'month' | 'year'; _confidence?: 'low' | 'medium' | 'high' };
-                      return {
-                        id: card.id,
-                        scope: cardWithMeta._scope || 'week',
-                        headline: card.title,
-                        summary: card.explanation,
-                        confidence: cardWithMeta._confidence || 'medium',
-                      };
-                    })} />
-                  )}
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-zinc-50">
+                  Distribution Insights
+                </h2>
+                <div className="space-y-4">
+                  {distributionInsightCards.map((card, index) => {
+                    const cardWithMeta = card as InsightCard & { _scope?: 'week' | 'month' | 'year'; _confidence?: 'low' | 'medium' | 'high' };
+                    const scope = cardWithMeta._scope || 'week';
+                    const isPrimary = index === 0;
+                    
+                    // Compute daily counts for visual based on scope
+                    const now = new Date();
+                    let sparklineValues: number[] = [];
+                    let totalEntries = 0;
+                    let windowReflections: typeof reflections = [];
+                    
+                    if (scope === 'week') {
+                      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                      windowReflections = filterEventsByWindow(reflections, start, now);
+                      const byDay = groupByDay(windowReflections);
+                      totalEntries = windowReflections.length;
+                      
+                      // Get daily counts for last 7 days
+                      for (let i = 6; i >= 0; i--) {
+                        const date = new Date(now);
+                        date.setDate(now.getDate() - i);
+                        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                        sparklineValues.push(byDay.get(dateKey)?.length || 0);
+                      }
+                    } else if (scope === 'month') {
+                      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                      windowReflections = filterEventsByWindow(reflections, start, now);
+                      const byDay = groupByDay(windowReflections);
+                      totalEntries = windowReflections.length;
+                      
+                      // Downsample 30 days to 24 bars
+                      const dailyCounts: number[] = [];
+                      for (let i = 29; i >= 0; i--) {
+                        const date = new Date(now);
+                        date.setDate(now.getDate() - i);
+                        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                        dailyCounts.push(byDay.get(dateKey)?.length || 0);
+                      }
+                      // Downsample: take evenly spaced values
+                      const step = dailyCounts.length / 24;
+                      sparklineValues = Array.from({ length: 24 }, (_, i) => {
+                        const idx = Math.floor(i * step);
+                        return dailyCounts[idx] || 0;
+                      });
+                    } else if (scope === 'year') {
+                      const start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                      windowReflections = filterEventsByWindow(reflections, start, now);
+                      const byDay = groupByDay(windowReflections);
+                      totalEntries = windowReflections.length;
+                      
+                      // Get monthly counts (12 values)
+                      const monthlyCounts: number[] = [];
+                      for (let m = 11; m >= 0; m--) {
+                        const monthStart = new Date(now.getFullYear(), now.getMonth() - m, 1);
+                        const monthEnd = new Date(now.getFullYear(), now.getMonth() - m + 1, 0);
+                        let monthCount = 0;
+                        for (const [dateKey, entries] of byDay.entries()) {
+                          const date = new Date(dateKey);
+                          if (date >= monthStart && date <= monthEnd) {
+                            monthCount += entries.length;
+                          }
+                        }
+                        monthlyCounts.push(monthCount);
+                      }
+                      sparklineValues = monthlyCounts;
+                    }
+                    
+                    // Compute active days
+                    const activeDaysSet = new Set<string>();
+                    const byDayForActive = groupByDay(windowReflections);
+                    for (const [dateKey, entries] of byDayForActive.entries()) {
+                      if (entries.length > 0) {
+                        activeDaysSet.add(dateKey);
+                      }
+                    }
+                    const activeDays = activeDaysSet.size;
+                    
+                    // Compute distribution stats for spike ratio and top 10% share
+                    const windowDays = scope === 'week' ? 7 : scope === 'month' ? 30 : 365;
+                    const distributionResult = computeDistributionLayer(windowReflections, { windowDays });
+                    const spikeRatio = distributionResult.stats.spikeRatio;
+                    const top10SharePercent = distributionResult.stats.top10PercentDaysShare * 100;
+                    
+                    // Determine intensity (legacy string for display)
+                    const intensity = totalEntries >= 50 ? 'High' : totalEntries >= 20 ? 'Medium' : 'Low';
+                    
+                    // Compute unified intensity levels
+                    const entryIntensity = intensityFromEntryCount(totalEntries, scope);
+                    const spikeIntensity = intensityFromSpikeRatio(spikeRatio);
+                    const top10Intensity = intensityFromTop10Share(top10SharePercent);
+                    
+                    const scopeLabel = scope.charAt(0).toUpperCase() + scope.slice(1);
+                    const confidenceLabel = cardWithMeta._confidence || 'medium';
+                    const confidenceDisplay = confidenceLabel.charAt(0).toUpperCase() + confidenceLabel.slice(1);
+                    
+                    // Primary label based on scope
+                    const primaryLabel = isPrimary
+                      ? scope === 'week'
+                        ? 'Primary structural pattern this week'
+                        : scope === 'month'
+                        ? 'Primary structural pattern this month'
+                        : 'Primary structural pattern this year'
+                      : undefined;
+                    
+                    // Icon based on scope
+                    const icon = (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                        {scope === 'week' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        ) : scope === 'month' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        )}
+                      </svg>
+                    );
+                    
+                    return (
+                      <div key={card.id} className="summary-card-fade">
+                        <InsightSignalCard
+                          title={card.title}
+                          icon={icon}
+                          chips={[
+                          { label: `Window: ${scopeLabel}` },
+                          { label: `Intensity: ${intensity}`, intensity: entryIntensity },
+                          { label: `Entries: ${totalEntries} ${interpretEntryCount(totalEntries, scope)}`, intensity: entryIntensity },
+                          { label: `Active days: ${activeDays} ${interpretActiveDays(activeDays, windowDays)}` },
+                          { label: `Spike ratio: ${spikeRatio.toFixed(1)}x ${interpretSpikeRatio(spikeRatio)}`, intensity: spikeIntensity },
+                          { label: `Top 10% share: ${top10SharePercent.toFixed(0)}% ${interpretTop10Share(top10SharePercent)}`, intensity: top10Intensity },
+                        ]}
+                        rightMeta={`${totalEntries} entries`}
+                        chart={<MiniHistogram values={sparklineValues} intensity={spikeIntensity} />}
+                        primaryLabel={primaryLabel}
+                        >
+                          {card.explanation.split('.')[0]}.
+                        </InsightSignalCard>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
+
+            {/* What this shows / does not show */}
+            {summaryArtifactCards.length > 0 && (() => {
+              const boundaries = getLensBoundaries('summary', narrativeTone);
+              return (
+                <div className="pt-6 mt-6">
+                  <ObservationalDivider />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs mt-6">
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this shows</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.shows.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this does not show</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.doesNotShow.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
+
+        {/* Session Closing */}
+        <SessionClosing lens="summary" narrativeTone={narrativeTone} />
       </section>
     </div>
   );

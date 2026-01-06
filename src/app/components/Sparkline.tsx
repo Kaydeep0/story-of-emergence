@@ -40,7 +40,7 @@ export function Sparkline({ dailyCounts, dates, isLoading, values, width = 80, h
   }).join(' ');
 
   return (
-    <svg width={width} height={height} className="text-white/40">
+    <svg width={width} height={height} className="text-white/40" style={{ animation: 'waveSubtle 2s ease-in-out 0.3s' }}>
       <polyline
         points={points}
         fill="none"
@@ -48,6 +48,9 @@ export function Sparkline({ dailyCounts, dates, isLoading, values, width = 80, h
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
+        style={{
+          animation: 'waveSubtle 2s ease-in-out 0.3s',
+        }}
       />
     </svg>
   );

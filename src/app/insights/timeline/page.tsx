@@ -22,8 +22,20 @@ import { TimelineSectionSkeleton } from '../components/InsightsSkeleton';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { generateTimelineArtifact } from '../../lib/artifacts/timelineArtifact';
 import { InsightDebugPanel } from '../components/InsightDebugPanel';
-import { Sparkline } from '../../components/Sparkline';
+import { TimelineWaveform } from '../../components/TimelineWaveform';
 import type { InsightArtifact } from '../../lib/insights/artifactTypes';
+import { useNarrativeTone } from '../hooks/useNarrativeTone';
+import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
+import { getLensPurposeCopy, getLensBoundaries } from '../lib/lensPurposeCopy';
+import { LensTransition } from '../components/LensTransition';
+import { ObservationalDivider } from '../components/ObservationalDivider';
+import { SessionClosing } from '../components/SessionClosing';
+import { useDensity } from '../hooks/useDensity';
+import { DensityToggle } from '../components/DensityToggle';
+import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
+import { computeDistributionLayer, computeActiveDays } from '../../lib/insights/distributionLayer';
+import { filterEventsByWindow } from '../../lib/insights/timeWindows';
+import '../styles/delights.css';
 
 /**
  * Compute trend summary counts from topic drift buckets
@@ -65,6 +77,8 @@ export default function TimelinePage() {
   const [contrastPairs, setContrastPairs] = useState<ContrastPair[]>([]);
   const [timelineArtifact, setTimelineArtifact] = useState<import('../../lib/lifetimeArtifact').ShareArtifact | null>(null);
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
+  const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
+  const { densityMode, handleDensityChange } = useDensity(address, mounted);
   const [showTimelineCapsuleDialog, setShowTimelineCapsuleDialog] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<any>(null);
@@ -227,6 +241,62 @@ export default function TimelinePage() {
     });
   }, [reflections, address]);
 
+  // Build SharePack from timeline lens state
+  const sharePack = useMemo<SharePack | null>(() => {
+    if (reflections.length === 0 || !address || spikeInsights.length === 0) return null;
+
+    try {
+      // Get all-time window for timeline
+      const dates = reflections.map(r => new Date(r.createdAt));
+      const windowStart = dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date();
+      const windowEnd = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : new Date();
+      const windowReflections = filterEventsByWindow(reflections, windowStart, windowEnd);
+      
+      // Compute distribution layer for metrics
+      const distributionResult = computeDistributionLayer(windowReflections, windowStart, windowEnd);
+      
+      const entryCount = windowReflections.length;
+      const activeDays = computeActiveDays(distributionResult?.dailyCounts || []);
+      
+      // Compute spike count from spike insights
+      const spikeCount = spikeInsights.length;
+      
+      // Get top spike dates as key moments
+      const keyMoments = spikeInsights.slice(0, 3).map(spike => ({
+        date: spike.date,
+      }));
+
+      const concentration = distributionResult?.stats.top10PercentDaysShare || 0;
+      
+      // Get one sentence summary from primary spike
+      const primarySpike = spikeInsights[0];
+      const oneSentenceSummary = primarySpike?.headline || `Timeline with ${spikeCount} activity spikes`;
+
+      // Determine distribution label
+      const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+        concentration > 0.4 ? 'powerlaw' :
+        concentration > 0.2 ? 'lognormal' :
+        'normal';
+
+      return buildSharePackForLens({
+        lens: 'timeline',
+        oneSentenceSummary,
+        entryCount,
+        activeDays,
+        distributionLabel,
+        concentrationShareTop10PercentDays: concentration,
+        spikeCount,
+        keyMoments,
+        periodStart: windowStart.toISOString(),
+        periodEnd: windowEnd.toISOString(),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('Failed to build timeline SharePack:', err);
+      return null;
+    }
+  }, [reflections, address, spikeInsights]);
+
   // Compute timeline daily data for sparkline
   const timelineDailyData = useMemo(() => {
     if (reflections.length === 0) {
@@ -307,8 +377,22 @@ export default function TimelinePage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
-        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex-1 text-center">
+            <h1 className="text-2xl font-normal">{lens.label}</h1>
+            <p className="text-sm text-white/50 mt-1">{lens.description}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <DensityToggle density={densityMode} onDensityChange={handleDensityChange} />
+            <NarrativeToneSelector tone={narrativeTone} onToneChange={handleToneChange} />
+          </div>
+        </div>
+
+        {/* Why this lens exists */}
+        <div className="mb-6 pb-6 border-b border-white/10">
+          <p className="text-xs text-white/50 mb-1">Why this lens exists</p>
+          <p className="text-sm text-white/60 leading-relaxed">{getLensPurposeCopy('timeline', narrativeTone)}</p>
+        </div>
 
         <InsightsTabs />
 
@@ -321,8 +405,8 @@ export default function TimelinePage() {
         )}
 
         {error && (
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
-            <p className="text-sm text-rose-400">{error}</p>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-white/60">{error}</p>
           </div>
         )}
 
@@ -353,22 +437,25 @@ export default function TimelinePage() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-                  <Sparkline 
-                    dailyCounts={timelineDailyData.dailyCounts} 
+                  <TimelineWaveform 
+                    dailyCounts={timelineDailyData.dailyCounts}
                     dates={timelineDailyData.dates}
-                    isLoading={false}
+                    width={800}
+                    height={200}
+                    narrativeTone={narrativeTone}
                   />
                 </div>
               )}
             </div>
 
             {/* Share Actions */}
-            <ShareActionsBar
-              artifact={timelineArtifact}
-              senderWallet={address}
-              encryptionReady={encryptionReady}
-              onSendPrivately={() => setShowTimelineCapsuleDialog(true)}
-            />
+            {sharePack && (
+              <ShareActionsBar
+                sharePack={sharePack}
+                senderWallet={address}
+                encryptionReady={encryptionReady}
+              />
+            )}
 
             {/* Timeline Spikes Section */}
             <div className="space-y-4">
@@ -610,9 +697,9 @@ export default function TimelinePage() {
                     };
                     
                     const strengthStyles = {
-                      high: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-                      medium: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-                      low: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+                      high: 'bg-white/10 text-white/70 border-white/20',
+                      medium: 'bg-white/8 text-white/60 border-white/15',
+                      low: 'bg-white/5 text-white/50 border-white/10',
                     };
                     const strengthLabels = {
                       high: 'High Drift',
@@ -739,6 +826,42 @@ export default function TimelinePage() {
             </div>
           </div>
         )}
+
+        {/* Transition to boundaries */}
+        {!loading && !error && reflections.length > 0 && (spikeInsights.length > 0 || clusterInsights.length > 0) && (
+          <LensTransition text="Over time, these bursts settle into patterns." />
+        )}
+
+        {/* What this shows / does not show */}
+        {!loading && !error && reflections.length > 0 && (spikeInsights.length > 0 || clusterInsights.length > 0) && (() => {
+          const boundaries = getLensBoundaries('timeline', narrativeTone);
+          return (
+            <div className="pt-6 mt-6">
+              <ObservationalDivider />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs mt-6">
+                <div>
+                  <div className="text-white/60 font-medium mb-2">What this shows</div>
+                  <ul className="space-y-1 text-white/50 list-none">
+                    {boundaries.shows.map((item, idx) => (
+                      <li key={idx}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="text-white/60 font-medium mb-2">What this does not show</div>
+                  <ul className="space-y-1 text-white/50 list-none">
+                    {boundaries.doesNotShow.map((item, idx) => (
+                      <li key={idx}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Session Closing */}
+        <SessionClosing lens="timeline" narrativeTone={narrativeTone} />
 
         {/* Insight Detail Drawer */}
         <InsightDrawer

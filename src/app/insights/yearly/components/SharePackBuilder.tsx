@@ -20,6 +20,7 @@ import { getTopSpikeDates } from '../../../lib/insights/distributionLayer';
 import { buildYearlySharePack, type SharePack as CanonicalSharePack, type YearlyInsightData } from '../../../lib/share/sharePack';
 import type { SharePack } from '@/app/lib/share/sharePack';
 import { renderSharePack, type SharePackFrame } from '../../../lib/share/renderSharePack';
+import { SharePackRenderer } from '../../../lib/share/SharePackRenderer';
 import { buildSharePack, type SharePackSelection, type SharePackPlatform } from '../share/sharePack';
 import { renderSharePack as legacyRenderSharePack, type ShareFrame } from '../../../share/renderers/renderSharePack';
 import { ShareActions } from './ShareActions';
@@ -1090,7 +1091,7 @@ export function SharePackBuilder({
                         }}>
                           {/* Phase 3.2: Use canonical renderSharePack for preview */}
                           {previewCanonicalPack ? (
-                            renderSharePack(previewCanonicalPack, { frame: mapFrameToCanonical(frame) })
+                            <SharePackRenderer sharePack={previewCanonicalPack} mode="preview" frame={mapFrameToCanonical(frame)} />
                           ) : (
                             <div className="text-white/60 text-sm p-8">No data available</div>
                           )}
@@ -1231,7 +1232,7 @@ export function SharePackBuilder({
               id="yearly-share-export-card"
               style={{ position: 'absolute', left: '-9999px', top: 0, visibility: 'hidden' }}
             >
-              {renderSharePack(generatedCanonicalPack, { frame: mapFrameToCanonical(frame) })}
+              <SharePackRenderer sharePack={generatedCanonicalPack} mode="png" frame={mapFrameToCanonical(frame)} />
             </div>
           )}
         </div>

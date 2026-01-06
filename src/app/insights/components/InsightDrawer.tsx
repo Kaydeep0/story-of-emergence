@@ -8,10 +8,17 @@ import type { TopicDriftBucket } from '../../lib/insights/topicDrift';
 import type { ContrastPair } from '../../lib/insights/contrastPairs';
 import type { YearOverYearCard } from '../../lib/insights/computeYearOverYear';
 import type { SourceEntryLite } from '../../lib/insights/fromSources';
-import { listSourcesForReflection, linkSourceToReflection, unlinkSourceFromReflection } from '../../lib/reflectionSources';
-import { listExternalSources, type ExternalSourceDecrypted } from '../../lib/externalSources';
+import { listSourcesForEntry, linkSourceToEntry, unlinkSourceFromEntry } from '../../lib/entrySources';
+import { listSources, type SourceDecrypted } from '../../lib/sources';
 import { assertInsightTone } from '../../lib/insights/insightGuardrails';
 import { toast } from 'sonner';
+import { rpcFetchEntries } from '../../lib/entries';
+import { itemToReflectionEntry, attachDemoSourceLinks } from '../../lib/insights/timelineSpikes';
+import { useReflectionLinks } from '../../lib/reflectionLinks';
+import { getOrBuildGraph } from '../../../lib/graph/graphCache';
+import type { Edge } from '../../../lib/graph/buildReflectionGraph';
+import type { Reflection } from '../../../lib/graph/buildReflectionGraph';
+import { RelatedReflections } from '../../../components/reflections/RelatedReflections';
 
 /**
  * Normalized insight type that the drawer can consume
@@ -243,11 +250,15 @@ function ReflectionPreviewPanel({
 }) {
   const { address } = useAccount();
   const { ready: encryptionReady, aesKey: sessionKey } = useEncryptionSession();
-  const [linkedSources, setLinkedSources] = useState<ExternalSourceDecrypted[]>([]);
+  const { getSourceIdFor } = useReflectionLinks(address);
+  const [linkedSources, setLinkedSources] = useState<SourceDecrypted[]>([]);
   const [loadingSources, setLoadingSources] = useState(false);
   const [showAddSource, setShowAddSource] = useState(false);
-  const [availableSources, setAvailableSources] = useState<ExternalSourceDecrypted[]>([]);
+  const [availableSources, setAvailableSources] = useState<SourceDecrypted[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string>('');
+  const [allReflections, setAllReflections] = useState<ReflectionEntry[]>([]);
+  const [graphEdges, setGraphEdges] = useState<Edge[]>([]);
+  const [loadingGraph, setLoadingGraph] = useState(false);
 
   // Close on Escape key
   useEffect(() => {
@@ -272,7 +283,7 @@ function ReflectionPreviewPanel({
       if (!address || !entry || !sessionKey) return;
       try {
         setLoadingSources(true);
-        const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+        const sources = await listSourcesForEntry(address, entry.id, sessionKey);
         setLinkedSources(sources);
       } catch (err) {
         console.error('Failed to load linked sources', err);
@@ -294,7 +305,7 @@ function ReflectionPreviewPanel({
     async function loadAvailableSources() {
       if (!address || !sessionKey) return;
       try {
-        const sources = await listExternalSources(address, sessionKey);
+        const sources = await listSources(address, sessionKey);
         // Filter out already linked sources
         const linkedIds = new Set(linkedSources.map(s => s.id));
         setAvailableSources(sources.filter(s => !linkedIds.has(s.id)));
@@ -311,9 +322,9 @@ function ReflectionPreviewPanel({
     if (!entry || !address || !selectedSourceId || !sessionKey) return;
 
     try {
-      await linkSourceToReflection(address, entry.id, selectedSourceId);
+      await linkSourceToEntry(address, entry.id, selectedSourceId);
       // Reload linked sources
-      const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+      const sources = await listSourcesForEntry(address, entry.id, sessionKey);
       setLinkedSources(sources);
       setShowAddSource(false);
       setSelectedSourceId('');
@@ -328,9 +339,9 @@ function ReflectionPreviewPanel({
     if (!entry || !address || !sessionKey) return;
 
     try {
-      await unlinkSourceFromReflection(address, entry.id, sourceId);
+      await unlinkSourceFromEntry(address, entry.id, sourceId);
       // Reload linked sources
-      const sources = await listSourcesForReflection(address, entry.id, sessionKey);
+      const sources = await listSourcesForEntry(address, entry.id, sessionKey);
       setLinkedSources(sources);
       toast.success('Source unlinked');
     } catch (err: any) {
@@ -395,6 +406,22 @@ function ReflectionPreviewPanel({
             <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
           </div>
 
+          {/* Related reflections */}
+          {!loadingGraph && entry && graphEdges.length > 0 && allReflections.length > 0 && (
+            <RelatedReflections
+              reflectionId={entry.id}
+              edges={graphEdges}
+              allReflections={allReflections.map(r => ({
+                id: r.id,
+                createdAt: r.createdAt,
+                text: r.plaintext,
+              }))}
+              onReflectionClick={(reflectionId) => {
+                onClose();
+              }}
+            />
+          )}
+
           {/* Linked sources section */}
           {encryptionReady && address && (
             <div className="pt-6 border-t border-white/10">
@@ -420,7 +447,7 @@ function ReflectionPreviewPanel({
                     <option value="">Select a source</option>
                     {availableSources.map((source) => (
                       <option key={source.id} value={source.id}>
-                        {source.title} ({source.source_type}, {source.occurred_at_year})
+                        {source.title} ({source.kind})
                       </option>
                     ))}
                   </select>
@@ -459,10 +486,7 @@ function ReflectionPreviewPanel({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/60 capitalize">
-                            {source.source_type}
-                          </span>
-                          <span className="text-xs text-white/40">
-                            {source.occurred_at_year}
+                            {source.kind}
                           </span>
                         </div>
                         <p className="text-xs text-white/80 font-medium truncate">
@@ -534,6 +558,22 @@ function ReflectionPreviewPanel({
             <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{entry.plaintext}</p>
           </div>
 
+          {/* Related reflections */}
+          {!loadingGraph && entry && graphEdges.length > 0 && allReflections.length > 0 && (
+            <RelatedReflections
+              reflectionId={entry.id}
+              edges={graphEdges}
+              allReflections={allReflections.map(r => ({
+                id: r.id,
+                createdAt: r.createdAt,
+                text: r.plaintext,
+              }))}
+              onReflectionClick={(reflectionId) => {
+                onClose();
+              }}
+            />
+          )}
+
           {/* Linked sources section */}
           {encryptionReady && address && (
             <div className="pt-6 border-t border-white/10">
@@ -559,7 +599,7 @@ function ReflectionPreviewPanel({
                     <option value="">Select a source</option>
                     {availableSources.map((source) => (
                       <option key={source.id} value={source.id}>
-                        {source.title} ({source.source_type}, {source.occurred_at_year})
+                        {source.title} ({source.kind})
                       </option>
                     ))}
                   </select>
@@ -598,10 +638,7 @@ function ReflectionPreviewPanel({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-white/60 capitalize">
-                            {source.source_type}
-                          </span>
-                          <span className="text-xs text-white/40">
-                            {source.occurred_at_year}
+                            {source.kind}
                           </span>
                         </div>
                         <p className="text-xs text-white/80 font-medium truncate">

@@ -30,6 +30,7 @@ import { YearShapeGlyph } from '../../components/yearly/YearShapeGlyph';
 import { GrowthStory } from '../../components/yearly/GrowthStory';
 import { ThreeMoments } from '../../components/yearly/ThreeMoments';
 import { determineArchetype } from '../../lib/yearlyArchetype';
+import { ArchetypeSigil } from '../../components/yearly/ArchetypeSigil';
 import { SharePackBuilder } from './components/SharePackBuilder';
 import { UnderlyingRhythmCard } from './components/UnderlyingRhythmCard';
 import { MirrorSection } from './components/MirrorSection';
@@ -40,7 +41,16 @@ import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import { buildMeaningCapsule } from '../../lib/share/meaningCapsule';
 import { buildPublicSharePayload } from '../../lib/share/publicSharePayload';
 import type { PublicSharePayload } from '../../lib/share/publicSharePayload';
+import { useNarrativeTone } from '../hooks/useNarrativeTone';
+import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
+import { getLensPurposeCopy, getLensBoundaries } from '../lib/lensPurposeCopy';
+import { LensTransition } from '../components/LensTransition';
 import type { InsightArtifact } from '../../lib/insights/artifactTypes';
+import { ObservationalDivider } from '../components/ObservationalDivider';
+import { SessionClosing } from '../components/SessionClosing';
+import { useDensity } from '../hooks/useDensity';
+import { DensityToggle } from '../components/DensityToggle';
+import '../styles/delights.css';
 
 // Yearly Wrap v1 - Locked
 const YEARLY_WRAP_VERSION = 'v1' as const;
@@ -61,6 +71,8 @@ export default function YearlyWrapPage() {
   const [includeNumbers, setIncludeNumbers] = useState(false);
   const [privateMode, setPrivateMode] = useState(true);
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
+  const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
+  const { densityMode, handleDensityChange } = useDensity(address, mounted);
 
   // Removed yearlyArtifact state - sharing is handled by SharePackBuilder
 
@@ -583,8 +595,8 @@ export default function YearlyWrapPage() {
 
         {/* Error State */}
         {error && !loading && (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-6 text-center">
-            <p className="text-red-400">{error}</p>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+            <p className="text-white/60">{error}</p>
           </div>
         )}
 
@@ -638,7 +650,6 @@ export default function YearlyWrapPage() {
         })() && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
             <p className="text-white/70 mb-2">Yearly wrap is still forming. Data is present.</p>
-            <p className="text-sm text-white/50">See debug panel above for details.</p>
           </div>
         )}
 
@@ -675,6 +686,12 @@ export default function YearlyWrapPage() {
               </p>
             </div>
 
+            {/* Why this lens exists */}
+            <div className="mb-6 pb-6 border-b border-white/10">
+              <p className="text-xs text-white/50 mb-1">Why this lens exists</p>
+              <p className="text-sm text-white/60 leading-relaxed">{getLensPurposeCopy('yearly', narrativeTone)}</p>
+            </div>
+
             {/* 1️⃣ IDENTITY: One-sentence summary with year */}
             {distributionResult && windowDistribution && (
               <IdentityLine
@@ -700,10 +717,21 @@ export default function YearlyWrapPage() {
             {/* Archetype - Prominently displayed if present */}
             {archetype && (
               <div className="rounded-2xl border border-white/15 bg-white/8 p-6 sm:p-8">
-                <div className="text-xs text-white/50 mb-2 uppercase tracking-wide">Your Archetype</div>
-                <h2 className="text-xl sm:text-2xl font-semibold text-white/90 mb-2">{archetype.name}</h2>
-                <p className="text-sm sm:text-base text-white/70 leading-relaxed italic mb-2">{archetype.tagline}</p>
-                <p className="text-sm sm:text-base text-white/70 leading-relaxed">{archetype.explanation}</p>
+                <div className="text-xs text-white/50 mb-4 uppercase tracking-wide">Your Archetype</div>
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="flex-shrink-0">
+                    <ArchetypeSigil 
+                      archetypeName={archetype.name} 
+                      size={80}
+                      narrativeTone={narrativeTone}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-white/90 mb-2">{archetype.name}</h2>
+                    <p className="text-sm sm:text-base text-white/70 leading-relaxed italic mb-2">{archetype.tagline}</p>
+                    <p className="text-sm sm:text-base text-white/70 leading-relaxed">{archetype.explanation}</p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -717,7 +745,9 @@ export default function YearlyWrapPage() {
                 </p>
                 
                 {/* Emergence Interpretation Panel - Philosophy-aligned orientation */}
-                <div className="mt-6 pt-6 border-t border-white/10 space-y-4">
+                <div className="mt-6 pt-6 space-y-4">
+                  <ObservationalDivider />
+                  <div className="mt-6">
                   <div>
                     <h4 className="text-xs text-white/60 mb-1.5 font-medium">What this shows</h4>
                     <p className="text-xs text-white/50 leading-relaxed">
@@ -736,12 +766,16 @@ export default function YearlyWrapPage() {
                       This is not a score, a goal, or a recommendation. It is an observation of how your attention has moved, not an instruction for how it should move.
                     </p>
                   </div>
+                  </div>
                 </div>
                 
                 {/* Continuity Anchor - Acknowledges time passing without concluding */}
-                <p className="text-xs text-white/40 mt-6 pt-4 text-center italic border-t border-white/5">
-                  These patterns continue to unfold as time passes.
-                </p>
+                <div className="mt-6 pt-4">
+                  <ObservationalDivider />
+                  <p className="text-xs text-white/40 mt-6 text-center italic">
+                    These patterns continue to unfold as time passes.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -839,12 +873,46 @@ export default function YearlyWrapPage() {
             {/* Growth Story - Additional context */}
             {reflections.length >= 10 && <GrowthStory entries={reflections} />}
 
+            {/* Transition to boundaries */}
+            <LensTransition text="Over time, these bursts settle into patterns." />
+
+            {/* What this shows / does not show */}
+            {(() => {
+              const boundaries = getLensBoundaries('yearly', narrativeTone);
+              return (
+                <div className="pt-6 mt-6 border-t border-white/10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this shows</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.shows.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this does not show</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.doesNotShow.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Footer note */}
-            <div className="pt-6 border-t border-white/10">
-              <p className="text-xs text-white/40 text-center">
+            <div className="pt-6">
+              <ObservationalDivider />
+              <p className="text-xs text-white/40 text-center mt-6">
                 Yearly Wrap · Private · Computed Locally
               </p>
             </div>
+
+            {/* Session Closing */}
+            <SessionClosing lens="yearly" narrativeTone={narrativeTone} />
           </div>
         )}
 

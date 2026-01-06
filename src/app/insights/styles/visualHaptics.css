@@ -1,0 +1,150 @@
+/* Visual Haptics - Tactile feedback through visual means */
+
+/* Compression on hover - slight scale down */
+@keyframes compress {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(0.98);
+  }
+}
+
+/* Glow intensification on focus */
+@keyframes glowIntensify {
+  0% {
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.3));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
+  }
+}
+
+/* Subtle lift on hover (inverse of compression for some elements) */
+@keyframes liftSubtle {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-1px);
+  }
+}
+
+/* Visual haptic classes */
+.visual-haptic-compress {
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.visual-haptic-compress:hover {
+  transform: scale(0.99);
+  box-shadow: 0 -2px 12px rgba(16, 185, 129, 0.25), -2px 0 12px rgba(16, 185, 129, 0.2), 2px 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.visual-haptic-compress:active {
+  transform: scale(0.97);
+}
+
+.visual-haptic-glow {
+  transition: filter 0.2s ease-out;
+}
+
+.visual-haptic-glow:focus,
+.visual-haptic-glow:focus-visible {
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
+  outline: none;
+}
+
+.visual-haptic-lift {
+  transition: transform 0.15s ease-out;
+}
+
+.visual-haptic-lift:hover {
+  transform: translateY(-1px);
+}
+
+/* Chart proximity response */
+.chart-proximity {
+  transition: opacity 0.2s ease-out, filter 0.2s ease-out;
+}
+
+.chart-proximity:hover {
+  opacity: 1;
+  filter: brightness(1.1);
+}
+
+/* Button haptic feedback */
+.button-haptic {
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+}
+
+.button-haptic:hover {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+.button-haptic:active {
+  transform: scale(0.96);
+}
+
+/* Card haptic feedback - calm instrument panel feel */
+.card-haptic {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s ease-out;
+}
+
+.card-haptic:hover {
+  transform: scale(0.995);
+  box-shadow: 0 -2px 12px rgba(16, 185, 129, 0.2), 
+              -2px 0 12px rgba(16, 185, 129, 0.15), 
+              2px 0 12px rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.card-haptic:focus-within {
+  box-shadow: 0 -2px 16px rgba(16, 185, 129, 0.3), 
+              -2px 0 16px rgba(16, 185, 129, 0.25), 
+              2px 0 16px rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* Chip/pill haptic feedback */
+.chip-haptic {
+  transition: transform 0.1s ease-out, 
+              box-shadow 0.1s ease-out,
+              background-color 0.1s ease-out;
+}
+
+.chip-haptic:hover {
+  transform: scale(0.95);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.2);
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+/* Chart bar haptic feedback */
+.chart-bar-haptic {
+  transition: transform 0.15s ease-out, 
+              opacity 0.15s ease-out,
+              filter 0.15s ease-out;
+}
+
+.chart-bar-haptic:hover {
+  transform: scaleY(1.05) translateY(-1px);
+  opacity: 1;
+  filter: brightness(1.2);
+}
+
+/* Subtle pulse on hover for interactive elements */
+@keyframes hapticPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.haptic-pulse:hover {
+  animation: hapticPulse 1.5s ease-in-out infinite;
+}
+

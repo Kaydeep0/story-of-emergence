@@ -1,113 +1,188 @@
-# Story of Emergence — Project Status
+# STATUS
 
-**Status date:** January 2, 2026
+## Operating Frame
 
----
+**Stance**
+A Mirror that can speak, but cannot steer.
 
-## Repo State
+We allow insight.
+We forbid control.
 
-- **Branch expected:** `main`
-- **Working tree expected:** clean
-- **Typecheck:** passing
-- **Build:** passing
-
----
-
-## Verified Commands
-
-- `npm run typecheck`
-- `npm run build`
-- `pnpm dev`
+**Layers**
+Vault layer: encryption session, entries, RLS, storage, migrations
+Lens layer: insights computed locally after decrypt
+Meaning layer: threads, bridges, pins
+Distribution layer: sharing and artifacts with one canonical spine
 
 ---
 
-## Today Accomplished
+## Scope Freeze (One Week)
 
-### 1. Environment Stabilization
-- Node 20 pinned
-- Next 16 build stable with Turbopack
+**IMPORTANT: Architecture settlement period**
 
-### 2. Production Readiness Check
-- typecheck passes
-- build passes
+For the next week:
 
-### 3. React Correctness Fix
-- Lifetime page hooks moved to top to satisfy Rules of Hooks
+**NOT ALLOWED:**
+- No new lenses
+- No new metrics
+- No new "helpful" features
+- No new capabilities
 
-### 4. Runtime Verification
-- Dev server runs
-- Insights pages respond
-- Internal event logging endpoint responds
+**ONLY ALLOWED:**
+- Bug fixes
+- Consistency improvements
+- Language alignment (interpretation over prescription)
+- Finishing migrations (SharePack, entries table, etc.)
 
----
+**Purpose:** Let the architecture settle. The Distribution layer spine is complete. The Meaning layer language is aligned. Now we stabilize.
 
-## Current Route Inventory
-
-**Core Routes:**
-- `/` - Home/Reflections view
-- `/insights` - Redirects to `/insights/summary`
-- `/insights/weekly` - Weekly lens (uses canonical engine)
-- `/insights/summary` - Summary lens
-- `/insights/timeline` - Timeline lens
-- `/insights/yearly` - Yearly lens
-- `/insights/yearly-wrap` - Yearly wrap view
-- `/insights/distributions` - Distribution analysis
-- `/insights/yoy` - Year over Year comparison
-- `/insights/lifetime` - Lifetime signal inventory
-- `/sources` - Sources list page
-- `/sources/[sourceId]` - Source detail page
-- `/shared` - Shared items landing
-- `/shared/open` - Open capsule from URL param
-- `/shared/open/[id]` - Open capsule by ID
-- `/shared/wallet/[id]` - Wallet share page (stub)
-- `/share/[capsuleId]` - Legacy share pack renderer
-- `/share/year/[slug]` - Public year share page
-
-**API Routes:**
-- `/api/capsules` - Create capsule (POST)
-- `/api/capsules/[capsuleId]` - Get capsule (GET)
-- `/api/events/log` - Internal events logging (POST)
-- `/api/summary` - Summary API endpoint
-- `/api/timeline` - Timeline API endpoint
+**End date:** [Set one week from today]
 
 ---
 
-## Known Issues
+## Post-Stability Cleanup (After Scope Freeze)
 
-- Port 3000 may already be in use if dev server is running when starting production server
-- If `next start` fails with EADDRINUSE, stop dev server or change port
+**When:** Only once you feel calm. After stability period.
+
+**Purpose:** Reduce cognitive load. This is cleanup, not urgency.
+
+**Tasks:**
+
+1. **Remove legacy share routes:**
+   - `/shared/open` (capsule URLs)
+   - `/shared/open/[id]` (old share links)
+   - Keep deprecated tables inert (don't delete, just leave them)
+
+2. **Remove deprecated code:**
+   - `src/app/lib/shares.ts` (legacy share helpers)
+   - Any remaining references to `accepted_shares`, `capsules`, `public.shares` tables
+
+3. **Verification:**
+   - `rg "accepted_shares|capsules|public.shares"` returns no active usage paths
+   - App still shares, receives, opens, exports correctly
+   - All shares use `wallet_shares` table and `SharePack` format
+
+**Note:** Deprecated database tables remain inert. No need to drop them. Just remove code paths.
 
 ---
 
-## How to Verify Tomorrow Morning
+## Current state
 
-1. `git status` should be clean
-2. `npm run typecheck` should pass
-3. `npm run build` should pass
-4. `pnpm dev` should start and load:
-   - `/`
-   - `/insights/weekly`
-   - `/insights/summary`
-   - `/insights/yearly`
-   - `/insights/lifetime`
-   - `/sources`
-   - `/shared`
+Story of Emergence is a private, wallet bound reflection vault with a client side "Brain" that computes insights and narrative lenses without leaking raw text.
+
+### Reality check by layer
+
+#### Vault layer
+**Status: Stable**
+
+- Entries table migrated (`022_create_entries_table.sql`)
+- RLS policies correct (using `get_wallet_from_header()`)
+- RPC lifecycle stable (`list_entries`, `insert_entry`, `soft_delete_entry`, `restore_entry`, `delete_entry`)
+- Encryption session working
+- Storage and migrations version-controlled
+
+**What remains:** None. Vault is stable.
 
 ---
 
-## Current State Summary
+#### Lens layer
+**Status: Mostly complete, finishing passes**
 
-**Canonical Engine Status:**
-- Engine exists: `src/app/lib/insights/computeInsightsForWindow.ts`
-- Only Weekly lens routes through canonical engine ✅
-- Summary, Timeline, Yearly, Lifetime, YoY, Distributions use direct compute functions
-- Migration needed for all except Weekly
+- All major lenses exist: Weekly, Summary, Timeline, Yearly, Distributions, YoY, Lifetime
+- SharePack infrastructure supports all lenses
+- All lenses migrated to SharePack (completed today)
+- Canonical engine produces deterministic outputs
+- Consistent Share actions across all lenses
 
-**Phase Status:**
-- Phase 0 (Encrypted Ledger): COMPLETE and FROZEN
-- Phase 1 + 1.5 (Observer & Insight Engine): COMPLETE
-- Phase 2 (Distributions): FUNCTIONAL
-- Phase 3 (Sharing Guardrails): PARTIALLY COMPLETE
-- Phase 4.0 (Canonical Insight Architecture): PARTIALLY COMPLETE
+**What remains:** Final consistency passes, edge case handling.
 
-**Next Task:** See `docs/NEXT.md` for detailed task breakdown.
+---
+
+#### Meaning layer
+**Status: Structurally present, needs refinement**
+
+- Narrative bridges logic complete (`buildNarrativeBridge.ts`)
+- Language alignment done (interpretation over prescription)
+- Posture alignment complete (patterns, tensions, forks, trajectories)
+- Threads Dev Validation page functional
+- Bridge generation working (146 bridges, 84% coverage observed)
+
+**What remains:** Surface bridges in UI, copy refinement, not new logic.
+
+---
+
+#### Distribution layer
+**Status: Core complete, cleanup remaining**
+
+- `wallet_shares` table canonical
+- `SharePack` universal format
+- One renderer (`SharePackRenderer`) across preview, export, viewer
+- All lenses use SharePack
+- Wallet share encryption/decryption working
+
+**What remains:** Remove legacy routes (`/shared/open`, `/shared/open/[id]`), remove deprecated code (`src/app/lib/shares.ts`). This is cleanup, not urgency.
+
+---
+
+### What we are not doing yet
+
+- No new lenses
+- No new metrics
+- No new "helpful" features
+- No new capabilities
+
+**Reason:** Scope freeze. Architecture settlement period.
+
+---
+
+### Documentation anchors
+See `docs/INVARIANTS.md` for the five non negotiables that must never regress.
+See `docs/POSTURE.md` for the product posture and architectural layers.
+
+---
+
+## Daily Orientation
+
+**Layers touched today**
+Vault:
+Lens:
+Meaning:
+Distribution:
+
+**What moved forward today**
+
+
+**What is still blocked**
+
+
+## Observed shifts today
+
+**New pattern surfaced in:**
+(Example: "New pattern surfaced in bridge generation - contrast signals are more decisive than similarity signals")
+
+**Previous assumption invalidated in:**
+(Example: "Previous assumption invalidated in SharePack migration - all lenses now use unified renderer")
+
+**No change detected in:**
+(Example: "No change detected in vault layer - encryption and RLS remain stable")
+
+**Interpretation:**
+(What does this mean? What trajectories are visible? What forks are emerging?)
+
+
+## Layer Balance Check
+
+**Vault status:**
+
+**Lens status:**
+
+**Meaning status:**
+
+**Distribution status:**
+
+**Next pull forward tasks by layer**
+
+Vault:
+Lens:
+Meaning:
+Distribution:

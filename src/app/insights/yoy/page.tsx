@@ -21,6 +21,18 @@ import { InsightDrawer, normalizeInsight } from '../components/InsightDrawer';
 import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import YearSelector from '../components/YearSelector';
 import type { InsightArtifact } from '../../lib/insights/artifactTypes';
+import { useNarrativeTone } from '../hooks/useNarrativeTone';
+import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
+import { useDensity } from '../hooks/useDensity';
+import { DensityToggle } from '../components/DensityToggle';
+import { getLensPurposeCopy, getLensBoundaries } from '../lib/lensPurposeCopy';
+import { LensTransition } from '../components/LensTransition';
+import { ObservationalDivider } from '../components/ObservationalDivider';
+import { SessionClosing } from '../components/SessionClosing';
+import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
+import { computeDistributionLayer, computeActiveDays } from '../../lib/insights/distributionLayer';
+import { filterEventsByWindow } from '../../lib/insights/timeWindows';
+import '../styles/delights.css';
 
 /**
  * Group reflections by year
@@ -53,6 +65,8 @@ export default function YearOverYearPage() {
   const [year2, setYear2] = useState<number | null>(null);
   const [yoyCard, setYoyCard] = useState<YearOverYearCard | null>(null);
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
+  const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
+  const { densityMode, handleDensityChange } = useDensity(address, mounted);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedInsight, setSelectedInsight] = useState<any>(null);
   const [computeError, setComputeError] = useState<{ message: string; debug?: any } | null>(null);
@@ -280,6 +294,81 @@ export default function YearOverYearPage() {
     };
   }, [reflections, year1, year2, address, retryKey]);
 
+  // Build SharePack from YoY lens state
+  const sharePack = useMemo<SharePack | null>(() => {
+    if (!yoyCard || reflections.length === 0 || !address || !year1 || !year2) return null;
+
+    try {
+      // Get year windows
+      const year1Start = new Date(year1, 0, 1);
+      const year1End = new Date(year1, 11, 31, 23, 59, 59);
+      const year2Start = new Date(year2, 0, 1);
+      const year2End = new Date(year2, 11, 31, 23, 59, 59);
+      
+      // Combine both years for metrics
+      const combinedStart = year1Start < year2Start ? year1Start : year2Start;
+      const combinedEnd = year1End > year2End ? year1End : year2End;
+      const windowReflections = filterEventsByWindow(reflections, combinedStart, combinedEnd);
+      
+      // Compute distribution layer for metrics
+      const distributionResult = computeDistributionLayer(windowReflections, combinedStart, combinedEnd);
+      
+      const entryCount = windowReflections.length;
+      const activeDays = computeActiveDays(distributionResult?.dailyCounts || []);
+      
+      // Compute spike count
+      const dailyCounts = distributionResult?.dailyCounts || [];
+      const nonZeroCounts = dailyCounts.filter(c => c > 0);
+      let spikeCount = 0;
+      if (nonZeroCounts.length > 0) {
+        const sortedNonZero = [...nonZeroCounts].sort((a, b) => a - b);
+        const median = sortedNonZero.length % 2 === 0
+          ? (sortedNonZero[sortedNonZero.length / 2 - 1] + sortedNonZero[sortedNonZero.length / 2]) / 2
+          : sortedNonZero[Math.floor(sortedNonZero.length / 2)];
+        const effectiveMedian = median > 0 ? median : 1;
+        const spikeThreshold = Math.max(3, effectiveMedian * 2);
+        spikeCount = dailyCounts.filter(count => count >= spikeThreshold && count >= 3).length;
+      }
+
+      const concentration = distributionResult?.stats.top10PercentDaysShare || 0;
+      
+      // Get one sentence summary from YoY card
+      const oneSentenceSummary = yoyCard.headline || `Year-over-year comparison: ${year1} vs ${year2}`;
+
+      // Determine distribution label (simplified)
+      const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+        concentration > 0.4 ? 'powerlaw' :
+        concentration > 0.2 ? 'lognormal' :
+        'normal';
+
+      // Get key moments from comparison
+      const keyMoments: Array<{ date: string }> = [];
+      if (yoyCard.year1TopDay) {
+        keyMoments.push({ date: new Date(year1, 0, 1).toISOString() });
+      }
+      if (yoyCard.year2TopDay) {
+        keyMoments.push({ date: new Date(year2, 0, 1).toISOString() });
+      }
+
+      return buildSharePackForLens({
+        lens: 'yoy',
+        oneSentenceSummary,
+        entryCount,
+        activeDays,
+        distributionLabel,
+        concentrationShareTop10PercentDays: concentration,
+        spikeCount,
+        keyMoments: keyMoments.slice(0, 3),
+        periodStart: combinedStart.toISOString(),
+        periodEnd: combinedEnd.toISOString(),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('Failed to build YoY SharePack:', err);
+      return null;
+    }
+  }, [yoyCard, reflections, address, year1, year2]);
+
   if (!mounted) return null;
 
   const lens = LENSES.yoy;
@@ -287,8 +376,19 @@ export default function YearOverYearPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <section className="max-w-2xl mx-auto px-4 py-12">
-        <h1 className="text-2xl font-normal text-center mb-3">{lens.label}</h1>
-        <p className="text-center text-sm text-white/50 mb-8">{lens.description}</p>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex-1 text-center">
+            <h1 className="text-2xl font-normal">{lens.label}</h1>
+            <p className="text-sm text-white/50 mt-1">{lens.description}</p>
+          </div>
+          <NarrativeToneSelector tone={narrativeTone} onToneChange={handleToneChange} />
+        </div>
+
+        {/* Why this lens exists */}
+        <div className="mb-6 pb-6 border-b border-white/10">
+          <p className="text-xs text-white/50 mb-1">Why this lens exists</p>
+          <p className="text-sm text-white/60 leading-relaxed">{getLensPurposeCopy('yoy', narrativeTone)}</p>
+        </div>
 
         <InsightsTabs />
 
@@ -301,8 +401,8 @@ export default function YearOverYearPage() {
         )}
 
         {error && (
-          <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4">
-            <p className="text-sm text-rose-400">{error}</p>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-white/60">{error}</p>
           </div>
         )}
 
@@ -355,7 +455,7 @@ export default function YearOverYearPage() {
 
             {/* Year-over-Year Card */}
             {yoyCard ? (
-              <div className="space-y-4">
+              <div className="space-y-4 distribution-reveal">
                 <div
                   className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-3 cursor-pointer hover:bg-emerald-500/10 transition-colors"
                   onClick={(e) => {
@@ -397,17 +497,19 @@ export default function YearOverYearPage() {
                 </div>
 
                 {/* Share Actions */}
-                <ShareActionsBar
-                  artifact={null}
-                  senderWallet={address}
-                  encryptionReady={encryptionReady}
-                />
+                {sharePack && (
+                  <ShareActionsBar
+                    sharePack={sharePack}
+                    senderWallet={address}
+                    encryptionReady={encryptionReady}
+                  />
+                )}
               </div>
             ) : computeError ? (
-              <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-rose-400 mb-2">Computation Error</h3>
+                    <h3 className="text-sm font-semibold text-white/60 mb-2">Computation Error</h3>
                     <p className="text-sm text-white/70">{computeError.message}</p>
                   </div>
                   
@@ -524,6 +626,39 @@ export default function YearOverYearPage() {
                 </div>
               );
             })()}
+
+            {/* Transition to boundaries */}
+            {yoyCard && (
+              <LensTransition text="Comparing moments reveals how patterns evolve." />
+            )}
+
+            {/* What this shows / does not show */}
+            {yoyCard && (() => {
+              const boundaries = getLensBoundaries('yoy', narrativeTone);
+              return (
+                <div className="pt-6 mt-6">
+                  <ObservationalDivider />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs mt-6">
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this shows</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.shows.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-white/60 font-medium mb-2">What this does not show</div>
+                      <ul className="space-y-1 text-white/50 list-none">
+                        {boundaries.doesNotShow.map((item, idx) => (
+                          <li key={idx}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -538,6 +673,9 @@ export default function YearOverYearPage() {
           originalCard={yoyCard ?? undefined}
           reflectionEntries={reflections}
         />
+
+        {/* Session Closing */}
+        <SessionClosing lens="yoy" narrativeTone={narrativeTone} />
       </section>
     </div>
   );

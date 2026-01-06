@@ -5,6 +5,14 @@ All reflections, insights, and shared content are encrypted locally using AES-GC
 
 This repository contains the full web application, including the encrypted journaling engine, insights pipeline, and shared content capsule system.
 
+## Product posture
+
+A Mirror that can speak, but cannot steer.
+
+Story of Emergence is an encrypted private vault that computes meaning locally and returns it as a second voice. Everything is computed locally after decrypt. No coaching, no reward loops, no shame loops.
+
+We allow insight. We forbid control.
+
 Tech Stack
 
 Next.js 15 (App Router + Turbopack)
