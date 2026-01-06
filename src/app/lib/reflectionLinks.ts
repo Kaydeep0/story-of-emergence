@@ -1,6 +1,6 @@
 // src/app/lib/reflectionLinks.ts
 // Supabase-backed reflection → source links (persistent across reloads)
-// Now reads from reflection_sources table (migrated from reflection_links)
+// Legacy reflection links - now uses entry_sources table via entrySources.ts
 
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
@@ -16,54 +16,82 @@ export type ReflectionLink = {
 };
 
 /**
- * Fetch all reflection links for a wallet from reflection_sources table
- * Returns primary source (most recently linked) per reflection
+ * Result type for fetchReflectionLinks
  */
-export async function fetchReflectionLinks(walletAddress: string): Promise<ReflectionLink[]> {
-  if (!walletAddress) return [];
+export type FetchReflectionLinksResult = {
+  links: ReflectionLink[];
+  error: string | null;
+};
+
+/**
+ * Fetch all reflection links for a wallet (legacy - use entrySources.ts for new code)
+ * Returns primary source (most recently linked) per reflection
+ * Never throws - returns empty array and error string on failure
+ */
+export async function fetchReflectionLinks(walletAddress: string): Promise<FetchReflectionLinksResult> {
+  // Step 2: Guard against invalid wallet addresses
+  if (!walletAddress || walletAddress.length !== 42 || !walletAddress.startsWith("0x")) {
+    return { links: [], error: "Wallet not ready" };
+  }
+  
+  console.log("[reflectionLinks] wallet", walletAddress, "len", walletAddress?.length);
   
   const supabase = getSupabaseForWallet(walletAddress);
-  const { data, error } = await supabase
-    .from('reflection_sources')
-    .select('id, user_wallet, reflection_id, source_id, created_at')
-    .eq('user_wallet', walletAddress.toLowerCase())
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.rpc("list_reflection_links", {
+    w: walletAddress,
+    p_limit: 1000, // Reasonable default for fetching all links
+    p_offset: 0,
+  });
 
+  // Step 1: Fix logging to show actual error (not just {})
   if (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('[reflectionLinks] Failed to fetch reflection links:', error);
+    console.error("[reflectionLinks] RPC raw error", error);
+    console.error("[reflectionLinks] RPC stringified", JSON.stringify(error, null, 2));
+    
+    // Build user-friendly error message
+    let errorMessage = error.message || 'Failed to fetch reflection links';
+    if ((error as any).details) {
+      errorMessage += `: ${(error as any).details}`;
     }
-    throw error;
+    if ((error as any).hint) {
+      errorMessage += ` (${(error as any).hint})`;
+    }
+    
+    return { links: [], error: errorMessage };
   }
 
   if (!data || data.length === 0) {
-    return [];
+    return { links: [], error: null };
   }
 
-  // Group by reflection_id and pick the most recent (first after descending sort)
+  // RPC returns data already ordered by created_at desc, so we can group by entry_id
+  // Group by entry_id and pick the most recent (first after descending sort)
   const reflectionMap = new Map<string, typeof data[0]>();
   for (const row of data) {
-    if (!reflectionMap.has(row.reflection_id)) {
-      reflectionMap.set(row.reflection_id, row);
+    if (!reflectionMap.has(row.entry_id)) {
+      reflectionMap.set(row.entry_id, row);
     }
   }
 
-  // Convert to ReflectionLink format (using most recent link per reflection)
-  return Array.from(reflectionMap.values()).map((row) => ({
+  // Convert to ReflectionLink format (using most recent link per entry)
+  // RPC returns: id, wallet_address, entry_id, source_id, created_at
+  const links = Array.from(reflectionMap.values()).map((row: any) => ({
     id: row.id,
-    walletAddress: row.user_wallet,
-    reflectionId: row.reflection_id,
+    walletAddress: row.wallet_address,
+    reflectionId: row.entry_id, // Note: column name is entry_id in entry_sources table
     sourceId: row.source_id,
     createdAt: row.created_at,
-    updatedAt: row.created_at, // reflection_sources doesn't have updated_at, use created_at
+    updatedAt: row.created_at,
   }));
+
+  return { links, error: null };
 }
 
 /**
  * Upsert or delete a reflection link
- * Now uses reflection_sources table (migrated from reflection_links)
+ * Legacy function - use entrySources.ts linkSourceToEntry for new code
  * If sourceId is null, deletes the specific link (not all links for that reflection)
- * Otherwise, creates a new link (reflection_sources allows multiple links per reflection)
+ * Otherwise, creates a new link (entry_sources allows multiple links per entry)
  */
 export async function upsertReflectionLink(
   walletAddress: string,
@@ -83,10 +111,10 @@ export async function upsertReflectionLink(
     // This path is deprecated - specific source removal should use reflectionSources.unlinkSourceFromReflection
     // But keeping for backward compatibility with setLink calls
     const { error } = await supabase
-      .from('reflection_sources')
+      .from('entry_sources')
       .delete()
       .eq('user_wallet', w)
-      .eq('reflection_id', reflectionId);
+      .eq('entry_id', reflectionId);
 
     if (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -97,13 +125,13 @@ export async function upsertReflectionLink(
     return;
   }
 
-  // Insert new link (reflection_sources allows multiple links, so we always insert)
+  // Insert new link (entry_sources allows multiple links, so we always insert)
   // The unique constraint will prevent duplicates
   const { error } = await supabase
-    .from('reflection_sources')
+    .from('entry_sources')
     .insert({
       user_wallet: w,
-      reflection_id: reflectionId,
+      entry_id: reflectionId,
       source_id: sourceId,
     });
 
@@ -121,7 +149,7 @@ export async function upsertReflectionLink(
 
 /**
  * Delete a reflection link
- * Now uses reflection_sources table
+ * Legacy function - use entrySources.ts unlinkSourceFromEntry for new code
  */
 export async function deleteReflectionLink(
   walletAddress: string,
@@ -131,10 +159,10 @@ export async function deleteReflectionLink(
 
   const supabase = getSupabaseForWallet(walletAddress);
   const { error } = await supabase
-    .from('reflection_sources')
+    .from('entry_sources')
     .delete()
     .eq('user_wallet', walletAddress.toLowerCase())
-    .eq('reflection_id', reflectionId);
+    .eq('entry_id', reflectionId);
 
   if (error) {
     if (process.env.NODE_ENV === 'development') {
@@ -167,15 +195,15 @@ export function getLinksForSource(
 
 /**
  * React hook for managing reflection links
- * Provides links array, getSourceIdFor helper, and setLink function
+ * Provides links array, getSourceIdFor helper, setLink function, and refetch function
  */
 export function useReflectionLinks(walletAddress?: string) {
   const [links, setLinks] = useState<ReflectionLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load links when walletAddress changes
-  useEffect(() => {
+  // Refetch function that can be called manually
+  const refetch = useCallback(async () => {
     if (!walletAddress) {
       setLinks([]);
       setLoading(false);
@@ -183,31 +211,28 @@ export function useReflectionLinks(walletAddress?: string) {
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
-    fetchReflectionLinks(walletAddress)
-      .then((data) => {
-        if (!cancelled) {
-          setLinks(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          if (process.env.NODE_ENV === 'development') {
-          console.error('[reflectionLinks] Failed to load reflection links:', err);
-        }
-          setError(err?.message ?? 'Failed to load reflection links');
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const result = await fetchReflectionLinks(walletAddress);
+      setLinks(result.links);
+      // Step 2: Don't treat "Wallet not ready" as an error (don't show scary banner)
+      setError(result.error === "Wallet not ready" ? null : result.error);
+    } catch (err) {
+      // Fallback catch (shouldn't happen now, but keep for safety)
+      console.error('[reflectionLinks] Unexpected error loading reflection links:', err);
+      setLinks([]);
+      setError(err instanceof Error ? err.message : 'Failed to load reflection links');
+    } finally {
+      setLoading(false);
+    }
   }, [walletAddress]);
+
+  // Load links when walletAddress changes
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   // Get sourceId for a reflection
   const getSourceIdForFromState = useCallback(
@@ -281,5 +306,6 @@ export function useReflectionLinks(walletAddress?: string) {
     error,
     getSourceIdFor: getSourceIdForFromState,
     setLink,
+    refetch,
   };
 }
