@@ -135,3 +135,85 @@ Unless explicitly stated otherwise:
 
 Meaning must land before metaphor.
 
+---
+
+## Daily Start Protocol
+
+At the beginning of a session, do the following before suggesting tasks:
+
+1. Scan the repository for recent changes since the last merge:
+   - git log
+   - modified files
+   - new migrations
+   - new routes or components
+
+2. Summarize the current system state strictly using this layer model:
+
+**Vault layer**
+- Encryption
+- Entries
+- RLS
+- Storage
+- Migrations
+
+**Lens layer**
+- Insights pages
+- Yearly / YoY / Lifetime
+- Timeline / Distributions
+(All computed locally after decrypt)
+
+**Meaning layer**
+- Threads
+- Bridges
+- Pins
+- Graph logic
+
+**Distribution layer**
+- SharePack
+- wallet_shares
+- Artifacts
+- External sharing paths
+
+3. Answer explicitly:
+- What layers are strong
+- What layers are in progress
+- What layers are blocked or incomplete
+
+4. Only after that, propose next tasks.
+Do not suggest features that violate the product posture:
+"A Mirror that can speak, but cannot steer."
+
+This trains Cursor to orient before acting.
+
+---
+
+## Daily Close Protocol
+
+At the end of a session or before a merge, do the following:
+
+1. Identify what changed today:
+   - Files added
+   - Files modified
+   - Migrations added
+   - Routes added or removed
+
+2. Classify each change by layer:
+   - Vault
+   - Lens
+   - Meaning
+   - Distribution
+
+3. Produce a short summary suitable for docs/STATUS.md:
+   - Layers touched today
+   - What shipped
+   - What is still pending
+
+4. Flag any mismatch between:
+   - WHAT_IS_BUILT.md
+   - docs/STATUS.md
+   - Actual repo contents
+
+Do not invent progress. If something is partially implemented, say so.
+
+This makes Cursor your reflection mirror, not a cheerleader.
+

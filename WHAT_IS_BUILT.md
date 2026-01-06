@@ -977,3 +977,33 @@ SELECT to_regclass('public.sources') as sources,
 
 **End of Report**
 
+---
+
+## How this file is updated going forward
+
+This document is a **capabilities inventory**, not a roadmap.
+
+Update this file only when a capability becomes:
+- Stable
+- Canonical
+- Safe for others to rely on
+
+This file intentionally **lags daily development**.
+
+Daily changes, experiments, and migrations belong in:
+- `docs/STATUS.md` (daily leadership loop)
+- Pull requests and commit history
+
+When to update this file:
+- A new lens becomes canonical
+- A storage or sharing spine becomes the default
+- A user facing capability is considered "real"
+
+When not to update this file:
+- During refactors
+- During migrations
+- During experimentation or cleanup
+
+If in doubt, do **not** update this file.
+Wait until reality settles.
+
