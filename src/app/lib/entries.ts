@@ -109,8 +109,8 @@ export async function rpcSoftDelete(wallet: string, entryId: string): Promise<vo
 export async function rpcHardDelete(wallet: string, id: string) {
   const sb = getSupabaseForWallet(wallet);
   const { error } = await sb.rpc("delete_entry", {
-    eid: id,
-    w: wallet.toLowerCase(),
+    w: wallet,
+    entry_id: id,
   });
   if (error) throw error;
 }
