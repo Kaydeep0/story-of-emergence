@@ -14,6 +14,238 @@ import { InsightDebugPanel } from '../components/InsightDebugPanel';
 import type { InsightArtifact } from '../../lib/insights/artifactTypes';
 import { rpcInsertEntry } from '../../lib/entries';
 import { toast } from 'sonner';
+import { useNarrativeTone } from '../hooks/useNarrativeTone';
+import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
+import { useDensity } from '../hooks/useDensity';
+import { DensityToggle } from '../components/DensityToggle';
+import { getLensPurposeCopy, getLensBoundaries, getDistributionViewText } from '../lib/lensPurposeCopy';
+import { LensTransition } from '../components/LensTransition';
+import { getPreviousPeriodDailyCounts } from '../lib/temporalComparisons';
+import type { IntensityLevel } from '../lib/intensitySystem';
+import { getIntensityColor, getIntensityDotSize, intensityFromSpikeRatio } from '../lib/intensitySystem';
+import { ObservationalDivider } from '../components/ObservationalDivider';
+import { SessionClosing } from '../components/SessionClosing';
+import { ShareActionsBar } from '../components/ShareActionsBar';
+import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
+import '../styles/delights.css';
+
+/**
+ * Distribution Visualization Component
+ * Renders a simple histogram with log-normal curve overlay
+ */
+function DistributionVisualization({ 
+  dailyCounts, 
+  top10PercentThreshold,
+  ghostDailyCounts
+}: { 
+  dailyCounts: number[]; 
+  top10PercentThreshold: number;
+  ghostDailyCounts?: number[]; // Previous period for ghost comparison
+}) {
+  // Calculate histogram bins (include ghost data in range)
+  const allCounts = ghostDailyCounts && ghostDailyCounts.length > 0 
+    ? [...dailyCounts, ...ghostDailyCounts]
+    : dailyCounts;
+  const maxCount = Math.max(...allCounts);
+  const minCount = Math.min(...allCounts);
+  const binCount = Math.min(20, maxCount - minCount + 1);
+  const binSize = (maxCount - minCount) / binCount || 1;
+  
+  // Create histogram for current period
+  const histogram: number[] = new Array(binCount).fill(0);
+  const sortedCounts = [...dailyCounts].sort((a, b) => a - b);
+  const top10Threshold = sortedCounts[Math.max(0, sortedCounts.length - top10PercentThreshold)] || maxCount;
+  
+  dailyCounts.forEach(count => {
+    const binIndex = Math.min(Math.floor((count - minCount) / binSize), binCount - 1);
+    if (binIndex >= 0) {
+      histogram[binIndex]++;
+    }
+  });
+  
+  const maxFrequency = Math.max(...histogram, 1);
+  
+  // SVG dimensions
+  const width = 400;
+  const height = 200;
+  const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  
+  // Calculate ghost curve if provided
+  let ghostCurvePath: string | null = null;
+  if (ghostDailyCounts && ghostDailyCounts.length > 0) {
+    const ghostLogValues = ghostDailyCounts.filter(c => c > 0).map(c => Math.log(c));
+    if (ghostLogValues.length > 0) {
+      const ghostLogMean = ghostLogValues.reduce((a, b) => a + b, 0) / ghostLogValues.length;
+      const ghostLogVariance = ghostLogValues.reduce((sum, val) => sum + Math.pow(val - ghostLogMean, 2), 0) / ghostLogValues.length;
+      const ghostLogStdDev = Math.sqrt(ghostLogVariance);
+      
+      const ghostCurvePoints: Array<{ x: number; y: number }> = [];
+      const steps = 100;
+      
+      for (let i = 0; i <= steps; i++) {
+        const intensity = minCount + (i / steps) * (maxCount - minCount);
+        if (intensity > 0) {
+          const logIntensity = Math.log(intensity);
+          const pdf = Math.exp(-0.5 * Math.pow((logIntensity - ghostLogMean) / ghostLogStdDev, 2)) / 
+                      (intensity * ghostLogStdDev * Math.sqrt(2 * Math.PI));
+          const scaledFreq = pdf * ghostDailyCounts.length * binSize;
+          const normalizedY = Math.min((scaledFreq / maxFrequency) * chartHeight, chartHeight);
+          const x = padding.left + ((intensity - minCount) / (maxCount - minCount)) * chartWidth;
+          ghostCurvePoints.push({ x, y: height - padding.bottom - normalizedY });
+        }
+      }
+      
+      ghostCurvePath = ghostCurvePoints
+        .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+        .join(' ');
+    }
+  }
+  
+  // Calculate log-normal curve parameters from actual data
+  const logValues = dailyCounts.filter(c => c > 0).map(c => Math.log(c));
+  const logMean = logValues.reduce((a, b) => a + b, 0) / logValues.length;
+  const logVariance = logValues.reduce((sum, val) => sum + Math.pow(val - logMean, 2), 0) / logValues.length;
+  const logStdDev = Math.sqrt(logVariance);
+  
+  // Generate smooth log-normal curve points
+  const curvePoints: Array<{ x: number; y: number }> = [];
+  const steps = 100;
+  
+  for (let i = 0; i <= steps; i++) {
+    const intensity = minCount + (i / steps) * (maxCount - minCount);
+    if (intensity > 0) {
+      const logIntensity = Math.log(intensity);
+      // Log-normal PDF: f(x) = (1/(x*σ*√(2π))) * exp(-0.5*((ln(x)-μ)/σ)²)
+      const pdf = Math.exp(-0.5 * Math.pow((logIntensity - logMean) / logStdDev, 2)) / 
+                  (intensity * logStdDev * Math.sqrt(2 * Math.PI));
+      
+      // Scale to match histogram frequency scale (approximate)
+      const scaledFreq = pdf * dailyCounts.length * binSize;
+      const normalizedY = Math.min((scaledFreq / maxFrequency) * chartHeight, chartHeight);
+      
+      const x = padding.left + ((intensity - minCount) / (maxCount - minCount)) * chartWidth;
+      curvePoints.push({ x, y: height - padding.bottom - normalizedY });
+    }
+  }
+  
+  // Build smooth curve path
+  const curvePath = curvePoints
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+    .join(' ');
+  
+  return (
+    <div className="w-full">
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible" preserveAspectRatio="xMidYMid meet">
+        {/* Axes */}
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={height - padding.bottom}
+          stroke="rgba(255, 255, 255, 0.1)"
+          strokeWidth="1"
+        />
+        <line
+          x1={padding.left}
+          y1={height - padding.bottom}
+          x2={width - padding.right}
+          y2={height - padding.bottom}
+          stroke="rgba(255, 255, 255, 0.1)"
+          strokeWidth="1"
+        />
+        
+        {/* Histogram bars */}
+        {histogram.map((freq, i) => {
+          const barWidth = chartWidth / binCount;
+          const barHeight = (freq / maxFrequency) * chartHeight;
+          const x = padding.left + i * barWidth;
+          const y = height - padding.bottom - barHeight;
+          const intensity = minCount + i * binSize;
+          const isTop10 = intensity >= top10Threshold;
+          
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barWidth - 1}
+              height={barHeight}
+              fill={isTop10 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.06)'}
+              stroke="none"
+            />
+          );
+        })}
+        
+        {/* Ghost curve (previous period) */}
+        {ghostCurvePath && (
+          <path
+            d={ghostCurvePath}
+            fill="none"
+            stroke="rgba(255, 255, 255, 0.15)"
+            strokeWidth="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="4 4"
+            opacity={0.5}
+          />
+        )}
+        
+        {/* Log-normal curve overlay */}
+        <path
+          d={curvePath}
+          fill="none"
+          stroke="rgba(16, 185, 129, 0.35)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        
+        {/* Individual days as faint dots */}
+        {dailyCounts.map((count, i) => {
+          const x = padding.left + ((count - minCount) / (maxCount - minCount)) * chartWidth;
+          const isTop10 = count >= top10Threshold;
+          // Compute intensity from count relative to max
+          const relativeIntensity = maxCount > 0 ? count / maxCount : 0;
+          const dotIntensity: IntensityLevel = relativeIntensity >= 0.7 ? 'high' : relativeIntensity >= 0.4 ? 'medium' : 'low';
+          const dotSize = getIntensityDotSize(dotIntensity);
+          const dotColor = isTop10 ? getIntensityColor(dotIntensity, 0.6) : getIntensityColor(dotIntensity, 0.2);
+          
+          return (
+            <circle
+              key={i}
+              cx={x}
+              cy={height - padding.bottom - 2}
+              r={dotSize}
+              fill={dotColor}
+            />
+          );
+        })}
+        
+        {/* Labels */}
+        <text
+          x={padding.left - 5}
+          y={height - padding.bottom + 5}
+          textAnchor="end"
+          fill="rgba(255, 255, 255, 0.3)"
+          fontSize="10"
+        >
+          {minCount}
+        </text>
+        <text
+          x={width - padding.right}
+          y={height - padding.bottom + 5}
+          textAnchor="start"
+          fill="rgba(255, 255, 255, 0.3)"
+          fontSize="10"
+        >
+          {maxCount}
+        </text>
+      </svg>
+    </div>
+  );
+}
 
 export default function DistributionsPage() {
   const { address, isConnected } = useAccount();
@@ -29,6 +261,8 @@ export default function DistributionsPage() {
   const [distributionResult, setDistributionResult] = useState<DistributionResult | null>(null);
   const [distributionInsight, setDistributionInsight] = useState<InsightCard | null>(null);
   const [insightArtifact, setInsightArtifact] = useState<InsightArtifact | null>(null);
+  const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
+  const { densityMode, handleDensityChange } = useDensity(address, mounted);
 
   const connected = isConnected && !!address;
 
@@ -403,7 +637,19 @@ export default function DistributionsPage() {
   return (
     <main className="min-h-screen bg-black text-white">
       <section className="max-w-4xl mx-auto px-4 py-10">
-        <h1 className="text-2xl font-semibold text-center mb-6">Distribution Analysis</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-center flex-1">Distribution Analysis</h1>
+          <div className="flex items-center gap-2">
+            <DensityToggle density={densityMode} onDensityChange={handleDensityChange} />
+            <NarrativeToneSelector tone={narrativeTone} onToneChange={handleToneChange} />
+          </div>
+        </div>
+
+        {/* Why this lens exists */}
+        <div className="mb-6 pb-6 border-b border-white/10">
+          <p className="text-xs text-white/50 mb-1">Why this lens exists</p>
+          <p className="text-sm text-white/60 leading-relaxed">{getLensPurposeCopy('distributions', narrativeTone)}</p>
+        </div>
 
         <InsightDebugPanel debug={insightArtifact?.debug} />
 
@@ -443,9 +689,9 @@ export default function DistributionsPage() {
           // Empty state: eventCount === 0
           if (!loading && !error && eventCount === 0) {
             return (
-              <div className="rounded-2xl border border-white/10 p-6 text-center">
-                <p className="text-white/70">No reflections found. Start writing to see distribution analysis.</p>
-              </div>
+          <div className="rounded-2xl border border-white/10 p-6 text-center">
+            <p className="text-white/70">No reflections found. Start writing to see distribution analysis.</p>
+          </div>
             );
           }
 
@@ -454,9 +700,7 @@ export default function DistributionsPage() {
             return (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center mb-6">
                 <p className="text-white/70 mb-2">Distribution analysis is being computed.</p>
-                <p className="text-sm text-white/50">
-                  {insightArtifact ? 'Check the debug panel above for details.' : 'Please wait...'}
-                </p>
+                <p className="text-sm text-white/50">Please wait...</p>
               </div>
             );
           }
@@ -493,69 +737,114 @@ export default function DistributionsPage() {
             <>
               {/* Distribution Stats - null-safe guard */}
               {distributionResult && distributionResult.totalEntries > 0 && (
-                <div className="mb-8 space-y-4">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                    <h2 className="text-lg font-semibold mb-4">Distribution Profile (30 days)</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm text-white/60 mb-1">Most Common Day Count</div>
-                        <div className="text-2xl font-bold text-white">{distributionResult.stats.mostCommonDayCount}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-white/60 mb-1">Variance</div>
-                        <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
-                        <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
-                        <div className="text-xs text-white/40 mt-1">max day / median day</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
-                        <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
-                        <div className="text-xs text-white/40 mt-1">power law signal</div>
-                      </div>
-                    </div>
-                  </div>
+          <div className="mb-8 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold mb-4">Distribution Profile (30 days)</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Most Common Day Count</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.mostCommonDayCount}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Variance</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.variance.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Spike Ratio</div>
+                  <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(2)}x</div>
+                  <div className="text-xs text-white/40 mt-1">max day / median day</div>
+                </div>
+                <div>
+                  <div className="text-sm text-white/60 mb-1">Top 10% Days Share</div>
+                  <div className="text-2xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
+                  <div className="text-xs text-white/40 mt-1">power law signal</div>
+                </div>
+              </div>
+
+                    {/* Distribution View - show for log-normal or power law patterns */}
+                    {(() => {
+                      const dist30 = distributions.find(d => d.windowDays === 30);
+                      const classification = dist30?.classification || 'unknown';
+                      const isVisualizable = classification === 'lognormal' || classification === 'powerlaw';
+                      
+                      if (!isVisualizable || !distributionResult.dailyCounts || distributionResult.dailyCounts.length === 0) {
+                        return null;
+                      }
+
+                      const viewText = getDistributionViewText(narrativeTone);
+                      
+                      return (
+                        <div className="mt-6 pt-6 distribution-reveal">
+                          <ObservationalDivider />
+                          <div className="text-xs text-white/40 uppercase tracking-wide mb-3 mt-6">Distribution View</div>
+                          <DistributionVisualization
+                            dailyCounts={distributionResult.dailyCounts}
+                            top10PercentThreshold={Math.ceil(distributionResult.dailyCounts.length * 0.1)}
+                            ghostDailyCounts={(() => {
+                              // Get previous 30-day period for ghost comparison
+                              const now = new Date();
+                              const currentStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                              const currentEnd = now;
+                              try {
+                                return getPreviousPeriodDailyCounts(
+                                  reflections,
+                                  currentStart,
+                                  currentEnd,
+                                  'month'
+                                );
+                              } catch {
+                                return undefined;
+                              }
+                            })()}
+                          />
+                          <p className="text-xs text-white/40 mt-4 leading-relaxed">
+                            {viewText.line1}
+                            <br />
+                            {viewText.line2}
+                          </p>
+                        </div>
+                      );
+                    })()}
+            </div>
 
                   {/* Top Days List - null-safe guard */}
                   {distributionResult.topDays && distributionResult.topDays.length > 0 && (
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                      <h3 className="text-md font-semibold mb-3">Top Days</h3>
-                      <div className="space-y-2">
-                        {distributionResult.topDays.slice(0, 10).map((day, idx) => (
-                          <div key={day.date} className="flex items-center justify-between text-sm">
-                            <span className="text-white/70">{formatDate(day.date)}</span>
-                            <span className="text-white/90 font-medium">{day.count} entries</span>
-                          </div>
-                        ))}
-                      </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <h3 className="text-md font-semibold mb-3">Top Days</h3>
+                <div className="space-y-2">
+                  {distributionResult.topDays.slice(0, 10).map((day, idx) => (
+                    <div key={day.date} className="flex items-center justify-between text-sm">
+                      <span className="text-white/70">{formatDate(day.date)}</span>
+                      <span className="text-white/90 font-medium">{day.count} entries</span>
                     </div>
-                  )}
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
+          </div>
+        )}
 
               {/* Distribution Insight Card - null-safe guard */}
               {distributionInsight && (
-                <div className="mb-8">
-                  <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
-                    {/* Card header */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-orange-200">{distributionInsight.title}</h3>
-                      </div>
-                      <div className="flex items-center gap-2">
-                      </div>
-                    </div>
-
-                    {/* Explanation */}
-                    <p className="text-sm text-white/70">{distributionInsight.explanation}</p>
-
-                    {/* Computed locally badge */}
-                    <p className="text-xs text-white/40">Computed locally</p>
-                  </div>
+          <div className="mb-8">
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-5 space-y-3">
+              {/* Card header */}
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-orange-200">{distributionInsight.title}</h3>
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                </div>
+              </div>
+
+              {/* Explanation */}
+              <p className="text-sm text-white/70">{distributionInsight.explanation}</p>
+
+              {/* Computed locally badge */}
+              <p className="text-xs text-white/40">Computed locally</p>
+            </div>
+          </div>
+        )}
 
               {/* Distributions Table - null-safe guard */}
               {distributions && distributions.length > 0 && (
@@ -601,10 +890,55 @@ export default function DistributionsPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+              {/* Transition to boundaries */}
+              {distributionsCard && (
+                <LensTransition text="Short bursts compound into longer-term structure." />
               )}
+
+              {/* What this shows / does not show */}
+              {distributionsCard && (() => {
+                const boundaries = getLensBoundaries('distributions', narrativeTone);
+                return (
+                  <div className="pt-6 mt-6">
+                    <ObservationalDivider />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs mt-6">
+                      <div>
+                        <div className="text-white/60 font-medium mb-2">What this shows</div>
+                        <ul className="space-y-1 text-white/50 list-none">
+                          {boundaries.shows.map((item, idx) => (
+                            <li key={idx}>• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="text-white/60 font-medium mb-2">What this does not show</div>
+                        <ul className="space-y-1 text-white/50 list-none">
+                          {boundaries.doesNotShow.map((item, idx) => (
+                            <li key={idx}>• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           );
         })()}
+
+        {/* Share Actions */}
+        {sharePack && (
+          <ShareActionsBar
+            sharePack={sharePack}
+            senderWallet={address}
+            encryptionReady={encryptionReady}
+          />
+        )}
+
+        {/* Session Closing */}
+        <SessionClosing lens="distributions" narrativeTone={narrativeTone} />
       </section>
     </main>
   );

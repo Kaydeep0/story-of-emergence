@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { computeActiveDays } from '../../../lib/insights/distributionLayer';
 import type { DistributionResult, WindowDistribution } from '../../../lib/insights/distributionLayer';
+import { interpretSpikeRatio, interpretTop10Share, interpretActiveDays } from '../../lib/metricInterpretations';
 
 interface UnderlyingRhythmCardProps {
   distributionResult: DistributionResult;
@@ -31,10 +32,12 @@ export function UnderlyingRhythmCard({
         <div>
           <div className="text-xs text-white/60 mb-1">Active Days</div>
           <div className="text-2xl font-bold text-white">{activeDays}</div>
+          <div className="text-xs text-white/40 mt-1">{interpretActiveDays(activeDays, distributionResult.dailyCounts.length)}</div>
         </div>
         <div>
           <div className="text-xs text-white/60 mb-1">Spike Ratio</div>
           <div className="text-2xl font-bold text-white">{distributionResult.stats.spikeRatio.toFixed(1)}x</div>
+          <div className="text-xs text-white/40 mt-1">{interpretSpikeRatio(distributionResult.stats.spikeRatio)}</div>
         </div>
         <div>
           <div className="text-xs text-white/60 mb-1">Pattern</div>
@@ -82,6 +85,7 @@ export function UnderlyingRhythmCard({
             <div>
               <div className="text-xs text-white/60 mb-1">Top 10% Days Share</div>
               <div className="text-xl font-bold text-white">{(distributionResult.stats.top10PercentDaysShare * 100).toFixed(1)}%</div>
+              <div className="text-xs text-white/40 mt-1">{interpretTop10Share(distributionResult.stats.top10PercentDaysShare * 100)}</div>
             </div>
             <div>
               <div className="text-xs text-white/60 mb-1">Variance</div>

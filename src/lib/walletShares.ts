@@ -29,15 +29,16 @@ export type WalletShareRow = {
  * 
  * Process:
  * 1. Generate one-time content key for capsule
- * 2. Encrypt artifact JSON with content key
+ * 2. Encrypt SharePack JSON (preferred) or artifact JSON (legacy) with content key
  * 3. Wrap content key to recipient wallet
  * 4. Insert into database
  * 
  * @param supabase - Supabase client
- * @param artifact - The ShareArtifact to share
+ * @param artifact - The ShareArtifact to share (legacy, use sharePack instead)
  * @param recipientWallet - Recipient's wallet address
  * @param expiresAt - Optional expiration timestamp
  * @param message - Optional message from sender
+ * @param sharePack - The SharePack to share (preferred over artifact)
  * @returns Share ID
  */
 export async function createWalletShare(
@@ -45,21 +46,33 @@ export async function createWalletShare(
   artifact: ShareArtifact,
   recipientWallet: string,
   expiresAt?: Date | null,
-  message?: string | null
+  message?: string | null,
+  sharePack?: import('../app/lib/share/sharePack').SharePack
 ): Promise<string> {
-  // Determine kind from artifact
-  const kind: 'weekly' | 'summary' | 'yearly' = 
-    artifact.kind === 'weekly' ? 'weekly' :
-    artifact.kind === 'yearly' ? 'yearly' :
-    'summary';
+  // Determine kind from sharePack (preferred) or artifact (legacy)
+  let kind: 'weekly' | 'summary' | 'yearly';
+  let payloadJSON: string;
+  
+  if (sharePack) {
+    // Use SharePack - universal payload
+    kind = sharePack.lens === 'weekly' ? 'weekly' :
+           sharePack.lens === 'yearly' ? 'yearly' :
+           'summary';
+    payloadJSON = JSON.stringify(sharePack);
+  } else {
+    // Legacy artifact
+    kind = artifact.kind === 'weekly' ? 'weekly' :
+           artifact.kind === 'yearly' ? 'yearly' :
+           'summary';
+    payloadJSON = JSON.stringify(artifact);
+  }
 
   // Generate one-time content key
   const contentKey = await generateContentKey();
 
-  // Encrypt artifact JSON with content key using encryptSlice
+  // Encrypt payload JSON with content key using encryptSlice
   // encryptSlice returns "v1:base64(iv||ciphertext)" format
-  const artifactJSON = JSON.stringify(artifact);
-  const ciphertext = await encryptSlice(artifactJSON, contentKey);
+  const ciphertext = await encryptSlice(payloadJSON, contentKey);
   
   // Extract IV and ciphertext from encryptSlice format: "v1:base64(iv||ciphertext)"
   const ciphertextParts = ciphertext.split(':');

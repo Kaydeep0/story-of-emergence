@@ -1,0 +1,163 @@
+/* src/app/insights/styles/delights.css */
+/* Subtle delight animations - quiet acknowledgments */
+
+@keyframes breathe {
+  0%, 100% {
+    r: 6;
+  }
+  50% {
+    r: 8;
+  }
+}
+
+@keyframes fadeInLine {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseSoft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes revealSubtle {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes waveSubtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Line-by-line fade-in for Lifetime */
+.lifetime-line-fade {
+  animation: fadeInLine 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.lifetime-line-fade:nth-child(1) { animation-delay: 0.1s; }
+.lifetime-line-fade:nth-child(2) { animation-delay: 0.2s; }
+.lifetime-line-fade:nth-child(3) { animation-delay: 0.3s; }
+.lifetime-line-fade:nth-child(4) { animation-delay: 0.4s; }
+.lifetime-line-fade:nth-child(5) { animation-delay: 0.5s; }
+.lifetime-line-fade:nth-child(6) { animation-delay: 0.6s; }
+
+/* Sequential fade-in for Summary cards */
+.summary-card-fade {
+  animation: fadeInLine 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.summary-card-fade:nth-child(1) { animation-delay: 0.1s; }
+.summary-card-fade:nth-child(2) { animation-delay: 0.2s; }
+.summary-card-fade:nth-child(3) { animation-delay: 0.3s; }
+
+/* Subtle reveal for Distributions */
+.distribution-reveal {
+  animation: revealSubtle 0.8s ease-out forwards;
+  opacity: 0;
+}
+
+/* Pulse on hover for Weekly bars */
+.weekly-bar-hover {
+  transition: opacity 0.3s ease;
+}
+
+.weekly-bar-hover:hover {
+  animation: pulseSoft 1.5s ease-in-out infinite;
+}
+
+/* Micro-motion animations - so subtle they're barely noticeable */
+
+/* Bars grow in on mount, staggered by day */
+@keyframes barGrowIn {
+  from {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+  to {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+}
+
+.bar-grow-in {
+  animation: barGrowIn 0.4s ease-out forwards;
+  transform: scaleY(0);
+  transform-origin: bottom;
+}
+
+/* Spike dots pulse once when they appear */
+@keyframes spikePulse {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+.spike-pulse {
+  animation: spikePulse 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+/* Position markers gently oscillate ±1px every few seconds */
+@keyframes gentleOscillate {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(0.5px, -0.5px);
+  }
+  50% {
+    transform: translate(0, 0);
+  }
+  75% {
+    transform: translate(-0.5px, 0.5px);
+  }
+}
+
+.position-oscillate {
+  animation: gentleOscillate 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .bar-grow-in,
+  .spike-pulse,
+  .position-oscillate {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+}
+

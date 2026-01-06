@@ -2,6 +2,13 @@
 // Canonical insight engine entry point
 // Phase 4.2: Single source of truth for insight computation
 
+/**
+ * Insight Engine Contract
+ * This system reveals patterns and trajectories.
+ * It does not recommend actions or optimize behavior.
+ * Interpretability over instruction.
+ */
+
 import type { InsightArtifact, InsightHorizon, InsightArtifactDebug } from './artifactTypes';
 import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';

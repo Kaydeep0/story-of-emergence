@@ -244,7 +244,7 @@ export function EmergenceMapViz({ map, width, height = 300 }: EmergenceMapVizPro
           );
         })}
         
-        {/* Position point - highlighted */}
+        {/* Position point - highlighted with gentle breathing animation */}
         <circle
           cx={positionX}
           cy={positionY}
@@ -252,7 +252,16 @@ export function EmergenceMapViz({ map, width, height = 300 }: EmergenceMapVizPro
           fill="rgba(255, 255, 255, 0.9)"
           stroke="rgba(255, 255, 255, 0.5)"
           strokeWidth="1"
-        />
+        >
+          <animate
+            attributeName="r"
+            values="6;8;6"
+            dur="3s"
+            begin="0.5s"
+            repeatCount="1"
+            fill="freeze"
+          />
+        </circle>
         
         {/* Position point inner dot */}
         <circle

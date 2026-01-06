@@ -5,7 +5,12 @@ import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useLogEvent } from '../lib/useLogEvent';
-import { listSharesByRecipient, listSharesByOwner, rpcRevokeShare, type ShareRow } from '../lib/shares';
+import { 
+  listWalletSharesReceived, 
+  listWalletSharesSent, 
+  revokeWalletShare, 
+  type WalletShareRow 
+} from '../lib/wallet_shares';
 import { useEncryptionSession } from '../lib/useEncryptionSession';
 import { UnlockBanner } from '../components/UnlockBanner';
 import { decryptText, type EncryptionEnvelope } from '../../lib/crypto';
@@ -91,7 +96,7 @@ function SharePreviewModal({
   onClose,
   sessionKey,
 }: {
-  share: ShareRow | null;
+  share: WalletShareRow | null;
   isOpen: boolean;
   onClose: () => void;
   sessionKey: CryptoKey | null;
@@ -120,71 +125,22 @@ function SharePreviewModal({
       return;
     }
 
-    const capsule = share.capsule || {};
-    const kind = capsule.kind || 'unknown';
-    const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
-
-    // Only decrypt reflection kind
-    if (kind !== 'reflection') {
-      setDecryptedContent(null);
-      setDecryptError(null);
-      return;
-    }
-
-    if (!payload.ciphertext || !payload.iv || !payload.version) {
-      setDecryptError('Invalid encryption envelope format');
-      return;
-    }
-
-    setDecrypting(true);
-    setDecryptError(null);
-
-    decryptShareContent(sessionKey, payload)
-      .then((decrypted) => {
-        // Extract text from decrypted object (same format as entries)
-        let text = '';
-        if (typeof decrypted === 'object' && decrypted !== null) {
-          if ('text' in decrypted && typeof decrypted.text === 'string') {
-            text = decrypted.text;
-          } else if ('note' in decrypted && typeof decrypted.note === 'string') {
-            text = decrypted.note;
-          } else {
-            text = JSON.stringify(decrypted);
-          }
-        } else if (typeof decrypted === 'string') {
-          text = decrypted;
-        } else {
-          text = String(decrypted);
-        }
-
-        setDecryptedContent({
-          title: payload.title || 'Untitled',
-          text,
-        });
-      })
-      .catch((err) => {
-        console.error('Decryption failed:', err);
-        const errorMsg = err instanceof Error ? err.message : 'Failed to decrypt content';
-        setDecryptError(errorMsg);
-        toast.error('Failed to decrypt shared content');
-      })
-      .finally(() => {
-        setDecrypting(false);
-      });
+    // Wallet shares use wallet encryption, not session key
+    // For now, show a message that wallet decryption is needed
+    setDecryptError('Wallet share decryption requires wallet signature');
+    setDecrypting(false);
   }, [isOpen, share, sessionKey]);
 
   if (!share) return null;
 
-  const capsule = share.capsule || {};
-  const kind = capsule.kind || 'unknown';
-  const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
-  const title = payload.title || 'Untitled';
+  const kind = share.kind || 'unknown';
+  const title = `Shared ${kind} insight`;
   const createdDate = new Date(share.created_at).toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
-  const senderShort = `${share.owner_wallet.slice(0, 6)}…${share.owner_wallet.slice(-4)}`;
+  const senderShort = `${share.created_by_wallet.slice(0, 6)}…${share.created_by_wallet.slice(-4)}`;
 
   return (
     <>
@@ -225,11 +181,7 @@ function SharePreviewModal({
           </div>
 
           {/* Content */}
-          {kind !== 'reflection' ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-white/60">This share type is not supported yet</p>
-            </div>
-          ) : decrypting ? (
+          {decrypting ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30"></div>
             </div>
@@ -273,11 +225,7 @@ function SharePreviewModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {kind !== 'reflection' ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-white/60">This share type is not supported yet</p>
-            </div>
-          ) : decrypting ? (
+          {decrypting ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30"></div>
             </div>
@@ -304,9 +252,9 @@ export default function SharedPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'received' | 'owned'>('received');
-  const [sharesReceived, setSharesReceived] = useState<ShareRow[]>([]);
-  const [sharesOwned, setSharesOwned] = useState<ShareRow[]>([]);
-  const [selectedShare, setSelectedShare] = useState<ShareRow | null>(null);
+  const [sharesReceived, setSharesReceived] = useState<WalletShareRow[]>([]);
+  const [sharesOwned, setSharesOwned] = useState<WalletShareRow[]>([]);
+  const [selectedShare, setSelectedShare] = useState<WalletShareRow | null>(null);
   const [revokingShareId, setRevokingShareId] = useState<string | null>(null);
 
   const { logEvent } = useLogEvent();
@@ -331,19 +279,19 @@ export default function SharedPage() {
     setError(null);
 
     try {
-      // Fetch both lists in parallel
+      // Fetch both lists in parallel using wallet_shares RPCs
       const [receivedItems, ownedItems] = await Promise.all([
-        listSharesByRecipient(wallet, {
+        listWalletSharesReceived(wallet, {
           limit: 50,
           offset: 0,
         }),
-        listSharesByOwner(wallet, {
+        listWalletSharesSent(wallet, {
           limit: 50,
           offset: 0,
         }),
       ]);
 
-      // Filter out revoked shares for both lists
+      // RPCs already filter revoked/expired, but double-check
       const filteredReceived = receivedItems.filter((item) => item.revoked_at === null);
       const filteredOwned = ownedItems.filter((item) => item.revoked_at === null);
 
@@ -368,7 +316,7 @@ export default function SharedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, connected, wallet]);
 
-  async function handleRevokeShare(share: ShareRow, e: React.MouseEvent) {
+  async function handleRevokeShare(share: WalletShareRow, e: React.MouseEvent) {
     e.stopPropagation(); // Prevent opening the modal
 
     if (!wallet) return;
@@ -379,7 +327,7 @@ export default function SharedPage() {
     setRevokingShareId(share.id);
 
     try {
-      await rpcRevokeShare(wallet, share.id);
+      await revokeWalletShare(wallet, share.id);
       toast.success('Share revoked successfully');
       // Refresh both lists - the revoked share will be filtered out
       await loadShares();
@@ -395,7 +343,8 @@ export default function SharedPage() {
   async function handleCopyLink(shareId: string, e: React.MouseEvent) {
     e.stopPropagation(); // Prevent opening the modal
 
-    const link = `${window.location.origin}/shared/open/${shareId}`;
+    // Use wallet_shares route instead of deprecated /shared/open route
+    const link = `${window.location.origin}/shared/wallet/${shareId}`;
 
     try {
       // Try using the Clipboard API first
@@ -512,20 +461,17 @@ export default function SharedPage() {
               </div>
 
               {(view === 'received' ? sharesReceived : sharesOwned).map((item) => {
-                // Access capsule fields safely
-                const capsule = item.capsule || {};
-                const payload = (capsule.payload as EncryptionEnvelope & { title?: string }) || {};
-                const title = payload.title || 'Untitled';
-                const kind = capsule.kind || 'unknown';
+                const kind = item.kind || 'unknown';
+                const title = `Shared ${kind} insight`;
                 const createdDate = new Date(item.created_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
                 });
-                const isOwner = wallet && item.owner_wallet.toLowerCase() === wallet.toLowerCase();
+                const isOwner = wallet && item.created_by_wallet.toLowerCase() === wallet.toLowerCase();
                 const isRevoking = revokingShareId === item.id;
                 const recipientShort = `${item.recipient_wallet.slice(0, 6)}…${item.recipient_wallet.slice(-4)}`;
-                const senderShort = `${item.owner_wallet.slice(0, 6)}…${item.owner_wallet.slice(-4)}`;
+                const senderShort = `${item.created_by_wallet.slice(0, 6)}…${item.created_by_wallet.slice(-4)}`;
 
                 return (
                   <div
@@ -534,7 +480,7 @@ export default function SharedPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
-                        onClick={() => router.push(`/shared/open/${item.id}?preview=true`)}
+                        onClick={() => router.push(`/shared/wallet/${item.id}`)}
                         className="space-y-1 flex-1 text-left"
                       >
                         <p className="font-medium">{title}</p>
@@ -550,7 +496,7 @@ export default function SharedPage() {
                       </button>
                       <div className="flex items-start gap-2">
                         <KindBadge kind={kind} />
-                        {isOwner && item.revoked_at === null && (
+                        {isOwner && !item.revoked_at && (
                           <>
                             <button
                               onClick={(e) => handleCopyLink(item.id, e)}

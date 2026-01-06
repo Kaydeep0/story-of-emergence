@@ -1,23 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { listSourcesForReflection } from '../lib/reflectionSources';
-import type { ExternalSourceDecrypted } from '../lib/externalSources';
+import { listSourcesForEntry } from '../lib/entrySources';
+import type { SourceDecrypted } from '../lib/sources';
 
 interface LinkedSourcesBacklinksProps {
-  reflectionId: string;
+  entryId: string;
   walletAddress: string;
   sessionKey: CryptoKey | null;
   encryptionReady: boolean;
 }
 
 export function LinkedSourcesBacklinks({
-  reflectionId,
+  entryId,
   walletAddress,
   sessionKey,
   encryptionReady,
 }: LinkedSourcesBacklinksProps) {
-  const [linkedSources, setLinkedSources] = useState<ExternalSourceDecrypted[]>([]);
+  const [linkedSources, setLinkedSources] = useState<SourceDecrypted[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export function LinkedSourcesBacklinks({
       if (!sessionKey) return; // Guard against null
       setLoading(true);
       try {
-        const sources = await listSourcesForReflection(walletAddress, reflectionId, sessionKey);
+        const sources = await listSourcesForEntry(walletAddress, entryId, sessionKey);
         setLinkedSources(sources);
       } catch (err) {
         console.error('Failed to load linked sources', err);
@@ -41,7 +41,7 @@ export function LinkedSourcesBacklinks({
     }
 
     loadLinkedSources();
-  }, [reflectionId, walletAddress, sessionKey, encryptionReady]);
+  }, [entryId, walletAddress, sessionKey, encryptionReady]);
 
   if (loading || linkedSources.length === 0) {
     return null;
@@ -56,7 +56,7 @@ export function LinkedSourcesBacklinks({
             key={source.id}
             className="inline-flex items-center gap-1 text-xs text-white/60 bg-white/5 px-2 py-0.5 rounded border border-white/10"
           >
-            <span className="capitalize">{source.source_type}</span>
+            <span className="capitalize">{source.kind}</span>
             <span className="text-white/40">·</span>
             <span className="truncate max-w-[120px]">{source.title}</span>
           </span>

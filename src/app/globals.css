@@ -1,8 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core colors */
+  --bg0: 0 0% 3%;
+  --bg1: 0 0% 6%;
+  --panel: 0 0% 8%;
+  --line: 0 0% 14%;
+  --text: 0 0% 92%;
+  --muted: 0 0% 70%;
+
+  /* Accent colors */
+  --accent: 162 100% 40%;
+  --accent2: 280 85% 62%;
+
+  /* Effects */
+  --glow-soft: 0 0 40px hsl(var(--accent) / 0.14);
+  --glow-mid: 0 0 70px hsl(var(--accent) / 0.18);
+  --glow-hard: 0 0 120px hsl(var(--accent) / 0.22);
+
+  /* Radius */
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+
+  /* Legacy compatibility */
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {

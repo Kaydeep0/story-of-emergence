@@ -1,5 +1,6 @@
 // src/app/insights/components/InsightDebugPanel.tsx
 // Dev-only debug panel for insight artifacts
+// Hidden by default - only visible when explicitly enabled via query param or dev mode
 
 'use client';
 
@@ -15,22 +16,25 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
   const searchParams = useSearchParams();
   const debugParam = searchParams?.get('debug') === '1';
   const isDev = process.env.NODE_ENV === 'development';
-  // Show debug only in dev mode OR when debug=1 query param is present
-  const showDebug = isDev || debugParam;
-  const [isOpen, setIsOpen] = useState(showDebug);
+  
+  // Debug is only accessible when explicitly enabled (query param) OR in dev mode
+  const isDebugEnabled = isDev || debugParam;
+  const [isOpen, setIsOpen] = useState(false); // Default closed, even in dev mode
 
-  if (!debug) {
+  // If debug is not enabled at all, don't render anything
+  if (!isDebugEnabled || !debug) {
     return null;
   }
 
-  // Show content if debug is enabled (dev mode or debug=1 param) and toggle is open
-  const shouldShowContent = showDebug && isOpen;
+  // Show content only when toggle is explicitly opened
+  const shouldShowContent = isOpen;
 
   return (
     <div className="mb-4">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-xs text-white/40 hover:text-white/60 px-2 py-1 rounded border border-white/10 bg-white/5 transition-colors"
+        className="text-xs text-white/30 hover:text-white/50 px-2 py-1 rounded border border-white/5 bg-white/2 transition-colors"
+        title="Show debug data (developer only)"
       >
         {shouldShowContent ? '▼' : '▶'} Debug
       </button>
