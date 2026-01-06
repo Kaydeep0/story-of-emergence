@@ -144,6 +144,10 @@ function isRedirectOnly(routePath) {
   const content = readFileContent(routePath);
   if (!content) return false;
   
+  // Check for Next.js navigation import (required for redirects)
+  const hasNextNavigationImport = content.includes('from "next/navigation"') || 
+                                   content.includes("from 'next/navigation'");
+  
   // Check for redirect patterns (router.replace or redirect() call)
   const redirectPatterns = [
     /router\.replace\(/,  // Next.js router.replace
@@ -168,12 +172,17 @@ function isRedirectOnly(routePath) {
     if (hasRedirect) break;
   }
   
-  // Also check if it's a simple redirect component (export default function that redirects)
+  // Sturdier check: Next.js navigation import + redirect pattern = safe redirect
+  if (hasNextNavigationImport && hasRedirect) {
+    return true;
+  }
+  
+  // Fallback: Also check if it's a simple redirect component (export default function that redirects)
   const isSimpleRedirect = content.includes("export default function") && 
                            (content.includes("Legacy") || content.includes("Redirect")) &&
                            hasRedirect;
   
-  return hasRedirect || isSimpleRedirect;
+  return isSimpleRedirect;
 }
 
 function header(title) {
