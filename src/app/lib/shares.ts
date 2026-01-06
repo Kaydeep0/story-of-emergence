@@ -1,5 +1,11 @@
 // src/app/lib/shares.ts
-// Client-side functions for shares table (encrypted capsules)
+// DEPRECATED: Legacy shares table functions
+// 
+// ⚠️ DO NOT USE: This file is deprecated.
+// Use src/app/lib/wallet_shares.ts instead.
+// 
+// This file exists only for backward compatibility during migration.
+// All new code MUST use wallet_shares table via wallet_shares.ts
 
 import { getSupabaseForWallet } from "./supabase";
 import { encryptText, type EncryptionEnvelope } from "../../lib/crypto";

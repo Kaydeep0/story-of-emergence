@@ -77,32 +77,9 @@ export type DecryptedSlice = {
   senderWallet: string;
 };
 
-/**
- * An accepted share stored locally (will be re-encrypted under user's key)
- */
-export type AcceptedShare = {
-  id: string;
-  receivedAt: string; // ISO timestamp
-  sourceLabel: string; // e.g., "From 0x1234...5678 on Dec 4, 2025"
-  sliceKind: SliceKind;
-  title: string;
-  decryptedPayload: unknown;
-};
-
-/**
- * Accepted share row from Supabase (encrypted under recipient's key)
- */
-export type AcceptedShareRow = {
-  id: string;
-  wallet_address: string;
-  share_id: string;
-  slice_kind: string;
-  title: string;
-  ciphertext: string;
-  received_at: string;
-  source_label: string;
-  created_at: string;
-};
+// DEPRECATED: AcceptedShare and AcceptedShareRow types removed
+// These were for the deprecated accepted_shares table.
+// Use wallet_shares table instead.
 
 // ----- Capsule encoding/decoding -----
 
