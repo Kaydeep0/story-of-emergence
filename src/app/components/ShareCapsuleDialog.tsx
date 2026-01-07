@@ -73,8 +73,11 @@ export function ShareCapsuleDialog({
       URL.revokeObjectURL(url);
       toast('Image downloaded');
     } catch (err) {
-      console.error('Failed to generate image:', err);
-      toast.error('Failed to generate image');
+      console.error("PNG export failed", err);
+      const msg = process.env.NODE_ENV === "development"
+        ? `Failed to generate image: ${String(err)}`
+        : "Failed to generate image. Please try again.";
+      toast.error(msg);
     } finally {
       setDownloading(false);
     }

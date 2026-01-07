@@ -3,8 +3,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ShareArtifact } from './artifacts/types';
-import { generateContentKey, encryptSlice } from './sharing';
-import { wrapCapsuleKeyToWallet } from './walletEncryption';
+import { encryptWithAppKey, decryptWithAppKey } from './crypto';
+import type { EncryptionEnvelope } from './crypto';
 
 /**
  * Wallet share row from database
@@ -17,7 +17,6 @@ export type WalletShareRow = {
   kind: 'weekly' | 'summary' | 'yearly';
   ciphertext: string;
   iv: string;
-  wrapped_key: string;
   expires_at: string | null;
   revoked_at: string | null;
   version: string;
@@ -28,10 +27,8 @@ export type WalletShareRow = {
  * Create a wallet share
  * 
  * Process:
- * 1. Generate one-time content key for capsule
- * 2. Encrypt SharePack JSON (preferred) or artifact JSON (legacy) with content key
- * 3. Wrap content key to recipient wallet
- * 4. Insert into database
+ * 1. Encrypt SharePack JSON (preferred) or artifact JSON (legacy) with app key
+ * 2. Insert into database
  * 
  * @param supabase - Supabase client
  * @param artifact - The ShareArtifact to share (legacy, use sharePack instead)
@@ -67,37 +64,15 @@ export async function createWalletShare(
     payloadJSON = JSON.stringify(artifact);
   }
 
-  // Generate one-time content key
-  const contentKey = await generateContentKey();
-
-  // Encrypt payload JSON with content key using encryptSlice
-  // encryptSlice returns "v1:base64(iv||ciphertext)" format
-  const ciphertext = await encryptSlice(payloadJSON, contentKey);
-  
-  // Extract IV and ciphertext from encryptSlice format: "v1:base64(iv||ciphertext)"
-  const ciphertextParts = ciphertext.split(':');
-  if (ciphertextParts.length !== 2 || ciphertextParts[0] !== 'v1') {
-    throw new Error('Invalid ciphertext format');
-  }
-  
-  const decoded = Uint8Array.from(atob(ciphertextParts[1]), c => c.charCodeAt(0));
-  const iv = decoded.slice(0, 12);
-  const ct = decoded.slice(12);
-  
-  // Store IV and ciphertext separately in database
-  const ivB64 = btoa(String.fromCharCode(...iv));
-  const ctB64 = btoa(String.fromCharCode(...ct));
-  
-  // Wrap content key to recipient wallet
-  const wrappedKey = await wrapCapsuleKeyToWallet(contentKey, recipientWallet);
+  // Encrypt payload JSON with app key
+  const envelope = await encryptWithAppKey(payloadJSON);
 
   // Insert into database
   const { data, error } = await supabase.rpc('insert_wallet_share', {
     p_recipient_wallet: recipientWallet.toLowerCase(),
     p_kind: kind,
-    p_ciphertext: ctB64, // Store ciphertext without IV
-    p_iv: ivB64, // Store IV separately
-    p_wrapped_key: wrappedKey,
+    p_ciphertext: envelope.ciphertext,
+    p_iv: envelope.iv,
     p_expires_at: expiresAt?.toISOString() || null,
     p_message: message || null,
   });
@@ -191,41 +166,27 @@ export async function revokeWalletShare(
  * Decrypt a wallet share
  * 
  * Process:
- * 1. Unwrap capsule key using recipient's wallet
- * 2. Decrypt artifact JSON with capsule key
+ * 1. Decrypt artifact JSON with app key
  * 
  * @param share - Wallet share row
- * @param recipientWallet - Recipient's wallet address (for decryption)
- * @returns Decrypted ShareArtifact
+ * @param recipientWallet - Recipient's wallet address (unused, kept for API compatibility)
+ * @returns Decrypted ShareArtifact or SharePack
  */
 export async function decryptWalletShare(
   share: WalletShareRow,
   recipientWallet: string
 ): Promise<ShareArtifact> {
-  // Import unwrap function
-  const { unwrapCapsuleKeyFromWallet } = await import('./walletEncryption');
-  const { decryptSlice } = await import('./sharing');
+  // Create encryption envelope from database fields
+  const envelope: EncryptionEnvelope = {
+    ciphertext: share.ciphertext,
+    iv: share.iv,
+    version: share.version || 'v1',
+  };
 
-  // Unwrap capsule key
-  const contentKey = await unwrapCapsuleKeyFromWallet(share.wrapped_key, recipientWallet);
-
-  // Reconstruct ciphertext format: "v1:base64(iv||ciphertext)" for decryptSlice
-  const iv = Uint8Array.from(atob(share.iv), c => c.charCodeAt(0));
-  const ct = Uint8Array.from(atob(share.ciphertext), c => c.charCodeAt(0));
-  const combined = new Uint8Array(iv.length + ct.length);
-  combined.set(iv, 0);
-  combined.set(ct, iv.length);
-  // Convert to base64 and prepend "v1:" prefix
-  const combinedB64 = btoa(String.fromCharCode(...combined));
-  const ciphertext = `v1:${combinedB64}`;
-
-  // Decrypt artifact
-  const artifactJSON = await decryptSlice(ciphertext, contentKey);
+  // Decrypt with app key
+  const payloadJSON = await decryptWithAppKey(envelope);
   
-  if (typeof artifactJSON !== 'string') {
-    throw new Error('Invalid decrypted artifact format');
-  }
-
-  return JSON.parse(artifactJSON) as ShareArtifact;
+  // Parse and return (could be SharePack or legacy ShareArtifact)
+  return JSON.parse(payloadJSON) as ShareArtifact;
 }
 

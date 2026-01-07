@@ -288,6 +288,125 @@ export default function SummaryPage() {
     return map;
   }, [reflections]);
 
+  // Build SharePack from summary lens state - always returns a SharePack
+  const sharePack = useMemo<SharePack>(() => {
+    if (!address) {
+      // Minimal fallback when no wallet connected
+      return buildSharePackForLens({
+        lens: 'summary',
+        oneSentenceSummary: 'Summary',
+        entryCount: 0,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    try {
+      // Get summary window (last 90 days)
+      const now = new Date();
+      const windowStart = new Date(now);
+      windowStart.setDate(windowStart.getDate() - 90);
+      const windowReflections = filterEventsByWindow(reflections, windowStart, now);
+      const byDay = groupByDay(windowReflections);
+
+      // Compute metrics (always compute, even if empty)
+      const entryCount = windowReflections.length;
+      const activeDaysSet = new Set<string>();
+      const dailyCounts: number[] = [];
+      const keyMoments: Array<{ date: string }> = [];
+
+      // Build daily counts and active days
+      for (const reflection of windowReflections) {
+        const dateKey = `${new Date(reflection.createdAt).getFullYear()}-${String(new Date(reflection.createdAt).getMonth() + 1).padStart(2, '0')}-${String(new Date(reflection.createdAt).getDate()).padStart(2, '0')}`;
+        if (!activeDaysSet.has(dateKey)) {
+          activeDaysSet.add(dateKey);
+        }
+      }
+
+      const activeDays = activeDaysSet.size;
+
+      // Get daily counts for spike/concentration calculation
+      for (let i = 89; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(now.getDate() - i);
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const count = byDay.get(dateKey)?.length || 0;
+        dailyCounts.push(count);
+
+        // Add as key moment if it's a spike day (≥3 entries)
+        if (count >= 3) {
+          keyMoments.push({ date: new Date(dateKey).toISOString() });
+        }
+      }
+
+      // Compute spike count (days with ≥3 entries AND ≥2× median)
+      const nonZeroCounts = dailyCounts.filter(c => c > 0);
+      let spikeCount = 0;
+      if (nonZeroCounts.length > 0) {
+        const sortedNonZero = [...nonZeroCounts].sort((a, b) => a - b);
+        const median = sortedNonZero.length % 2 === 0
+          ? (sortedNonZero[sortedNonZero.length / 2 - 1] + sortedNonZero[sortedNonZero.length / 2]) / 2
+          : sortedNonZero[Math.floor(sortedNonZero.length / 2)];
+        const effectiveMedian = median > 0 ? median : 1;
+        const spikeThreshold = Math.max(3, effectiveMedian * 2);
+        spikeCount = dailyCounts.filter(count => count >= spikeThreshold && count >= 3).length;
+      }
+
+      // Compute concentration (top 10% days share)
+      const sortedCounts = [...dailyCounts].sort((a, b) => b - a);
+      const top10PercentCount = Math.max(1, Math.ceil(dailyCounts.length * 0.1));
+      const top10PercentSum = sortedCounts.slice(0, top10PercentCount).reduce((a, b) => a + b, 0);
+      const totalSum = dailyCounts.reduce((a, b) => a + b, 0);
+      const concentration = totalSum > 0 ? top10PercentSum / totalSum : 0;
+
+      // Get one sentence summary from primary card or fallback
+      const primaryCard = summaryArtifactCards[0];
+      const oneSentenceSummary = primaryCard?.title || 
+        (entryCount > 0 ? `Summary of ${entryCount} reflection${entryCount === 1 ? '' : 's'}` : 'Summary');
+
+      // Determine distribution label from distribution cards or default
+      const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+        entryCount === 0 ? 'none' :
+        distributionInsightCards.length > 0 && distributionInsightCards[0].title.includes('power')
+          ? 'powerlaw'
+          : concentration > 0.4 ? 'powerlaw'
+          : concentration > 0.2 ? 'lognormal'
+          : 'normal';
+
+      return buildSharePackForLens({
+        lens: 'summary',
+        oneSentenceSummary,
+        entryCount,
+        activeDays,
+        distributionLabel,
+        concentrationShareTop10PercentDays: concentration,
+        spikeCount,
+        keyMoments: keyMoments.slice(0, 5), // Top 5 spike days
+        periodStart: windowStart.toISOString(),
+        periodEnd: now.toISOString(),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('Failed to build summary SharePack:', err);
+      // Minimal fallback on error
+      return buildSharePackForLens({
+        lens: 'summary',
+        oneSentenceSummary: 'Summary',
+        entryCount: reflections.length,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+  }, [reflections, address, summaryArtifactCards, distributionInsightCards]);
+
   if (!mounted) return null;
 
   const lens = LENSES.summary;
@@ -336,13 +455,11 @@ export default function SummaryPage() {
         {!loading && !error && reflections.length > 0 && (
           <div className="space-y-6">
             {/* Share Actions */}
-            {sharePack && (
-              <ShareActionsBar
-                sharePack={sharePack}
-                senderWallet={address}
-                encryptionReady={encryptionReady}
-              />
-            )}
+            <ShareActionsBar
+              sharePack={sharePack}
+              senderWallet={address}
+              encryptionReady={encryptionReady}
+            />
 
             {/* Determinism-Emergence Axis */}
             {reflections.length >= 10 && (

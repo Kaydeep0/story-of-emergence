@@ -53,6 +53,35 @@ export async function deriveKeyFromSignature(address: string): Promise<CryptoKey
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
+// --- app key derivation (fixed secret → AES key for wallet shares) ---
+/**
+ * Derive a fixed app key from a constant secret for wallet shares
+ * This allows any user to decrypt wallet shares (access control via wallet address, not encryption)
+ */
+async function deriveAppKey(): Promise<CryptoKey> {
+  const appSecret = 'Story of Emergence — wallet shares app key v1';
+  const secretBytes = new TextEncoder().encode(appSecret);
+  const digest = await crypto.subtle.digest('SHA-256', u8ToArrayBuffer(secretBytes));
+  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+/**
+ * Encrypt data with the app key (for wallet shares)
+ * Returns an EncryptionEnvelope with ciphertext, iv, and version
+ */
+export async function encryptWithAppKey(plaintext: string): Promise<EncryptionEnvelope> {
+  const appKey = await deriveAppKey();
+  return encryptText(appKey, plaintext);
+}
+
+/**
+ * Decrypt data with the app key (for wallet shares)
+ */
+export async function decryptWithAppKey(envelope: EncryptionEnvelope): Promise<string> {
+  const appKey = await deriveAppKey();
+  return decryptText(appKey, envelope);
+}
+
 // --- legacy encrypt/decrypt (used in early versions) ---
 
 // Encrypt a JSON object -> base64(iv || ciphertext)

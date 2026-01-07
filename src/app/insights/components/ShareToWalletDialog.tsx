@@ -9,7 +9,6 @@ import type { ShareArtifact } from '../../../lib/artifacts/types';
 import type { SharePack } from '../../lib/share/sharePack';
 import { getSupabaseForWallet } from '../../../lib/supabase';
 import { createWalletShare } from '../../../lib/walletShares';
-import { checkWalletEncryptionSupport } from '../../../lib/walletEncryption';
 
 type ShareToWalletDialogProps = {
   /** SharePack - Universal payload (preferred) */
@@ -54,18 +53,6 @@ export function ShareToWalletDialog({
     const walletRegex = /^0x[a-fA-F0-9]{40}$/;
     if (!walletRegex.test(recipientWallet.trim())) {
       toast.error('Invalid wallet address format');
-      return;
-    }
-
-    // Check wallet encryption support
-    try {
-      const supported = await checkWalletEncryptionSupport();
-      if (!supported) {
-        toast.error('Your wallet does not support encryption. Please use MetaMask or a compatible wallet.');
-        return;
-      }
-    } catch (error) {
-      toast.error('Failed to check wallet encryption support');
       return;
     }
 
@@ -120,13 +107,7 @@ export function ShareToWalletDialog({
       console.error('Failed to create wallet share:', error);
       
       // Handle specific error cases
-      if (error.message?.includes('User rejected')) {
-        toast.error('Encryption request was cancelled');
-      } else if (error.message?.includes('not support')) {
-        toast.error('Recipient wallet does not support encryption');
-      } else {
-        toast.error(error.message || 'Failed to create wallet share');
-      }
+      toast.error(error.message || 'Failed to create wallet share');
     } finally {
       setCreating(false);
     }

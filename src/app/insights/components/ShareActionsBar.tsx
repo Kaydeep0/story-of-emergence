@@ -19,7 +19,8 @@ import { buildPublicShareUrl } from '../../lib/share/encodePublicSharePayload';
 import { ShareToWalletDialog } from './ShareToWalletDialog';
 import { buildShareTextFromPack } from '../../lib/share/buildShareText';
 import { SharePackRenderer } from '../../lib/share/SharePackRenderer';
-import { toPng } from 'html-to-image';
+import { toBlob, toPng } from 'html-to-image';
+import html2canvas from 'html2canvas';
 
 /**
  * Canonical privacy label string
@@ -118,6 +119,45 @@ function normalizeWeeklyExport(artifact: ShareArtifact, fallbackPatterns?: strin
   }
 
   return { summaryLines, patterns };
+}
+
+type ExportNode = HTMLElement;
+
+/**
+ * Convert a DOM node to a PNG Blob using html2canvas (reliable fallback)
+ * This handles CSS that html-to-image cannot serialize (backdrop-filter, filters, etc.)
+ */
+async function nodeToPngBlobViaHtml2Canvas(node: HTMLElement): Promise<Blob> {
+  const rect = node.getBoundingClientRect();
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+
+  if (width === 0 || height === 0) {
+    throw new Error("Export failed because the share card has zero size");
+  }
+
+  const canvas = await html2canvas(node, {
+    backgroundColor: "#0b0b0c",
+    scale: 2,
+    useCORS: true,
+    allowTaint: false,
+    logging: false,
+    width,
+    height,
+    windowWidth: width,
+    windowHeight: height,
+    scrollX: 0,
+    scrollY: 0,
+  });
+
+  const blob: Blob | null = await new Promise((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/png")
+  );
+
+  if (!blob) {
+    throw new Error("PNG export failed: canvas toBlob returned null");
+  }
+  return blob;
 }
 
 /**
@@ -662,24 +702,44 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
         
         if (sharePack) {
           // Use SharePack PNG renderer
-          if (!pngRendererRef.current) {
-            toast.error('PNG renderer not ready');
+          const wrapper = pngRendererRef.current;
+          if (!wrapper) {
+            console.error("PNG failed: pngRef missing");
+            toast.error("Failed to generate image");
             return;
           }
           
-          blob = await toPng(pngRendererRef.current, {
-            backgroundColor: '#000000',
-            quality: 1.0,
-            pixelRatio: 2,
-          });
+          // Capture the actual SharePackRenderer root element using data attribute
+          const node = wrapper.querySelector("[data-share-pack-root]") as HTMLElement | null;
+          if (!node) {
+            console.error("PNG failed: SharePackRenderer root not found");
+            toast.error("Failed to generate image");
+            return;
+          }
           
-          const lens = sharePack.lens;
-          const dateStr = sharePack.generatedAt.split('T')[0];
-          filename = `soe-${lens}-${dateStr}.png`;
+          // Wrap capture call with proper error handling
+          try {
+            blob = await nodeToPngBlobViaHtml2Canvas(node);
+            
+            const lens = sharePack.lens;
+            const dateStr = sharePack.generatedAt.split('T')[0];
+            filename = `soe-${lens}-${dateStr}.png`;
+          } catch (err) {
+            console.error("PNG export failed", err);
+            const msg = process.env.NODE_ENV === "development"
+              ? `Failed to generate image: ${String(err)}`
+              : "Failed to generate image. Please try again.";
+            toast.error(msg);
+            return;
+          }
         } else {
           // Legacy artifact PNG generation
           blob = await generateArtifactPNG(artifact!, fallbackPatterns);
           filename = generateArtifactFilename(artifact!);
+        }
+        
+        if (!(blob instanceof Blob)) {
+          throw new Error("PNG generation did not return a valid Blob");
         }
         
         const url = URL.createObjectURL(blob);
@@ -692,7 +752,11 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
         URL.revokeObjectURL(url);
         toast('Image downloaded');
       } catch (err) {
-        toast.error('Failed to generate image');
+        console.error("PNG export failed", err);
+        const msg = process.env.NODE_ENV === "development"
+          ? `Failed to generate image: ${String(err)}`
+          : "Failed to generate image. Please try again.";
+        toast.error(msg);
       }
     };
     
@@ -715,24 +779,44 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
         
         if (sharePack) {
           // Use SharePack PNG renderer
-          if (!pngRendererRef.current) {
-            toast.error('PNG renderer not ready');
+          const wrapper = pngRendererRef.current;
+          if (!wrapper) {
+            console.error("PNG failed: pngRef missing");
+            toast.error("Failed to generate image");
             return;
           }
           
-          blob = await toPng(pngRendererRef.current, {
-            backgroundColor: '#000000',
-            quality: 1.0,
-            pixelRatio: 2,
-          });
+          // Capture the actual SharePackRenderer root element using data attribute
+          const node = wrapper.querySelector("[data-share-pack-root]") as HTMLElement | null;
+          if (!node) {
+            console.error("PNG failed: SharePackRenderer root not found");
+            toast.error("Failed to generate image");
+            return;
+          }
           
-          const lens = sharePack.lens;
-          const dateStr = sharePack.generatedAt.split('T')[0];
-          filename = `soe-${lens}-${dateStr}.png`;
+          // Wrap capture call with proper error handling
+          try {
+            blob = await nodeToPngBlobViaHtml2Canvas(node);
+            
+            const lens = sharePack.lens;
+            const dateStr = sharePack.generatedAt.split('T')[0];
+            filename = `soe-${lens}-${dateStr}.png`;
+          } catch (err) {
+            console.error("PNG export failed", err);
+            const msg = process.env.NODE_ENV === "development"
+              ? `Failed to generate image: ${String(err)}`
+              : "Failed to generate image. Please try again.";
+            toast.error(msg);
+            return;
+          }
         } else {
           // Legacy artifact PNG generation
           blob = await generateArtifactPNG(artifact!, fallbackPatterns);
           filename = generateArtifactFilename(artifact!);
+        }
+        
+        if (!(blob instanceof Blob)) {
+          throw new Error("PNG generation did not return a valid Blob");
         }
         
         const file = new File([blob], filename, { type: 'image/png' });
@@ -751,7 +835,9 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
       } catch (err: any) {
         // AbortError means user cancelled - don't show error
         if (err.name !== 'AbortError') {
-          toast.error('Failed to share');
+          console.error("PNG export failed", err);
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(msg || "Failed to share");
         }
       }
     };
@@ -913,7 +999,7 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
 
   return (
     <>
-      <div className="mb-6 space-y-3">
+      <div className="mb-6 space-y-3" data-no-export="true">
         {/* Primary actions row */}
         <div className="flex flex-wrap gap-2 items-center">
           {(sharePack || artifact) && (
@@ -1064,10 +1150,13 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
           )}
           {hasPrivateShare && (
             <button
-              onClick={isDisabled ? undefined : handleSendPrivately}
-              disabled={isDisabled}
+              onClick={() => {
+                console.log("Send privately clicked", { address: senderWallet, encryptionReady, sharePack: !!sharePack, artifact: !!artifact });
+                setShowWalletDialog(true);
+              }}
+              disabled={!senderWallet || !encryptionReady}
               className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={disabledTooltip || 'Send privately to one recipient'}
+              title={!senderWallet ? 'Connect wallet to share' : !encryptionReady ? 'Unlock your vault to export' : 'Send privately to one recipient'}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -1112,9 +1201,19 @@ export function ShareActionsBar({ sharePack, artifact, senderWallet, encryptionR
         />
       )}
 
-      {/* Hidden PNG renderer for SharePack */}
+      {/* Dedicated PNG capture surface - always mounted, invisible but in layout */}
       {sharePack && (
-        <div ref={pngRendererRef} className="fixed -left-[9999px] top-0">
+        <div
+          ref={pngRendererRef}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: -10000,
+            width: 1200,
+            pointerEvents: 'none',
+            opacity: 0,
+          }}
+        >
           <SharePackRenderer sharePack={sharePack} mode="png" frame="square" />
         </div>
       )}

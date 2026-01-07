@@ -226,7 +226,7 @@ export function SharePackRenderer({
     };
 
     return (
-      <div style={cardStyle} data-share-root="true" className={className}>
+      <div style={cardStyle} data-share-pack-root="true" className={className}>
         {/* Header */}
         <div style={{ marginBottom: spacing.sectionGap }}>
           <div style={{ ...typography.brandTitle, marginBottom: '8px' }}>
@@ -352,7 +352,7 @@ export function SharePackRenderer({
   return (
     <div 
       className={`bg-black text-white rounded-2xl border border-white/10 ${className}`}
-      data-share-root={mode === 'png' ? 'true' : undefined}
+      data-share-pack-root="true"
     >
       <div className="p-6 sm:p-8">
         {/* Header */}

@@ -112,15 +112,21 @@ Story of Emergence is a private, wallet bound reflection vault with a client sid
 ---
 
 #### Distribution layer
-**Status: Core complete, cleanup remaining**
+**Status: Core complete, finishing fixes**
 
 - `wallet_shares` table canonical
 - `SharePack` universal format
 - One renderer (`SharePackRenderer`) across preview, export, viewer
 - All lenses use SharePack
-- Wallet share encryption/decryption working
+- Wallet share encryption simplified (app key, no eth_encrypt)
+- PNG export fixed (html2canvas replaces html-to-image)
+- "Send privately" button fixed
 
-**What remains:** Remove legacy routes (`/shared/open`, `/shared/open/[id]`), remove deprecated code (`src/app/lib/shares.ts`). This is cleanup, not urgency.
+**What remains:** 
+- Install html2canvas package (npm install)
+- Apply migration 024 in Supabase (drop old function overload first)
+- Remove legacy routes (`/shared/open`, `/shared/open/[id]`) - cleanup, not urgency
+- Remove deprecated code (`src/app/lib/shares.ts`) - cleanup, not urgency
 
 ---
 
@@ -144,15 +150,19 @@ See `docs/POSTURE.md` for the product posture and architectural layers.
 ## Daily Orientation
 
 **Layers touched today**
-Vault:
-Lens:
-Meaning:
-Distribution:
+Vault: Migration 024 (remove wrapped_key from wallet_shares), app key encryption added to crypto.ts
+Lens: Summary lens now always produces SharePack (minimal fallback)
+Meaning: None
+Distribution: PNG export fixed (html2canvas), SharePackRenderer data attribute, wallet share encryption simplified (removed eth_encrypt)
 
 **What moved forward today**
 
-- Legacy code removed (796 lines deleted, replaced with safe redirects)
-- Governance documents created (cleanup plan, vault invariants)
+- Removed eth_encrypt dependency from wallet shares (simplified to app key encryption)
+- Fixed PNG export: switched from html-to-image to html2canvas for reliable rendering
+- Summary lens hardened: always returns SharePack (even with empty cards)
+- "Send privately" button fixed: now uses same handler as dropdown "Share to wallet"
+- Migration 024 created: idempotent removal of wrapped_key column
+- Added html2canvas dependency (needs npm install)
 
 **Tooling**
 
@@ -160,35 +170,38 @@ Snapshot graduated from existence checks to semantic drift detection (redirect s
 
 **What is still blocked**
 
+- html2canvas package needs manual install (npm permission issue in sandbox)
+- Supabase migration 024 needs to be applied (drop old function overload first)
+
 
 ## Observed shifts today
 
 **New pattern surfaced in:**
-(Example: "New pattern surfaced in bridge generation - contrast signals are more decisive than similarity signals")
+PNG export reliability - html-to-image fails silently on backdrop-filter and complex CSS, html2canvas handles it reliably.
 
 **Previous assumption invalidated in:**
-(Example: "Previous assumption invalidated in SharePack migration - all lenses now use unified renderer")
+Wallet share encryption - eth_encrypt was unnecessary complexity. App key encryption (derived from fixed secret) is sufficient since access control is via wallet address, not encryption.
 
 **No change detected in:**
-(Example: "No change detected in vault layer - encryption and RLS remain stable")
+Vault layer RPCs remain stable. Meaning layer unchanged. Lens computation logic unchanged.
 
 **Interpretation:**
-(What does this mean? What trajectories are visible? What forks are emerging?)
+Distribution layer is simplifying (removing eth_encrypt, fixing PNG export). This aligns with scope freeze - fixing bugs and consistency, not adding features. The architecture is settling.
 
 
 ## Layer Balance Check
 
-**Vault status:**
+**Vault status:** Stable. Migration 024 ready (needs application in Supabase).
 
-**Lens status:**
+**Lens status:** Stable. All lenses produce SharePack. Summary lens hardened with fallback.
 
-**Meaning status:**
+**Meaning status:** Stable. No changes today.
 
-**Distribution status:**
+**Distribution status:** In progress. PNG export fixed, wallet share encryption simplified. html2canvas needs install, migration needs application.
 
 **Next pull forward tasks by layer**
 
-Vault:
-Lens:
-Meaning:
-Distribution:
+Vault: Apply migration 024 in Supabase (drop old function overload, then run migration)
+Lens: None - all lenses stable
+Meaning: None - no changes needed
+Distribution: Install html2canvas package, apply migration 024, test PNG export and wallet shares end-to-end
