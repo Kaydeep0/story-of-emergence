@@ -1,3 +1,6 @@
+> Canonical definition lives in docs/CONTINUITY_OF_SELF.md.
+> This document is an expanded appendix.
+
 # What the System Remembers About You Across Time
 
 This document articulates **what the system remembers** in plain language, without designing anything yet.

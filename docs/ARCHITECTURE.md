@@ -1,3 +1,6 @@
+> Canonical current architecture lives in docs/ARCHITECTURE_NOW.md.
+> This document is reference and historical context.
+
 # Story of Emergence Architecture Map
 
 ## 1. Product Definition

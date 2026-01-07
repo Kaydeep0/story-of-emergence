@@ -1,3 +1,5 @@
+> Operational snapshot only. Not a source of product truth.
+
 # STATUS
 
 ## Operating Frame
