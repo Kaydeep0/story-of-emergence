@@ -1,4 +1,5 @@
-> Operational snapshot only. Not a source of product truth.
+> STATUS is operational truth, not product law.
+> Canonical intent lives in docs/0_START_HERE.md.
 
 # STATUS
 
@@ -15,6 +16,11 @@ Vault layer: encryption session, entries, RLS, storage, migrations
 Lens layer: insights computed locally after decrypt
 Meaning layer: threads, bridges, pins
 Distribution layer: sharing and artifacts with one canonical spine
+
+### Canonical State
+- Engine: ☐ Open ☐ Closed ☐ Closing
+- Observer layer: Not implemented (by design)
+- Cockpit: Deferred until engine closure
 
 ---
 

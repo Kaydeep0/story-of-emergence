@@ -174,6 +174,22 @@ At the beginning of a session, do the following before suggesting tasks:
 - Artifacts
 - External sharing paths
 
+### Canonical Alignment Check
+
+- Core memory index reviewed: docs/0_START_HERE.md
+- Engine state: ☐ Open ☐ Closed ☐ Closing
+- Observer layer: ☐ Not implemented (by design)
+- Cockpit/UI work: ☐ Allowed ☐ Not allowed today
+
+Affirmations:
+- No new insight types will be added today
+- No new data models will be added today
+- No new metaphors will be introduced today
+- Any work today must articulate existing vision, not expand it
+
+Continuity reminder:
+The system remembers patterns, tensions, and shifts — not goals, judgments, or prescriptions.
+
 3. Answer explicitly:
 - What layers are strong
 - What layers are in progress
@@ -212,6 +228,18 @@ At the end of a session or before a merge, do the following:
    - WHAT_IS_BUILT.md
    - docs/STATUS.md
    - Actual repo contents
+
+### Stance Integrity Check
+
+- Did any change today introduce prescription, optimization, or judgment? ☐ No ☐ Yes (explain)
+- Did any change imply interpretation rather than witnessing? ☐ No ☐ Yes
+- Did any work today assume meaning instead of holding pattern? ☐ No ☐ Yes
+
+Continuity impact:
+- Did today's changes strengthen continuity of self across time? ☐ Yes ☐ Neutral ☐ Weakened
+
+Drift check:
+If I return to this system after a month, would today's changes help it remember me — or confuse it?
 
 Do not invent progress. If something is partially implemented, say so.
 
