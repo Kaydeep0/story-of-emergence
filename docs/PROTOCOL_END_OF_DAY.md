@@ -9,6 +9,9 @@ Facts only. Use short bullets. No justification, no interpretation.
 Include:
 - Commits made today (count + 3–8 key bullets max)
 - Any uncommitted changes (count + file list summary)
+- Stashes: count + top stash message (if any)
+
+If stashes exist, list the most recent stash message and confirm whether it is intentional.
 
 ---
 
