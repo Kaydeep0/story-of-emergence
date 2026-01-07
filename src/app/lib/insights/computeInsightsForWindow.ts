@@ -144,24 +144,13 @@ export function computeInsightsForWindow(args: {
   }
   
   // Merge debug information (artifact may already have debug from computeWeeklyArtifact)
-  // Only add/overwrite if artifact doesn't already have comprehensive debug
-  // Ensure debug object exists with safe defaults
-  if (!artifact.debug) {
-    artifact.debug = {
-      eventCount: 0,
-      windowStartIso: windowStart.toISOString(),
-      windowEndIso: windowEnd.toISOString(),
-      minEventIso: null,
-      maxEventIso: null,
-      sampleEventIds: [],
-      sampleEventDates: [],
-    };
-  }
+  // Rule: defaults fill missing fields, lens-computed debug always wins
+  const existing = artifact.debug ?? {};
   
-  if (!artifact.debug.reflectionsInWindow) {
-    const eventDates = events
-      .map(e => {
-        // Extract timestamp using same logic as reflectionAdapters
+  // Build default debug info (only used to fill missing fields)
+  const eventDates = events
+    .map(e => {
+      // Extract timestamp using same logic as reflectionAdapters
       const isUnified = 'sourceKind' in e;
       let ts: Date | null = null;
       
@@ -186,44 +175,43 @@ export function computeInsightsForWindow(args: {
     .filter((d): d is string => d !== null && d !== undefined)
     .sort();
   
-    const debug: InsightArtifactDebug = {
-      eventCount: events.length,
-      windowStartIso: windowStart.toISOString(),
-      windowEndIso: windowEnd.toISOString(),
-      minEventIso: eventDates.length > 0 ? eventDates[0] : null,
-      maxEventIso: eventDates.length > 0 ? eventDates[eventDates.length - 1] : null,
-      sampleEventIds: events.slice(0, 3).map(e => e.id ?? 'unknown'),
-      sampleEventDates: events.slice(0, 3).map(e => {
-        const isUnified = 'sourceKind' in e;
-        let ts: Date | null = null;
-        if (isUnified) {
-          const unified = e as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
-          ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
-               unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
-               unified.eventAt ? new Date(unified.eventAt) :
-               unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
-               null;
-        } else {
-          const internal = e as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
-          ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
-               internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
-               internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
-               internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
-               null;
-        }
-        return ts ? ts.toISOString() : 'invalid';
-      }),
-      // Dev-only reflection intake counters
-      reflectionsLoaded: args.reflectionsLoaded,
-      eventsGenerated: args.eventsGenerated,
-    };
-    
-    // Merge with existing debug if present (preserve validation telemetry from computeWeeklyArtifact)
-    artifact.debug = {
-      ...debug,
-      ...artifact.debug, // Preserve validation telemetry
-    };
-  }
+  const defaults: Partial<InsightArtifactDebug> = {
+    eventCount: events.length,
+    windowStartIso: windowStart.toISOString(),
+    windowEndIso: windowEnd.toISOString(),
+    minEventIso: eventDates.length > 0 ? eventDates[0] : null,
+    maxEventIso: eventDates.length > 0 ? eventDates[eventDates.length - 1] : null,
+    sampleEventIds: events.length > 0 ? events.slice(0, 3).map(e => e.id ?? 'unknown') : [],
+    sampleEventDates: events.length > 0 ? events.slice(0, 3).map(e => {
+      const isUnified = 'sourceKind' in e;
+      let ts: Date | null = null;
+      if (isUnified) {
+        const unified = e as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date; timestamp?: string | Date };
+        ts = unified.occurredAt ? (typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt) :
+             unified.createdAt ? (typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt) :
+             unified.eventAt ? new Date(unified.eventAt) :
+             unified.timestamp ? (typeof unified.timestamp === 'string' ? new Date(unified.timestamp) : unified.timestamp) :
+             null;
+      } else {
+        const internal = e as InternalEvent & { occurredAt?: string | Date; timestamp?: string | Date };
+        ts = internal.occurredAt ? (typeof internal.occurredAt === 'string' ? new Date(internal.occurredAt) : internal.occurredAt) :
+             internal.createdAt ? (internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt)) :
+             internal.eventAt ? (internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt)) :
+             internal.timestamp ? (typeof internal.timestamp === 'string' ? new Date(internal.timestamp) : internal.timestamp) :
+             null;
+      }
+      return ts ? ts.toISOString() : 'invalid';
+    }) : [],
+    // Dev-only reflection intake counters
+    reflectionsLoaded: args.reflectionsLoaded,
+    eventsGenerated: args.eventsGenerated,
+  };
+  
+  // Merge: defaults fill missing fields, existing (lens-computed) always wins
+  artifact.debug = {
+    ...defaults,
+    ...existing, // Lens-computed debug (from computeWeeklyArtifact) always wins
+  } as InsightArtifactDebug;
   
   // Ensure debug object always exists (safe default)
   if (!artifact.debug) {
