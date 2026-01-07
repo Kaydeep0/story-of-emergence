@@ -11,6 +11,15 @@ import type { PatternNarrative } from '../patternMemory/patternNarratives';
 export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy' | 'distributions';
 
 /**
+ * Rejected card with validation reasons
+ */
+export type RejectedCard = {
+  title: string;
+  kind: string;
+  reasons: string[];
+};
+
+/**
  * Debug information attached to artifacts for development
  */
 export type InsightArtifactDebug = {
@@ -24,6 +33,13 @@ export type InsightArtifactDebug = {
   /** Dev-only: Reflection intake counters */
   reflectionsLoaded?: number;
   eventsGenerated?: number;
+  /** Insight Contract validation telemetry */
+  reflectionsInWindow?: number;
+  activeDays?: number;
+  rawCardsGenerated?: number;
+  cardsPassingValidation?: number;
+  rejectedCards?: RejectedCard[];
+  timezone?: string;
 };
 
 /**

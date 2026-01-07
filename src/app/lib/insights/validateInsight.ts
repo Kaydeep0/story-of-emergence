@@ -117,6 +117,106 @@ export function validateInsight(insight: InsightCard | null): boolean {
 }
 
 /**
+ * Detailed validation result with reasons for rejection
+ */
+export type ValidationResult = {
+  ok: boolean;
+  reasons: string[];
+};
+
+/**
+ * Validate insight with detailed reasons for failure
+ * Returns structured result with ok flag and list of rejection reasons
+ */
+export function validateInsightDetailed(insight: InsightCard | null): ValidationResult {
+  if (!insight) {
+    return { ok: false, reasons: ['Insight is null'] };
+  }
+
+  const { title, explanation, evidence } = insight;
+  const reasons: string[] = [];
+
+  // Check 1: Claim must be falsifiable and behavioral, not a raw metric
+  const metricPatterns = [
+    /^you wrote \d+/i,
+    /^you had \d+/i,
+    /^\d+ entries?/i,
+    /^\d+ reflections?/i,
+    /^writing activity (up|down|steady)/i,
+    /^you wrote on \d+ of/i,
+  ];
+  
+  const isMetricTitle = metricPatterns.some(pattern => pattern.test(title));
+  if (isMetricTitle) {
+    reasons.push('Title is a metric, not a behavioral claim');
+  }
+
+  // Check 2: Evidence must be present
+  const hasEvidenceArray = evidence && evidence.length >= 2;
+  const explanationHasEvidence = /Evidence:?\s*[\n•-]/i.test(explanation);
+  
+  let evidenceItemCount = 0;
+  if (explanationHasEvidence) {
+    const evidenceMatch = explanation.match(/Evidence:?\s*\n([\s\S]*?)(?:\n\n(?:Contrast|Confidence):|$)/i);
+    if (evidenceMatch) {
+      const evidenceSection = evidenceMatch[1];
+      evidenceItemCount = (evidenceSection.match(/[•-]|\d+\./g) || []).length;
+    }
+  }
+
+  const hasSufficientEvidence = hasEvidenceArray || (evidenceItemCount >= 2 && evidenceItemCount <= 4);
+  if (!hasSufficientEvidence) {
+    reasons.push(`Insufficient evidence: array has ${evidence?.length || 0} items, explanation has ${evidenceItemCount} items (need 2-4)`);
+  }
+
+  // Check 3: Contrast must be explicitly stated
+  const hasContrast = /Contrast:\s*[^\n]+/i.test(explanation);
+  if (!hasContrast) {
+    reasons.push('Missing contrast: no explicit statement of what did not happen');
+  }
+
+  // Check 4: Confidence signal must be present
+  const hasConfidence = /Confidence:\s*[^\n]+/i.test(explanation);
+  if (!hasConfidence) {
+    reasons.push('Missing confidence signal');
+  } else {
+    // Additional validation: Confidence should reference scope
+    const confidenceMatch = explanation.match(/Confidence:\s*([^\n]+)/i);
+    if (confidenceMatch) {
+      const confidenceText = confidenceMatch[1];
+      const hasScopeReference = /\d+\s*(days?|weeks?|months?|years?|entries?|reflections?|active\s+days?)/i.test(confidenceText) ||
+                                /pattern.*(repeat|observed|across)/i.test(confidenceText) ||
+                                /sample\s+size|window/i.test(confidenceText);
+      if (!hasScopeReference) {
+        reasons.push('Confidence exists but does not reference scope (time windows, sample size, pattern repetition)');
+      }
+    }
+  }
+
+  // Additional check: Reject prescriptive language
+  const prescriptivePatterns = [
+    /\btry\b/i,
+    /\bshould\b/i,
+    /\bmust\b/i,
+    /\bneed to\b/i,
+    /\bkeep it up\b/i,
+    /\bbuild a habit\b/i,
+  ];
+  
+  const hasPrescription = prescriptivePatterns.some(pattern => 
+    pattern.test(title) || pattern.test(explanation)
+  );
+  if (hasPrescription) {
+    reasons.push('Contains prescriptive language (violates "mirror, not steer" posture)');
+  }
+
+  return {
+    ok: reasons.length === 0,
+    reasons,
+  };
+}
+
+/**
  * Filter array of insights to only contract-compliant ones
  * Non-compliant insights are silently dropped (no warnings, no placeholders)
  */

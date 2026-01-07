@@ -74,6 +74,44 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
               <div><span className="text-white/50">sampleEventIds:</span> [{debug.sampleEventIds.join(', ')}]</div>
               <div><span className="text-white/50">sampleEventDates:</span> [{debug.sampleEventDates.join(', ')}]</div>
             </div>
+            
+            {/* Insight Contract Validation Telemetry */}
+            {(debug.reflectionsInWindow !== undefined || debug.activeDays !== undefined || debug.rawCardsGenerated !== undefined) && (
+              <div className="pt-1 pb-2 border-t border-white/10 mt-2">
+                <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Insight Contract Validation</div>
+                {debug.reflectionsInWindow !== undefined && (
+                  <div><span className="text-white/50">reflectionsInWindow:</span> {debug.reflectionsInWindow}</div>
+                )}
+                {debug.activeDays !== undefined && (
+                  <div><span className="text-white/50">activeDays:</span> {debug.activeDays}</div>
+                )}
+                {debug.rawCardsGenerated !== undefined && (
+                  <div><span className="text-white/50">rawCardsGenerated:</span> {debug.rawCardsGenerated}</div>
+                )}
+                {debug.cardsPassingValidation !== undefined && (
+                  <div><span className="text-white/50">cardsPassingValidation:</span> {debug.cardsPassingValidation}</div>
+                )}
+                {debug.timezone && (
+                  <div><span className="text-white/50">timezone:</span> {debug.timezone}</div>
+                )}
+                {debug.rejectedCards && debug.rejectedCards.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Rejected Cards ({debug.rejectedCards.length})</div>
+                    {debug.rejectedCards.map((rejected, idx) => (
+                      <div key={idx} className="mt-1 pl-2 border-l-2 border-red-500/30">
+                        <div className="text-white/60 font-semibold">{rejected.title}</div>
+                        <div className="text-white/40 text-[10px]">kind: {rejected.kind}</div>
+                        <div className="text-red-400/70 text-[10px] mt-1">
+                          {rejected.reasons.map((reason, rIdx) => (
+                            <div key={rIdx}>• {reason}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -9,7 +9,8 @@ import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeAlwaysOnSummary } from './alwaysOnSummary';
 import { computeTimelineSpikes, itemToReflectionEntry } from './timelineSpikes';
-import { validateInsight } from './validateInsight';
+import { validateInsight, validateInsightDetailed } from './validateInsight';
+import type { InsightArtifactDebug, RejectedCard } from './artifactTypes';
 
 
 /**
@@ -77,12 +78,73 @@ export function computeWeeklyArtifact(args: {
   
   // Insight Contract Gatekeeper: Only render contract-compliant insights
   // Non-compliant insights fail silently (no warnings, no placeholders)
-  const cards = allCards.filter(validateInsight);
+  // Collect debug telemetry for validation failures
+  const cards: InsightCard[] = [];
+  const rejectedCards: RejectedCard[] = [];
+  
+  for (const card of allCards) {
+    const validation = validateInsightDetailed(card);
+    if (validation.ok) {
+      cards.push(card);
+    } else {
+      // Collect rejection reasons for debug panel (max 5 rejected cards)
+      if (rejectedCards.length < 5) {
+        rejectedCards.push({
+          title: card.title || '(no title)',
+          kind: card.kind,
+          reasons: validation.reasons,
+        });
+      }
+    }
+  }
+  
+  // Calculate debug metrics
+  const reflectionsInWindow = windowEntries.length;
+  const activeDaysSet = new Set<string>();
+  for (const entry of windowEntries) {
+    const dateKey = new Date(entry.createdAt).toISOString().split('T')[0];
+    activeDaysSet.add(dateKey);
+  }
+  const activeDays = activeDaysSet.size;
   
   // Generate artifact ID (deterministic based on window)
   const startDateStr = windowStart.toISOString().split('T')[0];
   const endDateStr = windowEnd.toISOString().split('T')[0];
   const artifactId = `weekly-${startDateStr}-${endDateStr}`;
+  
+  // Calculate min/max event dates
+  let minEventIso: string | null = null;
+  let maxEventIso: string | null = null;
+  if (events.length > 0) {
+    const eventDates = events.map(e => {
+      const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
+      return new Date(eventAt).getTime();
+    });
+    const minTime = Math.min(...eventDates);
+    const maxTime = Math.max(...eventDates);
+    minEventIso = new Date(minTime).toISOString();
+    maxEventIso = new Date(maxTime).toISOString();
+  }
+  
+  // Build debug info
+  const debug: InsightArtifactDebug = {
+    eventCount: events.length,
+    windowStartIso: windowStart.toISOString(),
+    windowEndIso: windowEnd.toISOString(),
+    minEventIso,
+    maxEventIso,
+    sampleEventIds: events.slice(0, 3).map(e => (e as any).id || 'unknown'),
+    sampleEventDates: events.slice(0, 3).map(e => {
+      const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
+      return eventAt.split('T')[0];
+    }),
+    reflectionsInWindow,
+    activeDays,
+    rawCardsGenerated: allCards.length,
+    cardsPassingValidation: cards.length,
+    rejectedCards: rejectedCards.length > 0 ? rejectedCards : undefined,
+    timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
   
   const artifact: InsightArtifact = {
     horizon: 'weekly',
@@ -94,6 +156,7 @@ export function computeWeeklyArtifact(args: {
     },
     createdAt: new Date().toISOString(),
     cards,
+    debug,
   };
   
   return artifact;
