@@ -1,3 +1,17 @@
+/**
+ * Test harness isolation
+ *
+ * Next.js uses PostCSS (Tailwind) via postcss.config.mjs.
+ * Vite/Vitest will also auto-discover PostCSS config and try to process CSS imports,
+ * which breaks unit tests and creates non-deterministic failures.
+ *
+ * During tests we:
+ * - stub all CSS imports to a no-op module
+ * - temporarily rename postcss.config.mjs so Vite cannot discover it
+ *
+ * This keeps Next builds canonical while tests remain tooling-independent.
+ */
+
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
 import path from 'path';
