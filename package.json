@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "NODE_ENV=test dotenv -e .env.test -- vitest",
+    "test": "NODE_ENV=test vitest",
     "validate-bridges": "tsx src/app/lib/meaningBridges/validateBridges.dev.ts",
     "schema:check": "tsx scripts/checkSchema.ts",
     "snapshot": "node scripts/capabilitySnapshot.mjs"
