@@ -8,6 +8,7 @@ import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeActiveDays } from './distributionLayer';
+import { validateInsight } from './validateInsight';
 
 /**
  * Compute metrics for a single year
@@ -255,7 +256,12 @@ export function computeYoYArtifact(args: {
 
     // Create card (always succeeds, even if one year is empty)
     const card = createYoYCard(yearA, yearB, yearAEntries, yearBEntries, yearAMetrics, yearBMetrics);
-    cards.push(card);
+    
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      cards.push(card);
+    }
 
     // Dev log: Card created
     if (process.env.NODE_ENV === 'development') {

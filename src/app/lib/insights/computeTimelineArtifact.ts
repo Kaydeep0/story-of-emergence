@@ -11,6 +11,8 @@ import { computeTimelineSpikes } from './timelineSpikes';
 import { computeLinkClusters } from './linkClusters';
 import { computeTopicDrift } from './topicDrift';
 import { computeContrastPairs } from './contrastPairs';
+import { detectTimelineEvents, timelineEventToCard } from './timelineEvents';
+import { validateInsight } from './validateInsight';
 import type { TopicDriftBucket } from './topicDrift';
 import type { ContrastPair } from './contrastPairs';
 
@@ -96,21 +98,32 @@ export function computeTimelineArtifact(args: {
     return createdAt >= windowStart && createdAt <= windowEnd;
   });
   
+  // Compute timeline events (NEW: Discrete moments, not continuous curves)
+  const timelineEvents = detectTimelineEvents(windowEntries);
+  const eventCards = timelineEvents.map(timelineEventToCard);
+  
   // Compute insights using existing pure functions
-  const spikes = computeTimelineSpikes(windowEntries);
+  // Suppress graphs if events exist - events matter more
+  const spikes = eventCards.length === 0 ? computeTimelineSpikes(windowEntries) : [];
   const clusters = computeLinkClusters(windowEntries);
   const topicDrift = computeTopicDrift(windowEntries);
   const contrastPairs = computeContrastPairs(topicDrift);
   
   // Convert all to InsightCard[] format
+  // Events come first (most important)
   // Spikes and clusters are already InsightCards
   // TopicDriftBucket and ContrastPair are converted to InsightCards with metadata
-  const cards: InsightCard[] = [
+  const allCards: InsightCard[] = [
+    ...eventCards, // Timeline events first
     ...spikes,
     ...clusters,
     ...topicDrift.map((bucket, idx) => topicDriftBucketToCard(bucket, idx)),
     ...contrastPairs.map((pair, idx) => contrastPairToCard(pair, idx)),
   ] as InsightCard[];
+
+  // Insight Contract Gatekeeper: Only render contract-compliant insights
+  // Non-compliant insights fail silently (no warnings, no placeholders)
+  const cards = allCards.filter(validateInsight);
   
   const artifact: InsightArtifact = {
     horizon: 'timeline',

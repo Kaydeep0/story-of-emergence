@@ -8,6 +8,7 @@ import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from './distributionLayer';
+import { validateInsight } from './validateInsight';
 
 /**
  * Format classification label for display
@@ -28,7 +29,7 @@ function formatDate(dateStr: string): string {
 }
 
 /**
- * Create lifetime distribution card from distribution results
+ * Create lifetime distribution card from distribution results (New Insight Contract)
  */
 function createLifetimeDistributionCard(
   distributionResult: DistributionResult,
@@ -43,26 +44,73 @@ function createLifetimeDistributionCard(
   const classification = windowDistribution.classification;
   const classificationLabel = formatClassification(classification);
 
-  // Build narrative
-  const title = `Lifetime distribution: ${classificationLabel.toLowerCase()} pattern`;
+  // Only generate insight if we can make a falsifiable claim
+  // Require at least 30 entries and 10 active days for meaningful pattern detection
+  if (distributionResult.totalEntries < 30 || activeDays < 10) {
+    // Fallback to simple description if insufficient data
+    const title = `Lifetime distribution: ${classificationLabel.toLowerCase()} pattern`;
+    const body = `You wrote ${distributionResult.totalEntries} reflections across ${activeDays} active days.`;
+    
+    return {
+      id: `lifetime-distribution-${Date.now()}`,
+      kind: 'distribution',
+      title,
+      explanation: body,
+      evidence: topSpikeDates.slice(0, 3).map((date, idx) => {
+        const dayData = distributionResult.topDays.find(d => d.date === date);
+        return {
+          entryId: `spike-${idx}`,
+          timestamp: new Date(date).toISOString(),
+          preview: `${dayData?.count || 0} entries on ${formatDate(date)}`,
+        };
+      }),
+      computedAt: new Date().toISOString(),
+      _distributionResult: distributionResult,
+      _windowDistribution: windowDistribution,
+    };
+  }
+
+  // CLAIM: User's writing pattern is concentrated vs distributed
+  const isConcentrated = top10PercentShare > 0.5;
+  const claim = isConcentrated
+    ? "Your most intense days account for most of your output. You write in concentrated bursts, not steady streams."
+    : "Your writing is distributed across time. You maintain a steady cadence rather than concentrated bursts.";
+
+  // EVIDENCE: Concrete metrics
+  const evidenceItems: string[] = [
+    `${distributionResult.totalEntries} total reflections across ${activeDays} active days`,
+    `Top 10% of days account for ${Math.round(top10PercentShare * 100)}% of total output`,
+  ];
   
-  let body = `You wrote ${distributionResult.totalEntries} reflections across ${activeDays} active days. `;
-  
-  if (top10PercentShare > 0.5) {
-    body += `Your most intense days account for ${Math.round(top10PercentShare * 100)}% of your total output. `;
-  } else {
-    body += `Your writing was spread across ${activeDays} days. `;
+  if (biggestSpikeDay && topDay) {
+    evidenceItems.push(`Biggest day: ${biggestSpikeDay} with ${topDay.count} entries`);
   }
   
-  if (biggestSpikeDay) {
-    body += `Your biggest day was ${biggestSpikeDay} with ${topDay.count} entries.`;
+  // Calculate median entries per active day for contrast
+  const medianEntriesPerDay = distributionResult.dailyCounts.length > 0
+    ? [...distributionResult.dailyCounts].sort((a, b) => a - b)[Math.floor(distributionResult.dailyCounts.length / 2)]
+    : 0;
+  
+  if (medianEntriesPerDay > 0) {
+    evidenceItems.push(`Median entries per active day: ${medianEntriesPerDay}`);
   }
+
+  // CONTRAST: What didn't happen
+  const contrast = isConcentrated
+    ? "A steady daily cadence pattern was not observed. Most days have zero entries."
+    : "A power-law concentration pattern was not observed. Output is more evenly distributed.";
+
+  // CONFIDENCE: Why we're confident
+  const confidence = `Pattern observed across ${activeDays} active days with ${distributionResult.totalEntries} total entries. Classification: ${classificationLabel.toLowerCase()} distribution.`;
+
+  const title = claim;
+  const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
   return {
     id: `lifetime-distribution-${Date.now()}`,
     kind: 'distribution', // Must match InsightKind union
     title,
-    explanation: body,
+    explanation,
     evidence: topSpikeDates.slice(0, 3).map((date, idx) => {
       const dayData = distributionResult.topDays.find(d => d.date === date);
       return {
@@ -161,15 +209,20 @@ export function computeLifetimeArtifact(args: {
   // Gate on entriesToUse.length > 0 (not events count)
   if (entriesToUse.length > 0) {
     const card = createLifetimeDistributionCard(distributionResult, windowDistribution);
-    cards.push(card);
+    
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      cards.push(card);
 
-    // Dev log: Card created
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Lifetime] artifact created with cardsLength and cardKinds:', {
-        cardsLength: cards.length,
-        cardKinds: cards.map(c => c.kind),
-        totalEntries: distributionResult.totalEntries,
-      });
+      // Dev log: Card created
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Lifetime] artifact created with cardsLength and cardKinds:', {
+          cardsLength: cards.length,
+          cardKinds: cards.map(c => c.kind),
+          totalEntries: distributionResult.totalEntries,
+        });
+      }
     }
   }
 

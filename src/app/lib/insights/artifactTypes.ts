@@ -11,6 +11,35 @@ import type { PatternNarrative } from '../patternMemory/patternNarratives';
 export type InsightHorizon = 'weekly' | 'summary' | 'timeline' | 'yearly' | 'lifetime' | 'yoy' | 'distributions';
 
 /**
+ * Rejected card with validation reasons
+ */
+export type RejectedCard = {
+  title: string;
+  kind: string;
+  reasons: string[];
+};
+
+/**
+ * Observer v1 debug information
+ */
+export type ObserverV1Debug = {
+  /** Cache key used for this comparison */
+  cacheKey?: string;
+  /** Whether Weekly artifact was found in cache */
+  weeklyInCache?: boolean;
+  /** Whether Yearly artifact was found in cache */
+  yearlyInCache?: boolean;
+  /** Weekly signature computed (present or null) */
+  weeklySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+  /** Yearly signature computed (present or null) */
+  yearlySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+  /** Whether patterns matched */
+  match: boolean;
+  /** Reason for silence (if match is false) */
+  silenceReason?: string;
+};
+
+/**
  * Debug information attached to artifacts for development
  */
 export type InsightArtifactDebug = {
@@ -24,6 +53,44 @@ export type InsightArtifactDebug = {
   /** Dev-only: Reflection intake counters */
   reflectionsLoaded?: number;
   eventsGenerated?: number;
+  /** Insight Contract validation telemetry */
+  reflectionsInWindow?: number;
+  activeDays?: number;
+  rawCardsGenerated?: number;
+  cardsPassingValidation?: number;
+  rejectedCards?: RejectedCard[];
+  timezone?: string;
+  invalidReflectionDates?: number;
+  sampleInvalidDateRaw?: string;
+  /** Data integrity: events that don't have corresponding reflections */
+  missingReflectionsForEvents?: number;
+  /** Observer v1: Pattern persistence recognition debug */
+  observerV1?: ObserverV1Debug;
+};
+
+/**
+ * Observer v1: Pattern persistence recognition result
+ * 
+ * Attached to artifact when pattern persistence is detected.
+ * See docs/PATTERN_PERSISTENCE_RULE.md for when this is populated.
+ */
+export type ObserverPersistenceResult = {
+  /** The pattern signature that persists */
+  signature: {
+    observedDistributionFit: 'normal' | 'lognormal' | 'powerlaw';
+    concentrationRatio: number;
+    dayOfWeekPattern: number[]; // Array of day numbers (0-6)
+    topPercentileShare: number;
+    relativeSpikeThreshold: number;
+  };
+  /** Lens names where the pattern appears */
+  lenses: [string, string];
+  /** Window start dates (ISO strings) */
+  windowStarts: [string, string];
+  /** Window end dates (ISO strings) */
+  windowEnds: [string, string];
+  /** Persistence statement (single sentence) */
+  statement: string;
 };
 
 /**
@@ -44,5 +111,7 @@ export type InsightArtifact = {
   narratives?: PatternNarrative[];
   /** Debug information for development */
   debug?: InsightArtifactDebug;
+  /** Observer v1: Pattern persistence recognition result (null by default) */
+  persistence?: ObserverPersistenceResult | null;
 };
 

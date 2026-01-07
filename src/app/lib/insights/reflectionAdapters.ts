@@ -120,6 +120,56 @@ function extractPlaintext(event: InternalEvent | UnifiedInternalEvent): string |
 }
 
 /**
+ * Extract reflection ID from an event payload
+ * 
+ * Handles two cases:
+ * 1. Synthetic events (created from reflections): event.id IS the reflection ID
+ * 2. Real DB events: reflection ID is in payload.id (for reflection_saved events)
+ * 
+ * @param event - InternalEvent or UnifiedInternalEvent
+ * @returns Reflection ID if found, null otherwise
+ */
+export function extractReflectionIdFromEvent(event: InternalEvent | UnifiedInternalEvent): string | null {
+  const isUnified = 'sourceKind' in event;
+  
+  if (isUnified) {
+    const unified = event as UnifiedInternalEvent;
+    // Check rawMetadata first (if payload was preserved)
+    if (unified.rawMetadata && typeof unified.rawMetadata === 'object') {
+      const meta = unified.rawMetadata as Record<string, unknown>;
+      if (typeof meta.id === 'string') {
+        return meta.id;
+      }
+    }
+    // For synthetic UnifiedInternalEvents created from reflections, event.id IS the reflection ID
+    // This happens in Weekly page when converting reflections to events
+    if (typeof unified.id === 'string') {
+      return unified.id;
+    }
+    return null;
+  } else {
+    const internal = event as InternalEvent;
+    const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
+    
+    // For reflection_saved events from DB, the reflection ID is in payload.id
+    const eventType = payload?.event_type as string | undefined;
+    if (eventType === 'reflection_saved' || eventType === 'reflection_deleted' || eventType === 'reflection_restored') {
+      if (typeof payload?.id === 'string') {
+        return payload.id;
+      }
+    }
+    
+    // For synthetic events (created from reflections), event.id IS the reflection ID
+    // This happens when Weekly page converts reflections to events
+    if (typeof internal.id === 'string') {
+      return internal.id;
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Extract sourceKind from an event
  */
 function extractSourceKind(event: InternalEvent | UnifiedInternalEvent): string | undefined {

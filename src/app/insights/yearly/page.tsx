@@ -50,6 +50,7 @@ import { ObservationalDivider } from '../components/ObservationalDivider';
 import { SessionClosing } from '../components/SessionClosing';
 import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
+import { attachPersistenceToArtifact, resetPersistenceCacheIfIdentityChanged } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 // Yearly Wrap v1 - Locked
@@ -216,8 +217,18 @@ export default function YearlyWrapPage() {
         })),
       } as any);
 
+      // Observer v1: Attach persistence by comparing with Weekly artifact if available
+      // Use dataset version from debug to create cache key
+      const datasetVersion = artifact.debug?.maxEventIso ?? artifact.debug?.windowEndIso ?? null;
+      
+      // Attach persistence (may be null if Weekly artifact not in cache for same key)
+      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections, {
+        address: address ?? null,
+        datasetVersion,
+      });
+      
       // Store artifact for debug panel
-      setInsightArtifact(artifact);
+      setInsightArtifact(updatedArtifact);
 
       // Extract DistributionResult and WindowDistribution from artifact card metadata
       const cards = artifact.cards ?? [];
@@ -586,6 +597,13 @@ export default function YearlyWrapPage() {
     <section className="max-w-4xl mx-auto px-4 py-10">
         <InsightDebugPanel debug={insightArtifact?.debug} />
 
+        {/* Observer v1: Persistence statement */}
+        {insightArtifact?.persistence?.statement && (
+          <div className="mb-6 text-sm text-white/40">
+            {insightArtifact.persistence.statement}
+          </div>
+        )}
+
         {/* Loading State */}
         {loading && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
@@ -625,13 +643,16 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Yearly wrap still forming - Data exists but artifact incomplete */}
+        {/* Yearly wrap still forming - Only show when truly no usable data */}
         {!loading && !error && (() => {
           const debug = insightArtifact?.debug;
           const eventCount = debug?.eventCount ?? 0;
           const cards = insightArtifact?.cards ?? [];
           const yearlyCard = cards.find((c) => c.kind === 'distribution');
           const hasYearlyCard = !!yearlyCard;
+          
+          // Check if we have usable distribution data
+          const hasDistributionData = distributionResult && distributionResult.totalEntries > 0;
           
           // Dev-only logging: gate values
           if (process.env.NODE_ENV === 'development') {
@@ -640,13 +661,19 @@ export default function YearlyWrapPage() {
               cardsLength: cards.length,
               yearlyCardExists: hasYearlyCard,
               yearlyCardKind: yearlyCard?.kind,
-              shouldShowStillForming: eventCount > 0 && !hasYearlyCard,
+              hasDistributionData,
+              distributionResultTotalEntries: distributionResult?.totalEntries,
+              shouldShowStillForming: eventCount > 0 && !hasYearlyCard && !hasDistributionData,
             });
           }
           
-          // Show this state ONLY if eventCount > 0 but yearly card doesn't exist
-          // This means distribution computation failed
-          return eventCount > 0 && !hasYearlyCard;
+          // Show "still forming" ONLY if:
+          // - Events exist (eventCount > 0)
+          // - But no card exists (hasYearlyCard === false)
+          // - AND no usable distribution data (hasDistributionData === false)
+          // This means we're truly waiting for data to be computed
+          // If distribution data exists, render the content even without card (content gates handle it)
+          return eventCount > 0 && !hasYearlyCard && !hasDistributionData;
         })() && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
             <p className="text-white/70 mb-2">Yearly wrap is still forming. Data is present.</p>

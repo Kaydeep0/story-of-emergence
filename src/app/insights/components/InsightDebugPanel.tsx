@@ -74,6 +74,101 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
               <div><span className="text-white/50">sampleEventIds:</span> [{debug.sampleEventIds.join(', ')}]</div>
               <div><span className="text-white/50">sampleEventDates:</span> [{debug.sampleEventDates.join(', ')}]</div>
             </div>
+            
+            {/* Insight Contract Validation Telemetry */}
+            {(debug.reflectionsInWindow !== undefined || debug.activeDays !== undefined || debug.rawCardsGenerated !== undefined) && (
+              <div className="pt-1 pb-2 border-t border-white/10 mt-2">
+                <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Insight Contract Validation</div>
+                {debug.reflectionsInWindow !== undefined && (
+                  <div><span className="text-white/50">reflectionsInWindow:</span> {debug.reflectionsInWindow} <span className="text-white/30">(from windowEntries)</span></div>
+                )}
+                {debug.activeDays !== undefined && (
+                  <div><span className="text-white/50">activeDays:</span> {debug.activeDays}</div>
+                )}
+                <div><span className="text-white/50">eventCount:</span> {debug.eventCount} <span className="text-white/30">(from events)</span></div>
+                {debug.invalidReflectionDates !== undefined && (
+                  <div><span className="text-white/50">invalidReflectionDates:</span> {debug.invalidReflectionDates}</div>
+                )}
+                {debug.rawCardsGenerated !== undefined && (
+                  <div><span className="text-white/50">rawCardsGenerated:</span> {debug.rawCardsGenerated}</div>
+                )}
+                {debug.cardsPassingValidation !== undefined && (
+                  <div><span className="text-white/50">cardsPassingValidation:</span> {debug.cardsPassingValidation}</div>
+                )}
+                {debug.timezone && (
+                  <div><span className="text-white/50">timezone:</span> {debug.timezone}</div>
+                )}
+                {debug.missingReflectionsForEvents !== undefined && debug.missingReflectionsForEvents > 0 && (
+                  <div className="mt-2 text-amber-400/70">
+                    <div><span className="text-white/50">missingReflectionsForEvents:</span> {debug.missingReflectionsForEvents} <span className="text-white/30">(data integrity issue)</span></div>
+                  </div>
+                )}
+                {debug.invalidReflectionDates !== undefined && debug.invalidReflectionDates > 0 && (
+                  <div className="mt-2 text-amber-400/70">
+                    <div><span className="text-white/50">invalidReflectionDates:</span> {debug.invalidReflectionDates}</div>
+                    {debug.sampleInvalidDateRaw && (
+                      <div className="text-xs"><span className="text-white/40">sampleInvalidDateRaw:</span> {debug.sampleInvalidDateRaw}</div>
+                    )}
+                  </div>
+                )}
+                {debug.rejectedCards && debug.rejectedCards.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Rejected Cards ({debug.rejectedCards.length})</div>
+                    {debug.rejectedCards.map((rejected, idx) => (
+                      <div key={idx} className="mt-1 pl-2 border-l-2 border-red-500/30">
+                        <div className="text-white/60 font-semibold">{rejected.title}</div>
+                        <div className="text-white/40 text-[10px]">kind: {rejected.kind}</div>
+                        <div className="text-red-400/70 text-[10px] mt-1">
+                          {rejected.reasons.map((reason, rIdx) => (
+                            <div key={rIdx}>• {reason}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Observer v1 Debug */}
+                {debug.observerV1 && (
+                  <div className="pt-1 pb-2 border-t border-white/10 mt-2">
+                    <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Observer v1</div>
+                    {debug.observerV1.cacheKey && (
+                      <div><span className="text-white/50">cacheKey:</span> {debug.observerV1.cacheKey}</div>
+                    )}
+                    {debug.observerV1.weeklyInCache !== undefined && (
+                      <div><span className="text-white/50">weeklyInCache:</span> {debug.observerV1.weeklyInCache ? 'true' : 'false'}</div>
+                    )}
+                    {debug.observerV1.yearlyInCache !== undefined && (
+                      <div><span className="text-white/50">yearlyInCache:</span> {debug.observerV1.yearlyInCache ? 'true' : 'false'}</div>
+                    )}
+                    <div><span className="text-white/50">match:</span> {debug.observerV1.match ? 'true' : 'false'}</div>
+                    {debug.observerV1.weeklySignature && (
+                      <div>
+                        <span className="text-white/50">weeklySignature:</span>{' '}
+                        {debug.observerV1.weeklySignature.observedDistributionFit} (ratio: {debug.observerV1.weeklySignature.concentrationRatio.toFixed(2)})
+                      </div>
+                    )}
+                    {!debug.observerV1.weeklySignature && (
+                      <div><span className="text-white/50">weeklySignature:</span> null</div>
+                    )}
+                    {debug.observerV1.yearlySignature && (
+                      <div>
+                        <span className="text-white/50">yearlySignature:</span>{' '}
+                        {debug.observerV1.yearlySignature.observedDistributionFit} (ratio: {debug.observerV1.yearlySignature.concentrationRatio.toFixed(2)})
+                      </div>
+                    )}
+                    {!debug.observerV1.yearlySignature && (
+                      <div><span className="text-white/50">yearlySignature:</span> null</div>
+                    )}
+                    {debug.observerV1.silenceReason && (
+                      <div className="text-amber-400/70 mt-1">
+                        <span className="text-white/50">silenceReason:</span> {debug.observerV1.silenceReason}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

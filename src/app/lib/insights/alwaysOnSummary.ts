@@ -7,7 +7,10 @@ import type {
   InsightEvidence,
   AlwaysOnSummaryCard,
   AlwaysOnSummaryData,
+  EvidenceChip,
 } from './types';
+import { validateInsight } from './validateInsight';
+import { pickEvidenceChips } from './pickEvidenceChips';
 
 /**
  * Get the start of day (midnight) for a given date in local timezone
@@ -183,102 +186,180 @@ export function computeAlwaysOnSummary(
   const cards: AlwaysOnSummaryCard[] = [];
   const computedAt = new Date().toISOString();
 
-  // Card 1: Writing Change
-  if (previousCount > 0 || currentCount > 0) {
+  // Card 1: Writing Change (New Insight Contract)
+  // Only generate if we have enough data to make a falsifiable claim
+  if (previousCount > 0 && currentCount > 0) {
     const percentChange =
       previousCount > 0
         ? Math.round(((currentCount - previousCount) / previousCount) * 100)
-        : currentCount > 0
-        ? 100
         : 0;
 
-    const direction = percentChange >= 0 ? 'up' : 'down';
-    const absPercent = Math.abs(percentChange);
+    // Detect clustering pattern: entries concentrated in fewer days vs spread evenly
+    const currentActiveDaysCount = countActiveDays(currentWeekEntries);
+    const previousActiveDaysCount = countActiveDays(previousWeekEntries);
+    
+    // Calculate clustering ratio: entries per active day
+    const currentClusteringRatio = currentActiveDaysCount > 0 ? currentCount / currentActiveDaysCount : 0;
+    const previousClusteringRatio = previousActiveDaysCount > 0 ? previousCount / previousActiveDaysCount : 0;
+    
+    // Detect if user clusters (writes multiple entries on fewer days) vs spreads evenly
+    const isClustered = currentClusteringRatio >= 2.0; // 2+ entries per active day indicates clustering
+    const clusteringChanged = Math.abs(currentClusteringRatio - previousClusteringRatio) >= 0.5;
+    
+    // Only generate insight if we can make a falsifiable claim about clustering behavior
+    if (isClustered || clusteringChanged) {
+      // CLAIM: User processes in bursts rather than gradually
+      const claim = isClustered 
+        ? "You don't process things gradually. You wait, then commit fully."
+        : "Your writing pattern shifted this week.";
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${currentCount} entries across ${currentActiveDaysCount} active days (${currentClusteringRatio.toFixed(1)} entries/day)`,
+        `Previous week: ${previousCount} entries across ${previousActiveDaysCount} active days (${previousClusteringRatio.toFixed(1)} entries/day)`,
+      ];
+      
+      if (currentActiveDaysCount < 7) {
+        const gapDays = 7 - currentActiveDaysCount;
+        evidenceItems.push(`${gapDays} day${gapDays === 1 ? '' : 's'} with no entries`);
+      }
+      
+      // CONTRAST: What didn't happen
+      const contrast = currentActiveDaysCount < 4 
+        ? "A steady daily cadence was not observed."
+        : "No sustained low-level activity pattern detected.";
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = "Pattern observed across two consecutive weeks with measurable clustering ratio.";
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
-    let title: string;
-    if (percentChange === 0) {
-      title = 'Writing activity steady this week';
-    } else if (previousCount === 0 && currentCount > 0) {
-      title = 'Started writing this week';
-    } else {
-      title = `Writing activity ${direction} ${absPercent}% this week`;
+      // Build evidence from both weeks
+      const currentEvidence = getEvidencePerDay(currentWeekEntries, 3);
+      const previousEvidence = getEvidencePerDay(previousWeekEntries, 2);
+      const evidence = [...currentEvidence, ...previousEvidence];
+
+      // Observer v0: Pick evidence chips from current week reflections
+      const allWeekReflections = [...currentWeekEntries, ...previousWeekEntries];
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        allWeekReflections,
+        claim
+      );
+
+      const data: AlwaysOnSummaryData = {
+        summaryType: 'writing_change',
+        currentWeekEntries: currentCount,
+        previousWeekEntries: previousCount,
+        currentWeekActiveDays: currentActiveDaysCount,
+        percentChange,
+      };
+
+      const card: AlwaysOnSummaryCard = {
+        id: generateInsightId('always_on_summary', 'writing_change'),
+        kind: 'always_on_summary',
+        title,
+        explanation,
+        evidence,
+        computedAt,
+        data,
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
+      };
+
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
-
-    let explanation: string;
-    if (previousCount === 0 && currentCount > 0) {
-      explanation = `You wrote ${currentCount} ${currentCount === 1 ? 'entry' : 'entries'} in the last 7 days. Keep it up!`;
-    } else if (currentCount === 0 && previousCount > 0) {
-      explanation = `You had ${previousCount} ${previousCount === 1 ? 'entry' : 'entries'} the week before but none in the last 7 days.`;
-    } else {
-      explanation = `You wrote ${currentCount} ${currentCount === 1 ? 'entry' : 'entries'} in the last 7 days versus ${previousCount} the week before.`;
-    }
-
-    // Build evidence from both weeks
-    const currentEvidence = getEvidencePerDay(currentWeekEntries, 3);
-    const previousEvidence = getEvidencePerDay(previousWeekEntries, 2);
-    const evidence = [...currentEvidence, ...previousEvidence];
-
-    const data: AlwaysOnSummaryData = {
-      summaryType: 'writing_change',
-      currentWeekEntries: currentCount,
-      previousWeekEntries: previousCount,
-      currentWeekActiveDays: currentActiveDays,
-      percentChange,
-    };
-
-    cards.push({
-      id: generateInsightId('always_on_summary', 'writing_change'),
-      kind: 'always_on_summary',
-      title,
-      explanation,
-      evidence,
-      computedAt,
-      data,
-    });
   }
 
-  // Card 2: Consistency (only if we have current week data)
+  // Card 2: Consistency (New Insight Contract)
+  // Only generate if we can make a falsifiable claim about daily cadence patterns
   if (currentCount > 0) {
     const activeDayNames = getActiveDayNames(currentWeekEntries);
-    const dayListFormatted =
-      activeDayNames.length <= 3
-        ? activeDayNames.join(', ')
-        : activeDayNames.slice(0, -1).join(', ') +
-          ', and ' +
-          activeDayNames[activeDayNames.length - 1];
+    const previousActiveDays = previousCount > 0 ? countActiveDays(previousWeekEntries) : null;
+    
+    // Detect pattern: daily cadence vs sporadic
+    const isDailyCadence = currentActiveDays === 7;
+    const isSporadic = currentActiveDays <= 3;
+    const cadenceChanged = previousActiveDays !== null && Math.abs(currentActiveDays - previousActiveDays) >= 3;
+    
+    // Only generate if we can make a falsifiable claim
+    if (isDailyCadence || isSporadic || cadenceChanged) {
+      // CLAIM: User maintains daily cadence OR writes sporadically OR pattern shifted
+      let claim: string;
+      if (isDailyCadence) {
+        claim = "You maintain a daily writing cadence. Every day this week had at least one entry.";
+      } else if (isSporadic) {
+        claim = "Your writing is concentrated on specific days, not spread evenly.";
+      } else {
+        claim = `Your writing cadence shifted from ${previousActiveDays} active days to ${currentActiveDays} active days.`;
+      }
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${currentActiveDays} active days out of 7 this week`,
+        `${currentCount} total entries this week`,
+      ];
+      
+      // Add previous week comparison if available
+      if (previousActiveDays !== null) {
+        evidenceItems.push(`Previous week: ${previousActiveDays} active days with ${previousCount} entries`);
+      }
+      
+      // Add gap information if sporadic
+      if (isSporadic) {
+        const gapDays = 7 - currentActiveDays;
+        evidenceItems.push(`${gapDays} day${gapDays === 1 ? '' : 's'} with no entries`);
+      }
+      
+      // CONTRAST: What didn't happen
+      const contrast = isDailyCadence
+        ? "No days were skipped. A sporadic pattern was not observed."
+        : isSporadic
+        ? "A steady daily cadence was not observed. Most days had zero entries."
+        : "A consistent cadence pattern was not maintained across consecutive weeks.";
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = previousActiveDays !== null
+        ? `Pattern observed across two consecutive weeks with measurable active day counts (${previousActiveDays} → ${currentActiveDays}).`
+        : `Pattern observed across 7 consecutive days with ${currentActiveDays} active days.`;
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
-    const title = `You wrote on ${currentActiveDays} of the last 7 days`;
+      const evidence = getEvidencePerDay(currentWeekEntries, 7);
 
-    let explanation: string;
-    if (currentActiveDays === 7) {
-      explanation = 'Perfect week! You had entries every single day.';
-    } else if (currentActiveDays >= 5) {
-      explanation = `Great consistency! You had entries on ${dayListFormatted}.`;
-    } else if (currentActiveDays >= 3) {
-      explanation = `You had entries on ${dayListFormatted}.`;
-    } else {
-      explanation = `You had entries on ${dayListFormatted}. Try writing more often to build a habit.`;
+      // Observer v0: Pick evidence chips from current week reflections
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        currentWeekEntries,
+        claim
+      );
+
+      const data: AlwaysOnSummaryData = {
+        summaryType: 'consistency',
+        currentWeekEntries: currentCount,
+        previousWeekEntries: previousCount,
+        currentWeekActiveDays: currentActiveDays,
+        activeDayNames,
+      };
+
+      const card: AlwaysOnSummaryCard = {
+        id: generateInsightId('always_on_summary', 'consistency'),
+        kind: 'always_on_summary',
+        title,
+        explanation,
+        evidence,
+        computedAt,
+        data,
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
+      };
+
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
-
-    const evidence = getEvidencePerDay(currentWeekEntries, 7);
-
-    const data: AlwaysOnSummaryData = {
-      summaryType: 'consistency',
-      currentWeekEntries: currentCount,
-      previousWeekEntries: previousCount,
-      currentWeekActiveDays: currentActiveDays,
-      activeDayNames,
-    };
-
-    cards.push({
-      id: generateInsightId('always_on_summary', 'consistency'),
-      kind: 'always_on_summary',
-      title,
-      explanation,
-      evidence,
-      computedAt,
-      data,
-    });
   }
 
   // Card 3: Weekly Pattern Insight
@@ -338,7 +419,7 @@ export function computeAlwaysOnSummary(
 
         const title = `You tend to write most on ${patternDaysFormatted}.`;
 
-        // Get evidence from pattern days
+        // Get evidence from pattern days (ensure at least 2 items for validation)
         const evidence: InsightEvidence[] = [];
         for (const dayName of patternDays) {
           const dayIndex = dayNames.indexOf(dayName);
@@ -352,8 +433,8 @@ export function computeAlwaysOnSummary(
             timestamp: entry.createdAt,
           })));
         }
-        // Limit to 6 evidence items total
-        const limitedEvidence = evidence.slice(0, 6);
+        // Limit to 6 evidence items total, but ensure at least 2 for validation
+        const limitedEvidence = evidence.length >= 2 ? evidence.slice(0, 6) : evidence;
 
         const data: AlwaysOnSummaryData = {
           summaryType: 'weekly_pattern',
@@ -363,15 +444,52 @@ export function computeAlwaysOnSummary(
           patternDays,
         };
 
-        cards.push({
+        // CLAIM: User tends to write on specific days of the week
+        const claim = title;
+        
+        // EVIDENCE: Already in evidence array (entries from pattern days)
+        // Add summary metrics to explanation
+        const evidenceItems: string[] = [
+          `Pattern observed across ${totalWeeks} weeks`,
+          `${patternDays.length} day${patternDays.length === 1 ? '' : 's'} of the week show consistent activity`,
+          `Average ${(historicalEntries.length / totalWeeks / 7).toFixed(1)} entries per day on pattern days`,
+        ];
+        
+        // CONTRAST: What didn't happen
+        const contrast = `A uniform distribution across all 7 days was not observed. Activity is concentrated on specific days.`;
+        
+        // CONFIDENCE: Why we're confident
+        const confidence = `Pattern detected across ${totalWeeks} consecutive weeks with activity on ${patternDays.length} day${patternDays.length === 1 ? '' : 's'}, meeting threshold of ${minAvgEntriesPerWeek} entries per week average.`;
+        
+        const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
+
+        // Observer v0: Pick evidence chips from pattern day reflections
+        const patternDayReflections = historicalEntries.filter(entry => {
+          const date = new Date(entry.createdAt);
+          const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+          return patternDays.includes(dayName);
+        });
+        const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+          patternDayReflections,
+          claim,
+          { patternDays }
+        );
+
+        const card: AlwaysOnSummaryCard = {
           id: generateInsightId('always_on_summary', 'weekly_pattern'),
           kind: 'always_on_summary',
           title,
-          explanation: title,
+          explanation,
           evidence: limitedEvidence,
           computedAt,
           data,
-        });
+          evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
+        };
+
+        // Insight Contract Gatekeeper: Only render contract-compliant insights
+        if (validateInsight(card)) {
+          cards.push(card);
+        }
       }
     }
   }
@@ -414,7 +532,24 @@ export function computeAlwaysOnSummary(
     }
 
     if (spikeFound && spikeDate && spikeDayName) {
-      const title = `You had a spike in writing activity on ${spikeDayName}.`;
+      // CLAIM: User had a spike in writing activity
+      const claim = `You had a spike in writing activity on ${spikeDayName}.`;
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${spikeCount} entries on ${spikeDayName}`,
+        `Baseline average: ${baselineAvgPerDay.toFixed(1)} entries per day over last 14 days`,
+        `Spike is ${(spikeCount / baselineAvgPerDay).toFixed(1)}× above baseline`,
+      ];
+      
+      // CONTRAST: What didn't happen
+      const contrast = `A steady, uniform writing pattern was not observed. This day exceeded the baseline by at least 2×.`;
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = `Spike detected using 14-day baseline (${baselineEntries.length} entries) with threshold of 2× baseline average (${baselineAvgPerDay.toFixed(1)} entries/day). Spike day had ${spikeCount} entries.`;
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
       const evidence = spikeEntries
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -423,6 +558,13 @@ export function computeAlwaysOnSummary(
           entryId: entry.id,
           timestamp: entry.createdAt,
         }));
+
+      // Observer v0: Pick evidence chips from spike day reflections
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        spikeEntries,
+        claim,
+        { spikeDate }
+      );
 
       const data: AlwaysOnSummaryData = {
         summaryType: 'activity_spike',
@@ -435,15 +577,21 @@ export function computeAlwaysOnSummary(
         baselineCount: Math.round(baselineAvgPerDay * 10) / 10, // Round to 1 decimal
       };
 
-      cards.push({
+      const card: AlwaysOnSummaryCard = {
         id: generateInsightId('always_on_summary', 'activity_spike'),
         kind: 'always_on_summary',
         title,
-        explanation: title,
+        explanation,
         evidence,
         computedAt,
         data,
-      });
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
+      };
+
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
   }
 

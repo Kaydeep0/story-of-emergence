@@ -19,7 +19,7 @@ Distribution layer: sharing and artifacts with one canonical spine
 
 ### Canonical State
 - Engine: ☐ Open ☐ Closed ☐ Closing
-- Observer layer: Not implemented (by design)
+- Observer layer: Observer v0 complete (Evidence Chips MVP) — see `docs/OBSERVER_V0.md`. Observer v1 persistence across Weekly and Yearly is implemented, cached per wallet and datasetVersion, silence enforced by tests, statement renders only when allowed.
 - Cockpit: Deferred until engine closure
 
 ---

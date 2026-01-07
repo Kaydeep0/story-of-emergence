@@ -50,8 +50,10 @@ export function computeInsightsForWindow(args: {
   /** Dev-only: Reflection intake counters for debugging */
   reflectionsLoaded?: number;
   eventsGenerated?: number;
+  /** Optional: Actual reflection entries to match against events */
+  reflections?: import('./types').ReflectionEntry[];
 }): InsightArtifact {
-  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [], reflectionsLoaded, eventsGenerated } = args;
+  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [], reflectionsLoaded, eventsGenerated, reflections } = args;
   
   let artifact: InsightArtifact;
   
@@ -64,6 +66,7 @@ export function computeInsightsForWindow(args: {
       wallet,
       entriesCount,
       eventsCount,
+      reflections,
     });
   } else if (horizon === 'summary') {
     artifact = computeSummaryArtifact({
@@ -143,7 +146,11 @@ export function computeInsightsForWindow(args: {
     throw new Error(`Horizon ${horizon} not yet implemented in engine. Use dedicated page routes instead.`);
   }
   
-  // Attach debug information to artifact
+  // Merge debug information (artifact may already have debug from computeWeeklyArtifact)
+  // Rule: defaults fill missing fields, lens-computed debug always wins
+  const existing = artifact.debug ?? {};
+  
+  // Build default debug info (only used to fill missing fields)
   const eventDates = events
     .map(e => {
       // Extract timestamp using same logic as reflectionAdapters
@@ -171,14 +178,14 @@ export function computeInsightsForWindow(args: {
     .filter((d): d is string => d !== null && d !== undefined)
     .sort();
   
-  const debug: InsightArtifactDebug = {
+  const defaults: Partial<InsightArtifactDebug> = {
     eventCount: events.length,
     windowStartIso: windowStart.toISOString(),
     windowEndIso: windowEnd.toISOString(),
     minEventIso: eventDates.length > 0 ? eventDates[0] : null,
     maxEventIso: eventDates.length > 0 ? eventDates[eventDates.length - 1] : null,
-    sampleEventIds: events.slice(0, 3).map(e => e.id ?? 'unknown'),
-    sampleEventDates: events.slice(0, 3).map(e => {
+    sampleEventIds: events.length > 0 ? events.slice(0, 3).map(e => e.id ?? 'unknown') : [],
+    sampleEventDates: events.length > 0 ? events.slice(0, 3).map(e => {
       const isUnified = 'sourceKind' in e;
       let ts: Date | null = null;
       if (isUnified) {
@@ -197,39 +204,45 @@ export function computeInsightsForWindow(args: {
              null;
       }
       return ts ? ts.toISOString() : 'invalid';
-    }),
+    }) : [],
     // Dev-only reflection intake counters
     reflectionsLoaded: args.reflectionsLoaded,
     eventsGenerated: args.eventsGenerated,
   };
   
+  // Merge: defaults fill missing fields, existing (lens-computed) always wins
+  artifact.debug = {
+    ...defaults,
+    ...existing, // Lens-computed debug (from computeWeeklyArtifact) always wins
+  } as InsightArtifactDebug;
+  
   // Dev-only validation checks
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development' && artifact.debug) {
     if (events.length > 0) {
-      const minDate = debug.minEventIso ? new Date(debug.minEventIso) : null;
-      const maxDate = debug.maxEventIso ? new Date(debug.maxEventIso) : null;
+      const minDate = artifact.debug.minEventIso ? new Date(artifact.debug.minEventIso) : null;
+      const maxDate = artifact.debug.maxEventIso ? new Date(artifact.debug.maxEventIso) : null;
       
       // Check if minEventIso is after windowEndIso
       if (minDate && minDate > windowEnd) {
-        console.error(`[computeInsightsForWindow] minEventIso (${debug.minEventIso}) is after windowEndIso (${debug.windowEndIso})`, {
+        console.error(`[computeInsightsForWindow] minEventIso (${artifact.debug.minEventIso}) is after windowEndIso (${artifact.debug.windowEndIso})`, {
           horizon,
           eventCount: events.length,
-          windowStart: debug.windowStartIso,
-          windowEnd: debug.windowEndIso,
-          minEvent: debug.minEventIso,
-          maxEvent: debug.maxEventIso,
+          windowStart: artifact.debug.windowStartIso,
+          windowEnd: artifact.debug.windowEndIso,
+          minEvent: artifact.debug.minEventIso,
+          maxEvent: artifact.debug.maxEventIso,
         });
       }
       
       // Check if maxEventIso is before windowStartIso
       if (maxDate && maxDate < windowStart) {
-        console.error(`[computeInsightsForWindow] maxEventIso (${debug.maxEventIso}) is before windowStartIso (${debug.windowStartIso})`, {
+        console.error(`[computeInsightsForWindow] maxEventIso (${artifact.debug.maxEventIso}) is before windowStartIso (${artifact.debug.windowStartIso})`, {
           horizon,
           eventCount: events.length,
-          windowStart: debug.windowStartIso,
-          windowEnd: debug.windowEndIso,
-          minEvent: debug.minEventIso,
-          maxEvent: debug.maxEventIso,
+          windowStart: artifact.debug.windowStartIso,
+          windowEnd: artifact.debug.windowEndIso,
+          minEvent: artifact.debug.minEventIso,
+          maxEvent: artifact.debug.maxEventIso,
         });
       }
       
@@ -266,8 +279,6 @@ export function computeInsightsForWindow(args: {
     }
   }
   
-  artifact.debug = debug;
-  
   // Phase 5.4-5.5: Attach narratives to artifact (single integration point)
   // Extract patterns, generate snapshots, analyze deltas, generate narratives, select, attach
   // Task F: Expand Pattern Narratives beyond Weekly
@@ -295,6 +306,14 @@ export function computeInsightsForWindow(args: {
     // If narrative generation fails, silently skip attach (guardrail)
     // Artifact is returned unchanged
   }
+  
+  // Observer v1: Pattern persistence recognition
+  // Persistence is attached via attachPersistenceToArtifact when both Weekly and Yearly
+  // artifacts are available. Since pages compute independently, persistence may be attached
+  // on the second artifact computation (when both are in cache).
+  // For now, set persistence to null by default (hard silence).
+  // The attachPersistenceToArtifact function handles comparison when both artifacts exist.
+  artifact.persistence = null;
   
   return artifact;
 }

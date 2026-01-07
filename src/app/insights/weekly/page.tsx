@@ -25,6 +25,8 @@ import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
 import { InsightSignalCard } from '../components/InsightSignalCard';
 import { MiniHistogram } from '../components/MiniHistogram';
 import { LensTransition } from '../components/LensTransition';
+import { EvidenceChips } from '../components/EvidenceChips';
+import { ReflectionPreviewPanel } from '../components/InsightDrawer';
 import { filterEventsByWindow, groupByDay } from '../../lib/insights/timeWindows';
 import { interpretSpikeRatio, interpretActiveDays, interpretEntryCount, interpretPeakDay } from '../lib/metricInterpretations';
 import { compareToPreviousWeek, compareTo30DayAverage, formatComparisonIndicator, getPreviousPeriodDailyCounts } from '../lib/temporalComparisons';
@@ -41,6 +43,7 @@ import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
+import { attachPersistenceToArtifact, resetPersistenceCacheIfIdentityChanged } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 export default function WeeklyPage() {
@@ -54,6 +57,8 @@ export default function WeeklyPage() {
   const [artifact, setArtifact] = useState<InsightArtifact | null>(null);
   const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
   const { densityMode, handleDensityChange } = useDensity(address, mounted);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const lens = LENSES.weekly;
 
@@ -153,13 +158,12 @@ export default function WeeklyPage() {
         }
       });
 
-      if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
-
-      // Compute weekly artifact with filtered events
+      // Compute weekly artifact with filtered events (even if events.length === 0 for debug info)
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
         windowStart: start,
+        reflections, // Pass actual reflections so events can be matched to them
         windowEnd: end,
         wallet: address ?? undefined,
         entriesCount: reflections.length,
@@ -171,12 +175,39 @@ export default function WeeklyPage() {
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
       const normalizedCards = cards.map(normalizeInsightCard);
+      // Map original cards to normalized cards for evidenceChips
+      const cardsWithEvidence = normalizedCards.map((normalized, idx) => ({
+        ...normalized,
+        evidenceChips: cards[idx]?.evidenceChips,
+      }));
       
-      // Store artifact for debug panel
-      setArtifact(artifact);
+      // Dev logging for debugging rendering issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Weekly] Artifact computed:', {
+          eventsInWindow: events.length,
+          cardsGenerated: cards.length,
+          normalizedCards: normalizedCards.length,
+          hasDebug: !!artifact.debug,
+          debugRawCards: artifact.debug?.rawCardsGenerated,
+          debugPassingCards: artifact.debug?.cardsPassingValidation,
+        });
+      }
+      
+      // Observer v1: Attach persistence by comparing with Yearly artifact if available
+      // Use dataset version from debug to create cache key
+      const datasetVersion = artifact.debug?.maxEventIso ?? artifact.debug?.windowEndIso ?? null;
+      
+      // Attach persistence (may be null if Yearly artifact not in cache for same key)
+      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections, {
+        address: address ?? null,
+        datasetVersion,
+      });
+      
+      // Store artifact for debug panel (always set, even if empty)
+      setArtifact(updatedArtifact);
       
       return {
-        weeklyCards: normalizedCards,
+        weeklyCards: cardsWithEvidence,
         eventsInWindow: events.length,
       };
     } catch (err) {
@@ -301,6 +332,13 @@ export default function WeeklyPage() {
 
         <InsightDebugPanel debug={artifact?.debug} />
 
+        {/* Observer v1: Persistence statement */}
+        {artifact?.persistence?.statement && (
+          <div className="mb-6 text-sm text-white/40">
+            {artifact.persistence.statement}
+          </div>
+        )}
+
         {loading && (
           <div className="mt-8 space-y-4">
             <InsightCardSkeleton />
@@ -345,7 +383,12 @@ export default function WeeklyPage() {
             ) : weeklyCards.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
-                  No weekly insights yet. Keep writing reflections and they&apos;ll appear here.
+                  Reflections exist this week, but no contract-compliant insights were generated.
+                  {artifact?.debug?.rawCardsGenerated !== undefined && artifact.debug.rawCardsGenerated > 0 && (
+                    <span className="block mt-2 text-xs text-white/40">
+                      ({artifact.debug.rawCardsGenerated} card{artifact.debug.rawCardsGenerated === 1 ? '' : 's'} generated, {artifact.debug.cardsPassingValidation || 0} passed validation)
+                    </span>
+                  )}
                 </p>
                 <Link
                   href="/insights/summary"
@@ -450,7 +493,19 @@ export default function WeeklyPage() {
                         primaryLabel={isPrimary ? 'Primary signal this week' : undefined}
                         densityMode={densityMode}
                       >
-                        {card.summary.split('.')[0]}.
+                        <div>
+                          {card.summary.split('.')[0]}.
+                          {card.evidenceChips && card.evidenceChips.length > 0 && (
+                            <EvidenceChips
+                              chips={card.evidenceChips}
+                              reflections={reflections}
+                              onChipClick={(reflection) => {
+                                setSelectedReflection(reflection);
+                                setPreviewOpen(true);
+                              }}
+                            />
+                          )}
+                        </div>
                       </InsightSignalCard>
                     );
                   })}
@@ -496,6 +551,16 @@ export default function WeeklyPage() {
         {/* Session Closing */}
         <SessionClosing lens="weekly" narrativeTone={narrativeTone} />
       </section>
+
+      {/* Reflection Preview Panel */}
+      <ReflectionPreviewPanel
+        entry={selectedReflection}
+        isOpen={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setSelectedReflection(null);
+        }}
+      />
     </div>
   );
 }

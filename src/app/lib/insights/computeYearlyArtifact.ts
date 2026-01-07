@@ -8,6 +8,7 @@ import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from './distributionLayer';
+import { validateInsight } from './validateInsight';
 
 
 /**
@@ -200,21 +201,25 @@ export function computeYearlyArtifact(args: {
   if (hasEntries && (distributionResult.totalEntries > 0 || hasEvents)) {
     const card = createYearlyNarrativeCard(distributionResult, windowDistribution);
     
-    // Dev-only logging: verify card shape after creation
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[YearlyArtifact] Card created:', {
-        cardId: card.id,
-        cardKind: card.kind,
-        hasDistributionResult: '_distributionResult' in card,
-        hasWindowDistribution: '_windowDistribution' in card,
-        distributionResultTotalEntries: card._distributionResult?.totalEntries,
-        windowDistributionClassification: card._windowDistribution?.classification,
-        distributionResultKeys: card._distributionResult ? Object.keys(card._distributionResult) : null,
-        windowDistributionKeys: card._windowDistribution ? Object.keys(card._windowDistribution) : null,
-      });
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      // Dev-only logging: verify card shape after creation
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[YearlyArtifact] Card created:', {
+          cardId: card.id,
+          cardKind: card.kind,
+          hasDistributionResult: '_distributionResult' in card,
+          hasWindowDistribution: '_windowDistribution' in card,
+          distributionResultTotalEntries: card._distributionResult?.totalEntries,
+          windowDistributionClassification: card._windowDistribution?.classification,
+          distributionResultKeys: card._distributionResult ? Object.keys(card._distributionResult) : null,
+          windowDistributionKeys: card._windowDistribution ? Object.keys(card._windowDistribution) : null,
+        });
+      }
+      
+      cards.push(card);
     }
-    
-    cards.push(card);
   } else {
     // Dev-only logging: card not created because totalEntries === 0
     if (process.env.NODE_ENV === 'development') {
