@@ -93,3 +93,7 @@ The system remembers what happened, not what it means.
 
 Meaning belongs to you.
 
+---
+
+The system holds continuity without closure.
+

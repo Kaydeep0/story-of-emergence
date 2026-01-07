@@ -21,6 +21,7 @@ All UI and design changes must remain consistent with these documents:
 - **[Core Stack](docs/CORE_STACK.md)** — Canonical layer architecture (Layers 1-7)
 - **[Observer Layer](docs/OBSERVER_LAYER.md)** — Continuity of self and witnessing stance
 - **[Engine Closure](docs/ENGINE_CLOSURE.md)** — Rules of engagement for builder-to-navigator transition
+- **[Continuity of Self](docs/CONTINUITY_OF_SELF.md)** — What the system remembers across time
 
 These documents define the non-negotiable constraints and vision for Story of Emergence. They are enforceable constraints, not inspiration.
 
