@@ -2,7 +2,7 @@
 // Observer v1: Integration tests for persistence attachment
 // Tests that persistence is attached correctly when both artifacts exist
 
-import { attachPersistenceToArtifact, clearArtifactCache } from './attachPersistence';
+import { attachPersistenceToArtifact, resetPersistenceCacheIfIdentityChanged } from './attachPersistence';
 import type { InsightArtifact } from '../insights/artifactTypes';
 
 /**
@@ -76,7 +76,7 @@ function createTestArtifact(
  * Test: When both artifacts exist and match, both get the same statement
  */
 function testBothArtifactsGetSameStatement() {
-  clearArtifactCache();
+  resetPersistenceCacheIfIdentityChanged('test-address');
   
   const weekly = createTestArtifact('weekly', '2024-01-01T00:00:00Z', '2024-01-08T00:00:00Z');
   const yearly = createTestArtifact('yearly', '2024-01-01T00:00:00Z', '2024-12-31T23:59:59Z');
@@ -89,23 +89,25 @@ function testBothArtifactsGetSameStatement() {
     },
   ] as any[];
   
+  const cacheKey = { address: 'test-address', datasetVersion: '2024-12-31T23:59:59Z' };
+  
   // Attach to Weekly first (Yearly not in cache yet, so no persistence)
-  const weeklyAfterFirst = attachPersistenceToArtifact(weekly, reflections);
+  const weeklyAfterFirst = attachPersistenceToArtifact(weekly, reflections, cacheKey);
   
   if (weeklyAfterFirst.persistence !== null) {
     throw new Error('Expected null persistence when only Weekly is in cache');
   }
   
   // Attach to Yearly (Weekly is in cache, so comparison happens)
-  const yearlyAfterSecond = attachPersistenceToArtifact(yearly, reflections);
+  const yearlyAfterSecond = attachPersistenceToArtifact(yearly, reflections, cacheKey);
   
   // Yearly should have persistence if patterns match
   // (May be null if signatures don't match, which is expected for test data)
   if (yearlyAfterSecond.persistence && yearlyAfterSecond.persistence.statement) {
     // If persistence exists, Weekly should also have it when re-attached
-    clearArtifactCache();
-    const weeklyReattached = attachPersistenceToArtifact(weekly, reflections);
-    attachPersistenceToArtifact(yearly, reflections);
+    resetPersistenceCacheIfIdentityChanged('test-address');
+    const weeklyReattached = attachPersistenceToArtifact(weekly, reflections, cacheKey);
+    attachPersistenceToArtifact(yearly, reflections, cacheKey);
     
     // Both should have the same statement if match exists
     // (This test may pass or fail depending on whether test data matches)
@@ -118,7 +120,7 @@ function testBothArtifactsGetSameStatement() {
  * Test: When only one artifact exists, both remain null
  */
 function testSingleArtifactRemainsNull() {
-  clearArtifactCache();
+  resetPersistenceCacheIfIdentityChanged('test-address');
   
   const weekly = createTestArtifact('weekly', '2024-01-01T00:00:00Z', '2024-01-08T00:00:00Z');
   
@@ -130,8 +132,10 @@ function testSingleArtifactRemainsNull() {
     },
   ] as any[];
   
+  const cacheKey = { address: 'test-address', datasetVersion: '2024-01-08T00:00:00Z' };
+  
   // Attach to Weekly (no Yearly in cache)
-  const result = attachPersistenceToArtifact(weekly, reflections);
+  const result = attachPersistenceToArtifact(weekly, reflections, cacheKey);
   
   if (result.persistence !== null) {
     throw new Error('Expected null persistence when only one artifact exists');
