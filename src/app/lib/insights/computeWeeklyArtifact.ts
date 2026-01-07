@@ -193,9 +193,6 @@ export function computeWeeklyArtifact(args: {
     }
   }
   
-  // Calculate debug metrics (activeDays already computed above)
-  const reflectionsInWindow = windowEntries.length;
-  
   // Generate artifact ID (deterministic based on window)
   const startDateStr = windowStart.toISOString().split('T')[0];
   const endDateStr = windowEnd.toISOString().split('T')[0];
@@ -216,6 +213,10 @@ export function computeWeeklyArtifact(args: {
   }
   
   // Build debug info with safe defaults
+  // IMPORTANT: Debug values must come from the SAME variables used to build cards
+  // - windowEntries.length is used in fallback card evidence (line 142) and confidence (line 152)
+  // - activeDays is used in fallback card evidence (line 144) and confidence (line 152)
+  // - These same values are passed to computeAlwaysOnSummary(windowEntries) and computeTimelineSpikes(windowEntries)
   const debug: InsightArtifactDebug = {
     eventCount: events.length,
     windowStartIso: windowStart.toISOString(),
@@ -227,8 +228,9 @@ export function computeWeeklyArtifact(args: {
       const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
       return eventAt.split('T')[0];
     }) : [],
-    reflectionsInWindow,
-    activeDays,
+    // These MUST match the exact variables used in card generation above
+    reflectionsInWindow: windowEntries.length,  // Same as used in fallback card (line 142, 152)
+    activeDays: activeDays,  // Same as used in fallback card (line 144, 152) and computed from windowEntries (line 118)
     rawCardsGenerated: allCards.length,
     cardsPassingValidation: cards.length,
     rejectedCards: rejectedCards.length > 0 ? rejectedCards : undefined,
