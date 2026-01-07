@@ -6,7 +6,7 @@ import type { ReflectionEntry, InsightCard } from './types';
 import type { InsightArtifact } from './artifactTypes';
 import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
-import { eventsToReflectionEntries } from './reflectionAdapters';
+import { eventsToReflectionEntries, extractReflectionIdFromEvent } from './reflectionAdapters';
 import { computeAlwaysOnSummary } from './alwaysOnSummary';
 import { computeTimelineSpikes, itemToReflectionEntry } from './timelineSpikes';
 import { validateInsight, validateInsightDetailed } from './validateInsight';
@@ -60,16 +60,39 @@ export function computeWeeklyArtifact(args: {
   wallet?: string;
   entriesCount?: number;
   eventsCount?: number;
+  /** Optional: Actual reflection entries to match against events */
+  reflections?: ReflectionEntry[];
 }): InsightArtifact {
-  const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount } = args;
+  const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, reflections } = args;
   
   // IMPORTANT: Events are already filtered to the weekly window by computeInsightsForWindow
   // Build windowEntries by matching reflection IDs from events, not by re-parsing dates
   const windowEvents = events; // Events are already in the window
   
-  // Convert events to ReflectionEntry format (only journal events)
-  // This gives us the reflection entries that correspond to the window events
-  const windowEntries = eventsToReflectionEntries(windowEvents);
+  // Extract reflection IDs from events and match to actual reflections if provided
+  let windowEntries: ReflectionEntry[] = [];
+  if (reflections && reflections.length > 0) {
+    // Build a map of reflection ID -> ReflectionEntry for fast lookup
+    const reflectionsById = new Map<string, ReflectionEntry>();
+    for (const reflection of reflections) {
+      reflectionsById.set(reflection.id, reflection);
+    }
+    
+    // Extract reflection IDs from events and match to actual reflections
+    for (const event of windowEvents) {
+      const reflectionId = extractReflectionIdFromEvent(event);
+      if (reflectionId) {
+        const reflection = reflectionsById.get(reflectionId);
+        if (reflection) {
+          windowEntries.push(reflection);
+        }
+      }
+    }
+  } else {
+    // Fallback: Convert events to ReflectionEntry format (only journal events)
+    // This creates synthetic entries, but at least we have something
+    windowEntries = eventsToReflectionEntries(windowEvents);
+  }
   
   // Calculate activeDays from events (which have known-good timestamps)
   // This is more reliable than parsing reflection dates

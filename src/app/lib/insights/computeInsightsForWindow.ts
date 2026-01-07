@@ -50,8 +50,10 @@ export function computeInsightsForWindow(args: {
   /** Dev-only: Reflection intake counters for debugging */
   reflectionsLoaded?: number;
   eventsGenerated?: number;
+  /** Optional: Actual reflection entries to match against events */
+  reflections?: import('./types').ReflectionEntry[];
 }): InsightArtifact {
-  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [], reflectionsLoaded, eventsGenerated } = args;
+  const { horizon, events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount, previousSnapshots = [], reflectionsLoaded, eventsGenerated, reflections } = args;
   
   let artifact: InsightArtifact;
   
@@ -64,6 +66,7 @@ export function computeInsightsForWindow(args: {
       wallet,
       entriesCount,
       eventsCount,
+      reflections,
     });
   } else if (horizon === 'summary') {
     artifact = computeSummaryArtifact({
