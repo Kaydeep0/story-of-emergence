@@ -50,6 +50,8 @@ import { ObservationalDivider } from '../components/ObservationalDivider';
 import { SessionClosing } from '../components/SessionClosing';
 import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
+import { compareArtifactsForPersistence } from '../../lib/observer/compareArtifacts';
+import { getWindowStartEnd } from '../../lib/insights/timeWindows';
 import '../styles/delights.css';
 
 // Yearly Wrap v1 - Locked
@@ -216,8 +218,78 @@ export default function YearlyWrapPage() {
         })),
       } as any);
 
+      // Observer v1: Compare with Weekly artifact for pattern persistence
+      // Compute Weekly artifact for comparison
+      let updatedArtifact = artifact;
+      try {
+        const { start: weeklyStart, end: weeklyEnd } = getWindowStartEnd('week');
+        
+        // Convert reflections to events for Weekly
+        const walletAlias = address.toLowerCase();
+        const weeklyEvents = reflections.map((r) => ({
+          id: r.id ?? crypto.randomUUID(),
+          walletAlias,
+          eventAt: new Date(r.createdAt).toISOString(),
+          eventKind: 'written' as const,
+          sourceKind: 'journal' as const,
+          plaintext: r.plaintext ?? '',
+          length: (r.plaintext ?? '').length,
+          sourceId: r.sourceId ?? null,
+          topics: [],
+        }));
+        
+        const weeklyArtifact = computeInsightsForWindow({
+          horizon: 'weekly',
+          events: weeklyEvents,
+          windowStart: weeklyStart,
+          windowEnd: weeklyEnd,
+          wallet: address ?? undefined,
+          entriesCount: reflections.length,
+          eventsCount: weeklyEvents.length,
+          reflectionsLoaded: reflections.length,
+          eventsGenerated: weeklyEvents.length,
+          reflections: reflections.map((r) => ({
+            id: r.id,
+            createdAt: r.createdAt,
+            plaintext: r.plaintext ?? '',
+          })),
+        } as any);
+        
+        // Compare artifacts
+        const comparison = compareArtifactsForPersistence(weeklyArtifact, artifact, reflections);
+        
+        if (comparison) {
+          // Update artifact with persistence results and debug
+          updatedArtifact = {
+            ...comparison.yearly,
+            debug: {
+              ...artifact.debug,
+              observerV1: comparison.debug,
+            },
+          };
+        } else {
+          // No persistence, but still attach debug info
+          updatedArtifact = {
+            ...artifact,
+            debug: {
+              ...artifact.debug,
+              observerV1: {
+                weeklySignature: null,
+                yearlySignature: null,
+                match: false,
+                silenceReason: 'Comparison returned null',
+              },
+            },
+          };
+        }
+      } catch (err) {
+        // If comparison fails, keep original artifact
+        console.warn('[Yearly] Observer v1 comparison failed:', err);
+        updatedArtifact = artifact;
+      }
+      
       // Store artifact for debug panel
-      setInsightArtifact(artifact);
+      setInsightArtifact(updatedArtifact);
 
       // Extract DistributionResult and WindowDistribution from artifact card metadata
       const cards = artifact.cards ?? [];

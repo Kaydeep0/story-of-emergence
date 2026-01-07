@@ -20,6 +20,20 @@ export type RejectedCard = {
 };
 
 /**
+ * Observer v1 debug information
+ */
+export type ObserverV1Debug = {
+  /** Weekly signature computed (present or null) */
+  weeklySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+  /** Yearly signature computed (present or null) */
+  yearlySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+  /** Whether patterns matched */
+  match: boolean;
+  /** Reason for silence (if match is false) */
+  silenceReason?: string;
+};
+
+/**
  * Debug information attached to artifacts for development
  */
 export type InsightArtifactDebug = {
@@ -44,6 +58,8 @@ export type InsightArtifactDebug = {
   sampleInvalidDateRaw?: string;
   /** Data integrity: events that don't have corresponding reflections */
   missingReflectionsForEvents?: number;
+  /** Observer v1: Pattern persistence recognition debug */
+  observerV1?: ObserverV1Debug;
 };
 
 /**

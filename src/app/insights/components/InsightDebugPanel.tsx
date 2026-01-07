@@ -127,6 +127,37 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
                     ))}
                   </div>
                 )}
+                
+                {/* Observer v1 Debug */}
+                {debug.observerV1 && (
+                  <div className="pt-1 pb-2 border-t border-white/10 mt-2">
+                    <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Observer v1</div>
+                    <div><span className="text-white/50">match:</span> {debug.observerV1.match ? 'true' : 'false'}</div>
+                    {debug.observerV1.weeklySignature && (
+                      <div>
+                        <span className="text-white/50">weeklySignature:</span>{' '}
+                        {debug.observerV1.weeklySignature.observedDistributionFit} (ratio: {debug.observerV1.weeklySignature.concentrationRatio.toFixed(2)})
+                      </div>
+                    )}
+                    {!debug.observerV1.weeklySignature && (
+                      <div><span className="text-white/50">weeklySignature:</span> null</div>
+                    )}
+                    {debug.observerV1.yearlySignature && (
+                      <div>
+                        <span className="text-white/50">yearlySignature:</span>{' '}
+                        {debug.observerV1.yearlySignature.observedDistributionFit} (ratio: {debug.observerV1.yearlySignature.concentrationRatio.toFixed(2)})
+                      </div>
+                    )}
+                    {!debug.observerV1.yearlySignature && (
+                      <div><span className="text-white/50">yearlySignature:</span> null</div>
+                    )}
+                    {debug.observerV1.silenceReason && (
+                      <div className="text-amber-400/70 mt-1">
+                        <span className="text-white/50">silenceReason:</span> {debug.observerV1.silenceReason}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
