@@ -4,6 +4,7 @@
 
 'use client';
 
+import { useRouter } from 'next/navigation';
 import type { EvidenceChip } from '../../lib/insights/types';
 import type { ReflectionEntry } from '../../lib/insights/types';
 
