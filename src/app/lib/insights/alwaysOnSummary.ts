@@ -7,8 +7,10 @@ import type {
   InsightEvidence,
   AlwaysOnSummaryCard,
   AlwaysOnSummaryData,
+  EvidenceChip,
 } from './types';
 import { validateInsight } from './validateInsight';
+import { pickEvidenceChips } from './pickEvidenceChips';
 
 /**
  * Get the start of day (midnight) for a given date in local timezone
@@ -238,6 +240,13 @@ export function computeAlwaysOnSummary(
       const previousEvidence = getEvidencePerDay(previousWeekEntries, 2);
       const evidence = [...currentEvidence, ...previousEvidence];
 
+      // Observer v0: Pick evidence chips from current week reflections
+      const allWeekReflections = [...currentWeekEntries, ...previousWeekEntries];
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        allWeekReflections,
+        claim
+      );
+
       const data: AlwaysOnSummaryData = {
         summaryType: 'writing_change',
         currentWeekEntries: currentCount,
@@ -254,6 +263,7 @@ export function computeAlwaysOnSummary(
         evidence,
         computedAt,
         data,
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
       };
 
       // Insight Contract Gatekeeper: Only render contract-compliant insights
@@ -320,6 +330,12 @@ export function computeAlwaysOnSummary(
 
       const evidence = getEvidencePerDay(currentWeekEntries, 7);
 
+      // Observer v0: Pick evidence chips from current week reflections
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        currentWeekEntries,
+        claim
+      );
+
       const data: AlwaysOnSummaryData = {
         summaryType: 'consistency',
         currentWeekEntries: currentCount,
@@ -336,6 +352,7 @@ export function computeAlwaysOnSummary(
         evidence,
         computedAt,
         data,
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
       };
 
       // Insight Contract Gatekeeper: Only render contract-compliant insights
@@ -446,6 +463,18 @@ export function computeAlwaysOnSummary(
         
         const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
+        // Observer v0: Pick evidence chips from pattern day reflections
+        const patternDayReflections = historicalEntries.filter(entry => {
+          const date = new Date(entry.createdAt);
+          const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+          return patternDays.includes(dayName);
+        });
+        const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+          patternDayReflections,
+          claim,
+          { patternDays }
+        );
+
         const card: AlwaysOnSummaryCard = {
           id: generateInsightId('always_on_summary', 'weekly_pattern'),
           kind: 'always_on_summary',
@@ -454,6 +483,7 @@ export function computeAlwaysOnSummary(
           evidence: limitedEvidence,
           computedAt,
           data,
+          evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
         };
 
         // Insight Contract Gatekeeper: Only render contract-compliant insights
@@ -529,6 +559,13 @@ export function computeAlwaysOnSummary(
           timestamp: entry.createdAt,
         }));
 
+      // Observer v0: Pick evidence chips from spike day reflections
+      const evidenceChips: EvidenceChip[] = pickEvidenceChips(
+        spikeEntries,
+        claim,
+        { spikeDate }
+      );
+
       const data: AlwaysOnSummaryData = {
         summaryType: 'activity_spike',
         currentWeekEntries: currentCount,
@@ -548,6 +585,7 @@ export function computeAlwaysOnSummary(
         evidence,
         computedAt,
         data,
+        evidenceChips: evidenceChips.length > 0 ? evidenceChips : undefined,
       };
 
       // Insight Contract Gatekeeper: Only render contract-compliant insights

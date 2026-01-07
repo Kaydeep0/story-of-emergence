@@ -25,6 +25,8 @@ import { normalizeInsightCard } from '../../lib/insights/normalizeCard';
 import { InsightSignalCard } from '../components/InsightSignalCard';
 import { MiniHistogram } from '../components/MiniHistogram';
 import { LensTransition } from '../components/LensTransition';
+import { EvidenceChips } from '../components/EvidenceChips';
+import { ReflectionPreviewPanel } from '../components/InsightDrawer';
 import { filterEventsByWindow, groupByDay } from '../../lib/insights/timeWindows';
 import { interpretSpikeRatio, interpretActiveDays, interpretEntryCount, interpretPeakDay } from '../lib/metricInterpretations';
 import { compareToPreviousWeek, compareTo30DayAverage, formatComparisonIndicator, getPreviousPeriodDailyCounts } from '../lib/temporalComparisons';
@@ -54,6 +56,8 @@ export default function WeeklyPage() {
   const [artifact, setArtifact] = useState<InsightArtifact | null>(null);
   const { narrativeTone, handleToneChange } = useNarrativeTone(address, mounted);
   const { densityMode, handleDensityChange } = useDensity(address, mounted);
+  const [selectedReflection, setSelectedReflection] = useState<ReflectionEntry | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const lens = LENSES.weekly;
 
@@ -169,6 +173,11 @@ export default function WeeklyPage() {
       // Extract cards and normalize
       const cards = artifact.cards ?? [];
       const normalizedCards = cards.map(normalizeInsightCard);
+      // Map original cards to normalized cards for evidenceChips
+      const cardsWithEvidence = normalizedCards.map((normalized, idx) => ({
+        ...normalized,
+        evidenceChips: cards[idx]?.evidenceChips,
+      }));
       
       // Dev logging for debugging rendering issues
       if (process.env.NODE_ENV === 'development') {
@@ -186,7 +195,7 @@ export default function WeeklyPage() {
       setArtifact(artifact);
       
       return {
-        weeklyCards: normalizedCards,
+        weeklyCards: cardsWithEvidence,
         eventsInWindow: events.length,
       };
     } catch (err) {
@@ -372,7 +381,7 @@ export default function WeeklyPage() {
             ) : (
               <>
                 <div className="space-y-4">
-                  {weeklyCards.map((card, index) => {
+                  {cardsWithEvidence.map((card, index) => {
                     const isPrimary = index === 0;
                     // Compute daily counts for last 7 days
                     const now = new Date();
@@ -465,7 +474,19 @@ export default function WeeklyPage() {
                         primaryLabel={isPrimary ? 'Primary signal this week' : undefined}
                         densityMode={densityMode}
                       >
-                        {card.summary.split('.')[0]}.
+                        <div>
+                          {card.summary.split('.')[0]}.
+                          {card.evidenceChips && card.evidenceChips.length > 0 && (
+                            <EvidenceChips
+                              chips={card.evidenceChips}
+                              reflections={reflections}
+                              onChipClick={(reflection) => {
+                                setSelectedReflection(reflection);
+                                setPreviewOpen(true);
+                              }}
+                            />
+                          )}
+                        </div>
                       </InsightSignalCard>
                     );
                   })}

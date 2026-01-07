@@ -1,3 +1,5 @@
+import type { EvidenceChip } from './types';
+
 /**
  * Canonical InsightCard shape for UI consumption
  * All insight cards must conform to this shape before rendering
@@ -9,6 +11,7 @@ export type InsightCardBase = {
   summary: string;
   confidence: 'low' | 'medium' | 'high';
   label?: string;
+  evidenceChips?: EvidenceChip[]; // Observer v0: Excerpt chips from actual reflections
 };
 
 /**
@@ -94,6 +97,7 @@ export function normalizeInsightCard(input: LegacyInsightCard | InsightCardBase 
     summary,
     confidence: extractConfidence(),
     label: input.label,
+    evidenceChips: input.evidenceChips, // Preserve evidence chips if present
   };
 }
 

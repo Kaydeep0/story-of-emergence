@@ -239,7 +239,7 @@ export function normalizeInsight(source: InsightSource, index?: number): Normali
  * Reflection Preview Panel Component
  * Shows full reflection text in a lightweight preview panel
  */
-function ReflectionPreviewPanel({
+export function ReflectionPreviewPanel({
   entry,
   isOpen,
   onClose,

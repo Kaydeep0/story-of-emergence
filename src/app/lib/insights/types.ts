@@ -40,6 +40,15 @@ export type InsightKind =
   | 'year_over_year';
 
 /**
+ * Evidence chip with excerpt from a reflection (Observer v0)
+ */
+export type EvidenceChip = {
+  reflectionId: string;
+  createdAtIso: string;
+  excerpt: string; // 90-140 character excerpt
+};
+
+/**
  * Base insight card type
  * All insights share this structure
  */
@@ -51,6 +60,7 @@ export type InsightCard = {
   evidence: InsightEvidence[];
   computedAt: string; // ISO timestamp when this insight was generated
   patternSet?: InsightPatternSet; // Phase 4.1: Canonical pattern set (optional, backward compatible)
+  evidenceChips?: EvidenceChip[]; // Observer v0: Excerpt chips from actual reflections
 };
 
 /**
