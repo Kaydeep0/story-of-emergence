@@ -381,7 +381,7 @@ export default function WeeklyPage() {
             ) : (
               <>
                 <div className="space-y-4">
-                  {cardsWithEvidence.map((card, index) => {
+                  {weeklyCards.map((card, index) => {
                     const isPrimary = index === 0;
                     // Compute daily counts for last 7 days
                     const now = new Date();
@@ -532,6 +532,16 @@ export default function WeeklyPage() {
         {/* Session Closing */}
         <SessionClosing lens="weekly" narrativeTone={narrativeTone} />
       </section>
+
+      {/* Reflection Preview Panel */}
+      <ReflectionPreviewPanel
+        entry={selectedReflection}
+        isOpen={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setSelectedReflection(null);
+        }}
+      />
     </div>
   );
 }
