@@ -597,6 +597,13 @@ export default function YearlyWrapPage() {
     <section className="max-w-4xl mx-auto px-4 py-10">
         <InsightDebugPanel debug={insightArtifact?.debug} />
 
+        {/* Observer v1: Persistence statement */}
+        {insightArtifact?.persistence?.statement && (
+          <div className="mb-6 text-sm text-white/40">
+            {insightArtifact.persistence.statement}
+          </div>
+        )}
+
         {/* Loading State */}
         {loading && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">

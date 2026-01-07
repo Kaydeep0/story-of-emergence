@@ -332,6 +332,13 @@ export default function WeeklyPage() {
 
         <InsightDebugPanel debug={artifact?.debug} />
 
+        {/* Observer v1: Persistence statement */}
+        {artifact?.persistence?.statement && (
+          <div className="mb-6 text-sm text-white/40">
+            {artifact.persistence.statement}
+          </div>
+        )}
+
         {loading && (
           <div className="mt-8 space-y-4">
             <InsightCardSkeleton />

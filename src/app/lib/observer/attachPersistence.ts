@@ -143,9 +143,24 @@ export function attachPersistenceToArtifact(
   // Get cached pair for this key
   const pair = artifactCache.getPair(cacheKey);
   
+  // Update debug with cache state
+  debug.weeklyInCache = !!pair?.weekly;
+  debug.yearlyInCache = !!pair?.yearly;
+  
   // If we don't have both artifacts yet, return artifact as-is (persistence stays null)
   if (!pair || !pair.weekly || !pair.yearly) {
-    return artifact;
+    debug.silenceReason = !pair?.weekly && !pair?.yearly 
+      ? 'No artifacts in cache'
+      : !pair?.weekly 
+        ? 'Weekly artifact missing from cache'
+        : 'Yearly artifact missing from cache';
+    return {
+      ...artifact,
+      debug: {
+        ...artifact.debug,
+        observerV1: debug,
+      },
+    };
   }
 
   // Get both artifacts
@@ -167,18 +182,38 @@ export function attachPersistenceToArtifact(
     weeklyReflections
   );
 
-  // If comparison returned null (silence), return artifact as-is
+  // If comparison returned null (silence), return artifact with debug info
   if (!comparison) {
-    return artifact;
+    debug.match = false;
+    debug.silenceReason = 'Pattern comparison returned null (silence rule triggered)';
+    return {
+      ...artifact,
+      debug: {
+        ...artifact.debug,
+        observerV1: {
+          ...debug,
+          weeklySignature: null, // Will be populated by compareArtifactsForPersistence if it runs
+          yearlySignature: null,
+        },
+      },
+    };
   }
 
+  // Merge cache state into comparison debug
+  const mergedDebug = {
+    ...comparison.debug,
+    cacheKey,
+    weeklyInCache: true,
+    yearlyInCache: true,
+  };
+  
   // Update cached artifacts with persistence results
   if (artifact.horizon === 'weekly') {
     const updated = {
       ...comparison.weekly,
       debug: {
         ...artifact.debug,
-        observerV1: comparison.debug,
+        observerV1: mergedDebug,
       },
     };
     // Update cache
@@ -189,7 +224,7 @@ export function attachPersistenceToArtifact(
       ...comparison.yearly,
       debug: {
         ...artifact.debug,
-        observerV1: comparison.debug,
+        observerV1: mergedDebug,
       },
     };
     // Update cache
@@ -197,8 +232,14 @@ export function attachPersistenceToArtifact(
     return updated;
   }
 
-  // For other horizons, return as-is
-  return artifact;
+  // For other horizons, return as-is with debug
+  return {
+    ...artifact,
+    debug: {
+      ...artifact.debug,
+      observerV1: debug,
+    },
+  };
 }
 
 /**

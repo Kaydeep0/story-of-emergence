@@ -23,6 +23,12 @@ export type RejectedCard = {
  * Observer v1 debug information
  */
 export type ObserverV1Debug = {
+  /** Cache key used for this comparison */
+  cacheKey?: string;
+  /** Whether Weekly artifact was found in cache */
+  weeklyInCache?: boolean;
+  /** Whether Yearly artifact was found in cache */
+  yearlyInCache?: boolean;
   /** Weekly signature computed (present or null) */
   weeklySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
   /** Yearly signature computed (present or null) */

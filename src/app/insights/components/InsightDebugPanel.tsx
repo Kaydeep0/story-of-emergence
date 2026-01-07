@@ -132,6 +132,15 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
                 {debug.observerV1 && (
                   <div className="pt-1 pb-2 border-t border-white/10 mt-2">
                     <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Observer v1</div>
+                    {debug.observerV1.cacheKey && (
+                      <div><span className="text-white/50">cacheKey:</span> {debug.observerV1.cacheKey}</div>
+                    )}
+                    {debug.observerV1.weeklyInCache !== undefined && (
+                      <div><span className="text-white/50">weeklyInCache:</span> {debug.observerV1.weeklyInCache ? 'true' : 'false'}</div>
+                    )}
+                    {debug.observerV1.yearlyInCache !== undefined && (
+                      <div><span className="text-white/50">yearlyInCache:</span> {debug.observerV1.yearlyInCache ? 'true' : 'false'}</div>
+                    )}
                     <div><span className="text-white/50">match:</span> {debug.observerV1.match ? 'true' : 'false'}</div>
                     {debug.observerV1.weeklySignature && (
                       <div>
