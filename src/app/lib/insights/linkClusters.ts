@@ -2,8 +2,14 @@
 // Pure function to compute link clusters from decrypted reflections
 // Uses token-overlap (Jaccard similarity) for fast client-side clustering
 // Runs entirely client-side - no network calls, no side effects
+//
+// Observer exclusion: This file uses semantic tokenization and similarity clustering,
+// which is explicitly excluded from Observer v0/v1 scope. Observer focuses on
+// structural patterns (distribution, timing, evidence surfacing) and does not
+// perform semantic analysis, topic modeling, or content-based clustering.
+// Link clusters are computed separately and remain outside Observer's contract.
 
-import type { ReflectionEntry, InsightEvidence, LinkClusterCard } from './types';
+import type { ReflectionEntry, InsightEvidence, LinkClusterCard, LinkClusterData } from './types';
 import { validateInsight } from './validateInsight';
 
 /**
@@ -37,28 +43,6 @@ const CLUSTER_CONFIG = {
   ]),
   // Minimum token length to keep
   minTokenLength: 3,
-};
-
-/**
- * Link cluster insight card type
- */
-export type LinkClusterCard = {
-  id: string;
-  kind: 'link_cluster';
-  title: string;
-  explanation: string;
-  evidence: InsightEvidence[];
-  computedAt: string;
-  data: LinkClusterData;
-};
-
-/**
- * Cluster-specific data
- */
-export type LinkClusterData = {
-  clusterSize: number;
-  topTokens: string[];
-  avgSimilarity: number;
 };
 
 /**

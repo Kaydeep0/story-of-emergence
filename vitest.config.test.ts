@@ -3,8 +3,7 @@ import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 // Minimal vitest config for running tests without Next.js/PostCSS dependencies
-// Set NODE_ENV=test to avoid loading .env.local
-process.env.NODE_ENV = 'test';
+// NODE_ENV=test is set in package.json test script
 
 export default defineConfig({
   test: {
@@ -18,6 +17,7 @@ export default defineConfig({
     },
   },
   // Explicitly disable CSS processing
+  // @ts-expect-error - css: false is valid Vitest config but TypeScript types don't recognize it
   css: false,
 });
 

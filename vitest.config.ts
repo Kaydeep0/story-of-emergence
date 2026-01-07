@@ -17,8 +17,8 @@ import { defineConfig } from 'vitest/config';
 import path from 'path';
 import { existsSync, renameSync } from 'fs';
 
-// Set NODE_ENV=test for test runs to avoid loading .env.local
-process.env.NODE_ENV = 'test';
+// NODE_ENV=test is set in package.json test script
+// Setting it here would cause TypeScript read-only property error
 
 // Temporarily rename postcss.config.mjs to prevent Vite from loading it during tests
 // Vite discovers PostCSS config during initialization, before CSS imports are processed
@@ -83,5 +83,6 @@ export default defineConfig({
     ],
   },
   // Skip CSS processing entirely during tests
+  // @ts-expect-error - css: false is valid Vitest config but TypeScript types don't recognize it
   css: false,
 });

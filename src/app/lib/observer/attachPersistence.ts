@@ -2,7 +2,7 @@
 // Observer v1: Attach pattern persistence to artifacts
 // Shared pipeline function that compares artifacts and attaches persistence results
 
-import type { InsightArtifact } from '../insights/artifactTypes';
+import type { InsightArtifact, InsightArtifactDebug } from '../insights/artifactTypes';
 import { compareArtifactsForPersistence } from './compareArtifacts';
 import type { ReflectionEntry } from '../insights/types';
 
@@ -165,6 +165,18 @@ export function attachPersistenceToArtifact(
   debug.weeklyInCache = !!pair?.weekly;
   debug.yearlyInCache = !!pair?.yearly;
   
+  // Helper to ensure all required debug fields are present
+  const ensureDebugFields = (base: typeof artifact.debug): InsightArtifactDebug => ({
+    eventCount: base?.eventCount ?? 0,
+    windowStartIso: base?.windowStartIso ?? artifact.window.start,
+    windowEndIso: base?.windowEndIso ?? artifact.window.end,
+    minEventIso: base?.minEventIso ?? null,
+    maxEventIso: base?.maxEventIso ?? null,
+    sampleEventIds: base?.sampleEventIds ?? [],
+    sampleEventDates: base?.sampleEventDates ?? [],
+    ...base,
+  });
+
   // If we don't have both artifacts yet, return artifact as-is (persistence stays null)
   if (!pair || !pair.weekly || !pair.yearly) {
     debug.silenceReason = !pair?.weekly && !pair?.yearly 
@@ -175,7 +187,7 @@ export function attachPersistenceToArtifact(
     return {
       ...artifact,
       debug: {
-        ...artifact.debug,
+        ...ensureDebugFields(artifact.debug),
         observerV1: debug,
       },
     };
@@ -207,7 +219,7 @@ export function attachPersistenceToArtifact(
     return {
       ...artifact,
       debug: {
-        ...artifact.debug,
+        ...ensureDebugFields(artifact.debug),
         observerV1: {
           ...debug,
           weeklySignature: null, // Will be populated by compareArtifactsForPersistence if it runs
@@ -230,7 +242,7 @@ export function attachPersistenceToArtifact(
     const updated = {
       ...comparison.weekly,
       debug: {
-        ...artifact.debug,
+        ...ensureDebugFields(artifact.debug),
         observerV1: mergedDebug,
       },
     };
@@ -241,7 +253,7 @@ export function attachPersistenceToArtifact(
     const updated = {
       ...comparison.yearly,
       debug: {
-        ...artifact.debug,
+        ...ensureDebugFields(artifact.debug),
         observerV1: mergedDebug,
       },
     };
@@ -254,7 +266,7 @@ export function attachPersistenceToArtifact(
   return {
     ...artifact,
     debug: {
-      ...artifact.debug,
+      ...ensureDebugFields(artifact.debug),
       observerV1: debug,
     },
   };
