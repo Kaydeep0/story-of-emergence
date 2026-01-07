@@ -213,19 +213,6 @@ export function computeInsightsForWindow(args: {
     ...existing, // Lens-computed debug (from computeWeeklyArtifact) always wins
   } as InsightArtifactDebug;
   
-  // Ensure debug object always exists (safe default)
-  if (!artifact.debug) {
-    artifact.debug = {
-      eventCount: events.length,
-      windowStartIso: windowStart.toISOString(),
-      windowEndIso: windowEnd.toISOString(),
-      minEventIso: null,
-      maxEventIso: null,
-      sampleEventIds: [],
-      sampleEventDates: [],
-    };
-  }
-  
   // Dev-only validation checks
   if (process.env.NODE_ENV === 'development' && artifact.debug) {
     if (events.length > 0) {
