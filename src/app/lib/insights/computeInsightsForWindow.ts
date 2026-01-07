@@ -307,6 +307,14 @@ export function computeInsightsForWindow(args: {
     // Artifact is returned unchanged
   }
   
+  // Observer v1: Pattern persistence recognition
+  // NOTE: Pattern persistence requires comparing artifacts across multiple windows (e.g., Weekly and Yearly).
+  // Since computeInsightsForWindow only computes one artifact at a time, persistence detection
+  // must happen at a higher level where multiple artifacts are available.
+  // For now, set persistence to null by default (hard silence).
+  // Future: Persistence detection will be called from lens pages or a separate comparison function.
+  artifact.persistence = null;
+  
   return artifact;
 }
 

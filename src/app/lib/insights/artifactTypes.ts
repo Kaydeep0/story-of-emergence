@@ -47,6 +47,31 @@ export type InsightArtifactDebug = {
 };
 
 /**
+ * Observer v1: Pattern persistence recognition result
+ * 
+ * Attached to artifact when pattern persistence is detected.
+ * See docs/PATTERN_PERSISTENCE_RULE.md for when this is populated.
+ */
+export type ObserverPersistenceResult = {
+  /** The pattern signature that persists */
+  signature: {
+    observedDistributionFit: 'normal' | 'lognormal' | 'powerlaw';
+    concentrationRatio: number;
+    dayOfWeekPattern: number[]; // Array of day numbers (0-6)
+    topPercentileShare: number;
+    relativeSpikeThreshold: number;
+  };
+  /** Lens names where the pattern appears */
+  lenses: [string, string];
+  /** Window start dates (ISO strings) */
+  windowStarts: [string, string];
+  /** Window end dates (ISO strings) */
+  windowEnds: [string, string];
+  /** Persistence statement (single sentence) */
+  statement: string;
+};
+
+/**
  * Canonical insight artifact model
  * All computed insights follow this structure regardless of horizon
  */
@@ -64,5 +89,7 @@ export type InsightArtifact = {
   narratives?: PatternNarrative[];
   /** Debug information for development */
   debug?: InsightArtifactDebug;
+  /** Observer v1: Pattern persistence recognition result (null by default) */
+  persistence?: ObserverPersistenceResult | null;
 };
 
