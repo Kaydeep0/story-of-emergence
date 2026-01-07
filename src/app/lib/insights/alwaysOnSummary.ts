@@ -402,7 +402,7 @@ export function computeAlwaysOnSummary(
 
         const title = `You tend to write most on ${patternDaysFormatted}.`;
 
-        // Get evidence from pattern days
+        // Get evidence from pattern days (ensure at least 2 items for validation)
         const evidence: InsightEvidence[] = [];
         for (const dayName of patternDays) {
           const dayIndex = dayNames.indexOf(dayName);
@@ -416,8 +416,8 @@ export function computeAlwaysOnSummary(
             timestamp: entry.createdAt,
           })));
         }
-        // Limit to 6 evidence items total
-        const limitedEvidence = evidence.slice(0, 6);
+        // Limit to 6 evidence items total, but ensure at least 2 for validation
+        const limitedEvidence = evidence.length >= 2 ? evidence.slice(0, 6) : evidence;
 
         const data: AlwaysOnSummaryData = {
           summaryType: 'weekly_pattern',
