@@ -63,6 +63,16 @@ Before cockpit work begins, these decisions must be made:
 
 ---
 
+## Transition Criteria
+
+Engine closure is a transitional state, not a resting state.
+
+Once closure criteria are met, prolonged continuation in builder mode increases the risk of alienation from the system and loss of experiential intimacy.
+
+The cockpit should be built in one focused arc immediately after closure, not deferred indefinitely.
+
+---
+
 ## What Is Allowed After Closure
 
 After engine closure, these are allowed:
