@@ -157,6 +157,67 @@ This order is correct.
 
 ---
 
+## Narrative Closure and Center of Gravity
+
+The system feels unfinished not because features are missing, but because **narrative closure is missing**.
+
+The Observer layer (Layer 7) provides continuity of self over time. It is the center of gravity that holds your story together. Without it, insights feel disconnected from the arc of your life.
+
+**The cockpit should come after engine closure and Observer stance definition.**
+
+The experiential articulation of the system—the cockpit, the instruments, the spatial hierarchy—cannot be built until:
+1. The engine is mechanically complete
+2. The Observer layer stance is defined
+3. The sharing ritual is established
+
+Building the cockpit before these are settled risks creating a beautiful interface that does not serve the cognitive vessel vision.
+
+---
+
+## Build Order and Why
+
+The correct build order is:
+
+**Truth before beauty.**
+**Meaning before metaphor.**
+**Constraints before atmosphere.**
+**Engine before vessel.**
+
+### Why This Order Matters
+
+1. **Truth before beauty:** The system must be experientially true before it can be beautiful. A beautiful interface that feels like a dashboard is wrong.
+
+2. **Meaning before metaphor:** The spaceship metaphor is structural, not aesthetic. It emerges from the meaning of the system, not applied decoration.
+
+3. **Constraints before atmosphere:** The constraints (no coaching, no urgency, no notifications) define the atmosphere. The atmosphere cannot be designed without constraints.
+
+4. **Engine before vessel:** The engine (layers 1-6) must be stable before the vessel (cockpit, instrumentation) can be built. The vessel serves the engine, not the other way around.
+
+This order prevents:
+- Dashboard creep
+- Feature-first thinking
+- Aesthetic decisions that conflict with experiential truth
+- Building the cockpit before the engine is ready
+
+---
+
+## Danger Window
+
+Delaying cockpit work too long risks:
+
+### The System Feeling Foreign
+If the interface remains unarticulated for too long, it may feel foreign rather than intimate. The cognitive vessel vision requires the interface to feel like entering your own mind, not a tool.
+
+### Builder Brain Burnout
+Working on engine layers without experiential articulation can lead to builder fatigue. The cockpit work provides the reward of seeing the vision come to life.
+
+### Loss of Intimacy
+Without cockpit articulation, the system may feel technical rather than personal. The intimacy of the cognitive vessel requires the interface to feel like a space you inhabit, not a tool you use.
+
+**The balance:** Build the engine first, but do not delay cockpit work indefinitely. Once the engine is stable and the Observer stance is defined, cockpit work becomes the natural next step.
+
+---
+
 ## Reminder
 
 Messy does not mean wrong.
