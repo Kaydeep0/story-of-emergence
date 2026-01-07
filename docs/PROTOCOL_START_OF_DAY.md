@@ -7,7 +7,7 @@ This protocol anchors work to canonical system memory before any changes are mad
 ## Repository State Check
 - Current branch:
 - Uncommitted changes:
-- Build status:
+- Build status: ☐ Passing ☐ Failing ☐ Not evaluated (reason)
 - Recent commits reviewed:
 
 ---
@@ -16,7 +16,7 @@ This protocol anchors work to canonical system memory before any changes are mad
 - Core memory index reviewed: docs/0_START_HERE.md
 - Engine state: ☐ Open ☐ Closed ☐ Closing
 - Observer layer: Not implemented (by design)
-- Cockpit / UI work: ☐ Allowed ☐ Not allowed today
+- Cockpit / UI work: ☐ Allowed ☐ Not allowed today (must choose)
 
 Affirmations:
 - No new insight types will be added today
