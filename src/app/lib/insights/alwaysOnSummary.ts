@@ -265,14 +265,14 @@ export function computeAlwaysOnSummary(
 
   // Card 2: Consistency (New Insight Contract)
   // Only generate if we can make a falsifiable claim about daily cadence patterns
-  if (currentCount > 0 && previousCount > 0) {
+  if (currentCount > 0) {
     const activeDayNames = getActiveDayNames(currentWeekEntries);
-    const previousActiveDays = countActiveDays(previousWeekEntries);
+    const previousActiveDays = previousCount > 0 ? countActiveDays(previousWeekEntries) : null;
     
     // Detect pattern: daily cadence vs sporadic
     const isDailyCadence = currentActiveDays === 7;
     const isSporadic = currentActiveDays <= 3;
-    const cadenceChanged = Math.abs(currentActiveDays - previousActiveDays) >= 3;
+    const cadenceChanged = previousActiveDays !== null && Math.abs(currentActiveDays - previousActiveDays) >= 3;
     
     // Only generate if we can make a falsifiable claim
     if (isDailyCadence || isSporadic || cadenceChanged) {
@@ -290,8 +290,12 @@ export function computeAlwaysOnSummary(
       const evidenceItems: string[] = [
         `${currentActiveDays} active days out of 7 this week`,
         `${currentCount} total entries this week`,
-        `Previous week: ${previousActiveDays} active days with ${previousCount} entries`,
       ];
+      
+      // Add previous week comparison if available
+      if (previousActiveDays !== null) {
+        evidenceItems.push(`Previous week: ${previousActiveDays} active days with ${previousCount} entries`);
+      }
       
       // Add gap information if sporadic
       if (isSporadic) {
@@ -307,7 +311,9 @@ export function computeAlwaysOnSummary(
         : "A consistent cadence pattern was not maintained across consecutive weeks.";
       
       // CONFIDENCE: Why we're confident
-      const confidence = `Pattern observed across two consecutive weeks with measurable active day counts (${previousActiveDays} → ${currentActiveDays}).`;
+      const confidence = previousActiveDays !== null
+        ? `Pattern observed across two consecutive weeks with measurable active day counts (${previousActiveDays} → ${currentActiveDays}).`
+        : `Pattern observed across 7 consecutive days with ${currentActiveDays} active days.`;
       
       const title = claim;
       const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
