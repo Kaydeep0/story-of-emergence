@@ -50,7 +50,7 @@ import { ObservationalDivider } from '../components/ObservationalDivider';
 import { SessionClosing } from '../components/SessionClosing';
 import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
-import { clearArtifactCache } from '../../lib/observer/attachPersistence';
+import { attachPersistenceToArtifact, clearArtifactCache } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 // Yearly Wrap v1 - Locked
@@ -221,14 +221,8 @@ export default function YearlyWrapPage() {
       // Clear cache at start to prevent stale artifacts from previous requests
       clearArtifactCache();
       
-      let updatedArtifact = artifact;
-      try {
-        const { attachPersistenceToArtifact } = await import('../../lib/observer/attachPersistence');
-        updatedArtifact = attachPersistenceToArtifact(artifact, reflections);
-      } catch (err) {
-        // If Observer v1 is not available, keep artifact as-is
-        console.warn('[Yearly] Observer v1 attachment failed:', err);
-      }
+      // Attach persistence (may be null if Weekly artifact not in cache)
+      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections);
       
       // Store artifact for debug panel
       setInsightArtifact(updatedArtifact);
