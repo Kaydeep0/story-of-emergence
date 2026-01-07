@@ -94,6 +94,14 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
                 {debug.timezone && (
                   <div><span className="text-white/50">timezone:</span> {debug.timezone}</div>
                 )}
+                {debug.invalidReflectionDates !== undefined && debug.invalidReflectionDates > 0 && (
+                  <div className="mt-2 text-amber-400/70">
+                    <div><span className="text-white/50">invalidReflectionDates:</span> {debug.invalidReflectionDates}</div>
+                    {debug.sampleInvalidDateRaw && (
+                      <div className="text-xs"><span className="text-white/40">sampleInvalidDateRaw:</span> {debug.sampleInvalidDateRaw}</div>
+                    )}
+                  </div>
+                )}
                 {debug.rejectedCards && debug.rejectedCards.length > 0 && (
                   <div className="mt-2">
                     <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Rejected Cards ({debug.rejectedCards.length})</div>

@@ -40,6 +40,8 @@ export type InsightArtifactDebug = {
   cardsPassingValidation?: number;
   rejectedCards?: RejectedCard[];
   timezone?: string;
+  invalidReflectionDates?: number;
+  sampleInvalidDateRaw?: string;
 };
 
 /**

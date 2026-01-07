@@ -12,6 +12,35 @@ import { computeTimelineSpikes, itemToReflectionEntry } from './timelineSpikes';
 import { validateInsight, validateInsightDetailed } from './validateInsight';
 import type { InsightArtifactDebug, RejectedCard } from './artifactTypes';
 
+/**
+ * Safe date parsing helper
+ * Handles various input types and returns null for invalid dates
+ */
+function toDateSafe(input: any): Date | null {
+  if (input == null) return null;
+
+  // If it's already a Date
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+
+  // If it's a number, detect seconds vs milliseconds
+  if (typeof input === "number") {
+    const ms = input < 1e12 ? input * 1000 : input;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // If it's a string, try parse
+  if (typeof input === "string") {
+    const d = new Date(input);
+    if (!isNaN(d.getTime())) return d;
+
+    // Last resort: if it looks like a locale string, Date() may still fail.
+    // Return null instead of a broken Date.
+    return null;
+  }
+
+  return null;
+}
 
 /**
  * Compute Weekly InsightArtifact from events and window
@@ -36,11 +65,37 @@ export function computeWeeklyArtifact(args: {
   // Convert events to ReflectionEntry format (only journal events)
   const allReflectionEntries = eventsToReflectionEntries(events);
   
-  // Filter entries to window
-  const windowEntries = allReflectionEntries.filter((entry) => {
-    const createdAt = new Date(entry.createdAt);
-    return createdAt >= windowStart && createdAt <= windowEnd;
-  });
+  // Filter entries to window using safe date parsing
+  const windowEntries: ReflectionEntry[] = [];
+  let invalidReflectionDates = 0;
+  let sampleInvalidDateRaw: any = null;
+  
+  for (const entry of allReflectionEntries) {
+    // Try multiple possible date fields
+    const created = toDateSafe(
+      (entry as any).created_at ?? 
+      entry.createdAt ?? 
+      (entry as any).createdAtIso ?? 
+      (entry as any).timestamp
+    );
+    
+    if (!created) {
+      invalidReflectionDates++;
+      if (!sampleInvalidDateRaw) {
+        sampleInvalidDateRaw = (entry as any).created_at ?? entry.createdAt ?? (entry as any).createdAtIso ?? (entry as any).timestamp;
+      }
+      continue; // Skip entries with invalid dates
+    }
+    
+    // Check if date falls within window using getTime() for precise comparison
+    const createdTime = created.getTime();
+    const windowStartTime = windowStart.getTime();
+    const windowEndTime = windowEnd.getTime();
+    
+    if (createdTime >= windowStartTime && createdTime <= windowEndTime) {
+      windowEntries.push(entry);
+    }
+  }
   
   // Compute insights using existing pure functions
   const alwaysOnSummary = computeAlwaysOnSummary(windowEntries);
@@ -102,8 +157,16 @@ export function computeWeeklyArtifact(args: {
   const reflectionsInWindow = windowEntries.length;
   const activeDaysSet = new Set<string>();
   for (const entry of windowEntries) {
-    const dateKey = new Date(entry.createdAt).toISOString().split('T')[0];
-    activeDaysSet.add(dateKey);
+    const created = toDateSafe(
+      (entry as any).created_at ?? 
+      entry.createdAt ?? 
+      (entry as any).createdAtIso ?? 
+      (entry as any).timestamp
+    );
+    if (created) {
+      const dateKey = created.toISOString().split('T')[0];
+      activeDaysSet.add(dateKey);
+    }
   }
   const activeDays = activeDaysSet.size;
   
@@ -144,6 +207,8 @@ export function computeWeeklyArtifact(args: {
     cardsPassingValidation: cards.length,
     rejectedCards: rejectedCards.length > 0 ? rejectedCards : undefined,
     timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    invalidReflectionDates: invalidReflectionDates > 0 ? invalidReflectionDates : undefined,
+    sampleInvalidDateRaw: sampleInvalidDateRaw !== null ? String(sampleInvalidDateRaw) : undefined,
   };
   
   const artifact: InsightArtifact = {
