@@ -235,10 +235,10 @@ export function computeInsightsForWindow(args: {
         console.error(`[computeInsightsForWindow] maxEventIso (${artifact.debug.maxEventIso}) is before windowStartIso (${artifact.debug.windowStartIso})`, {
           horizon,
           eventCount: events.length,
-          windowStart: debug.windowStartIso,
-          windowEnd: debug.windowEndIso,
-          minEvent: debug.minEventIso,
-          maxEvent: debug.maxEventIso,
+          windowStart: artifact.debug.windowStartIso,
+          windowEnd: artifact.debug.windowEndIso,
+          minEvent: artifact.debug.minEventIso,
+          maxEvent: artifact.debug.maxEventIso,
         });
       }
       
