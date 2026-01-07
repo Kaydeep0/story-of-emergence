@@ -427,11 +427,30 @@ export function computeAlwaysOnSummary(
           patternDays,
         };
 
+        // CLAIM: User tends to write on specific days of the week
+        const claim = title;
+        
+        // EVIDENCE: Already in evidence array (entries from pattern days)
+        // Add summary metrics to explanation
+        const evidenceItems: string[] = [
+          `Pattern observed across ${totalWeeks} weeks`,
+          `${patternDays.length} day${patternDays.length === 1 ? '' : 's'} of the week show consistent activity`,
+          `Average ${(historicalEntries.length / totalWeeks / 7).toFixed(1)} entries per day on pattern days`,
+        ];
+        
+        // CONTRAST: What didn't happen
+        const contrast = `A uniform distribution across all 7 days was not observed. Activity is concentrated on specific days.`;
+        
+        // CONFIDENCE: Why we're confident
+        const confidence = `Pattern detected across ${totalWeeks} consecutive weeks with activity on ${patternDays.length} day${patternDays.length === 1 ? '' : 's'}, meeting threshold of ${minAvgEntriesPerWeek} entries per week average.`;
+        
+        const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
+
         const card: AlwaysOnSummaryCard = {
           id: generateInsightId('always_on_summary', 'weekly_pattern'),
           kind: 'always_on_summary',
           title,
-          explanation: title,
+          explanation,
           evidence: limitedEvidence,
           computedAt,
           data,
@@ -483,7 +502,24 @@ export function computeAlwaysOnSummary(
     }
 
     if (spikeFound && spikeDate && spikeDayName) {
-      const title = `You had a spike in writing activity on ${spikeDayName}.`;
+      // CLAIM: User had a spike in writing activity
+      const claim = `You had a spike in writing activity on ${spikeDayName}.`;
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${spikeCount} entries on ${spikeDayName}`,
+        `Baseline average: ${baselineAvgPerDay.toFixed(1)} entries per day over last 14 days`,
+        `Spike is ${(spikeCount / baselineAvgPerDay).toFixed(1)}× above baseline`,
+      ];
+      
+      // CONTRAST: What didn't happen
+      const contrast = `A steady, uniform writing pattern was not observed. This day exceeded the baseline by at least 2×.`;
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = `Spike detected using 14-day baseline (${baselineEntries.length} entries) with threshold of 2× baseline average (${baselineAvgPerDay.toFixed(1)} entries/day). Spike day had ${spikeCount} entries.`;
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
       const evidence = spikeEntries
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -508,7 +544,7 @@ export function computeAlwaysOnSummary(
         id: generateInsightId('always_on_summary', 'activity_spike'),
         kind: 'always_on_summary',
         title,
-        explanation: title,
+        explanation,
         evidence,
         computedAt,
         data,
