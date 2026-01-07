@@ -162,6 +162,7 @@ export default function WeeklyPage() {
         horizon: 'weekly',
         events,
         windowStart: start,
+        reflections, // Pass actual reflections so events can be matched to them
         windowEnd: end,
         wallet: address ?? undefined,
         entriesCount: reflections.length,
