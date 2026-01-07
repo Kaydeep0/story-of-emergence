@@ -113,12 +113,36 @@ export function computeWeeklyArtifact(args: {
   // This ensures Weekly always shows something when there are reflections this week
   // NOTE: Fallback card will be filtered by Insight Contract Gatekeeper if non-compliant
   if (allCards.length === 0 && events.length > 0) {
+    // CLAIM: User wrote reflections this week
+    const claim = `You wrote ${events.length} reflection${events.length === 1 ? '' : 's'} this week.`;
+    
+    // EVIDENCE: Concrete metrics
+    const evidenceItems: string[] = [
+      `${events.length} reflection${events.length === 1 ? '' : 's'} in the current week`,
+      `Window: ${windowStart.toISOString().split('T')[0]} to ${windowEnd.toISOString().split('T')[0]}`,
+    ];
+    
+    if (windowEntries.length > 0) {
+      evidenceItems.push(`${windowEntries.length} reflection${windowEntries.length === 1 ? '' : 's'} with valid timestamps in window`);
+      if (activeDays > 0) {
+        evidenceItems.push(`${activeDays} active day${activeDays === 1 ? '' : 's'} with entries`);
+      }
+    }
+    
+    // CONTRAST: What didn't happen
+    const contrast = `No reflections were written outside this week's window. Activity is contained to the current 7-day period.`;
+    
+    // CONFIDENCE: Why we're confident
+    const confidence = `Pattern computed over the last 7 days (${windowStart.toISOString().split('T')[0]} to ${windowEnd.toISOString().split('T')[0]}) with ${windowEntries.length} valid reflection${windowEntries.length === 1 ? '' : 's'} and ${activeDays} active day${activeDays === 1 ? '' : 's'}.`;
+    
+    const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
+    
     const fallbackCard: InsightCard = {
       id: `weekly-fallback-${windowStart.toISOString()}`,
       kind: 'always_on_summary',
       title: 'This week',
       headline: 'This week',
-      explanation: `You wrote ${events.length} reflection${events.length === 1 ? '' : 's'} this week.`,
+      explanation,
       confidence: 'medium',
       scope: 'week',
       evidence: events.slice(0, 3).map((e) => ({
