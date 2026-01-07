@@ -50,7 +50,7 @@ import { ObservationalDivider } from '../components/ObservationalDivider';
 import { SessionClosing } from '../components/SessionClosing';
 import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
-import { attachPersistenceToArtifact, clearArtifactCache } from '../../lib/observer/attachPersistence';
+import { attachPersistenceToArtifact, resetPersistenceCacheIfIdentityChanged } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 // Yearly Wrap v1 - Locked
@@ -218,11 +218,14 @@ export default function YearlyWrapPage() {
       } as any);
 
       // Observer v1: Attach persistence by comparing with Weekly artifact if available
-      // Clear cache at start to prevent stale artifacts from previous requests
-      clearArtifactCache();
+      // Use dataset version from debug to create cache key
+      const datasetVersion = artifact.debug?.maxEventIso ?? artifact.debug?.windowEndIso ?? null;
       
-      // Attach persistence (may be null if Weekly artifact not in cache)
-      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections);
+      // Attach persistence (may be null if Weekly artifact not in cache for same key)
+      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections, {
+        address: address ?? null,
+        datasetVersion,
+      });
       
       // Store artifact for debug panel
       setInsightArtifact(updatedArtifact);

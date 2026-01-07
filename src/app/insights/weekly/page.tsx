@@ -43,7 +43,7 @@ import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
-import { attachPersistenceToArtifact, clearArtifactCache } from '../../lib/observer/attachPersistence';
+import { attachPersistenceToArtifact, resetPersistenceCacheIfIdentityChanged } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 export default function WeeklyPage() {
@@ -194,11 +194,14 @@ export default function WeeklyPage() {
       }
       
       // Observer v1: Attach persistence by comparing with Yearly artifact if available
-      // Clear cache at start to prevent stale artifacts from previous requests
-      clearArtifactCache();
+      // Use dataset version from debug to create cache key
+      const datasetVersion = artifact.debug?.maxEventIso ?? artifact.debug?.windowEndIso ?? null;
       
-      // Attach persistence (may be null if Yearly artifact not in cache)
-      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections);
+      // Attach persistence (may be null if Yearly artifact not in cache for same key)
+      const updatedArtifact = attachPersistenceToArtifact(artifact, reflections, {
+        address: address ?? null,
+        datasetVersion,
+      });
       
       // Store artifact for debug panel (always set, even if empty)
       setArtifact(updatedArtifact);

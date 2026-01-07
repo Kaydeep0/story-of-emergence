@@ -7,85 +7,150 @@ import { compareArtifactsForPersistence } from './compareArtifacts';
 import type { ReflectionEntry } from '../insights/types';
 
 /**
+ * Cache key for artifact pairs
+ * 
+ * Combines wallet address and dataset version to create a stable key
+ * that changes when the underlying data changes.
+ */
+type CacheKey = string;
+
+/**
+ * Cached artifact pair for a given wallet and dataset version
+ */
+type CachedPair = {
+  weekly?: { artifact: InsightArtifact; reflections?: ReflectionEntry[] };
+  yearly?: { artifact: InsightArtifact; reflections?: ReflectionEntry[] };
+};
+
+/**
  * Artifact cache for persistence comparison
  * 
- * Stores artifacts by horizon so they can be compared when both are available.
- * This allows Weekly and Yearly pages to compute their own artifacts independently,
- * then have persistence attached when the second artifact is computed.
+ * Stores artifacts by cache key (wallet + dataset version) so they can be compared
+ * when both are available. This allows Weekly and Yearly pages to compute their own
+ * artifacts independently, then have persistence attached when the second artifact is computed.
  * 
- * NOTE: This is a module-level cache that persists across requests in the same process.
- * It should be cleared at the start of each page computation to prevent stale artifacts.
+ * Cache persists across navigation within the same session and resets when wallet changes.
  */
 class ArtifactCache {
-  private artifacts = new Map<string, { artifact: InsightArtifact; reflections?: ReflectionEntry[] }>();
+  private cache = new Map<CacheKey, CachedPair>();
+  private lastAddress: string | null = null;
+
+  /**
+   * Make cache key from wallet address and dataset version
+   */
+  makeKey(address: string | null | undefined, datasetVersion: string | null | undefined): CacheKey {
+    const addr = address ?? 'anon';
+    const version = datasetVersion ?? 'unknown';
+    return `${addr}::${version}`;
+  }
 
   /**
    * Store an artifact for later comparison
    */
-  store(artifact: InsightArtifact, reflections?: ReflectionEntry[]): void {
-    this.artifacts.set(artifact.horizon, { artifact, reflections });
+  store(
+    key: CacheKey,
+    horizon: 'weekly' | 'yearly',
+    artifact: InsightArtifact,
+    reflections?: ReflectionEntry[]
+  ): void {
+    if (!this.cache.has(key)) {
+      this.cache.set(key, {});
+    }
+    const pair = this.cache.get(key)!;
+    if (horizon === 'weekly') {
+      pair.weekly = { artifact, reflections };
+    } else {
+      pair.yearly = { artifact, reflections };
+    }
   }
 
   /**
-   * Get stored artifact by horizon
+   * Get stored artifact pair by key
    */
-  get(horizon: string): InsightArtifact | undefined {
-    return this.artifacts.get(horizon)?.artifact;
+  getPair(key: CacheKey): CachedPair | undefined {
+    return this.cache.get(key);
   }
 
   /**
-   * Get stored reflections for a horizon
+   * Clear cache for a specific key
    */
-  getReflections(horizon: string): ReflectionEntry[] | undefined {
-    return this.artifacts.get(horizon)?.reflections;
+  clearKey(key: CacheKey): void {
+    this.cache.delete(key);
   }
 
   /**
-   * Clear all stored artifacts
+   * Clear all cached artifacts
    */
   clear(): void {
-    this.artifacts.clear();
+    this.cache.clear();
   }
 
   /**
-   * Check if both Weekly and Yearly artifacts are available
+   * Check if identity changed and reset cache if needed
    */
-  hasBoth(): boolean {
-    return this.artifacts.has('weekly') && this.artifacts.has('yearly');
+  resetIfIdentityChanged(address: string | null | undefined): void {
+    const currentAddress = address ?? null;
+    if (currentAddress !== this.lastAddress) {
+      this.clear();
+      this.lastAddress = currentAddress;
+    }
   }
 }
 
-// Module-level cache instance (persists across requests in same process)
+// Module-level cache instance (persists across navigation in same session)
 const artifactCache = new ArtifactCache();
+
+/**
+ * Options for attaching persistence
+ */
+export type AttachPersistenceOptions = {
+  /** Wallet address for cache key */
+  address?: string | null;
+  /** Dataset version for cache key (e.g., maxEventIso or windowEndIso) */
+  datasetVersion?: string | null;
+};
 
 /**
  * Attach persistence to an artifact if comparison is possible
  * 
  * This function:
- * 1. Stores the artifact in cache
- * 2. If both Weekly and Yearly are available, compares them
- * 3. Attaches persistence results to both artifacts
- * 4. Returns the updated artifact
+ * 1. Creates a cache key from address and dataset version
+ * 2. Stores the artifact in cache under that key
+ * 3. If both Weekly and Yearly are available for the same key, compares them
+ * 4. Attaches persistence results to both artifacts
+ * 5. Returns the updated artifact
  * 
  * @param artifact - The artifact to attach persistence to
  * @param reflections - Optional reflections for Weekly distribution computation
- * @returns Updated artifact with persistence attached (or null if silence applies)
+ * @param options - Cache key options (address, datasetVersion)
+ * @returns Updated artifact with persistence attached (or original if silence applies)
  */
 export function attachPersistenceToArtifact(
   artifact: InsightArtifact,
-  reflections?: ReflectionEntry[]
+  reflections?: ReflectionEntry[],
+  options?: AttachPersistenceOptions
 ): InsightArtifact {
+  const { address, datasetVersion } = options || {};
+  
+  // Create cache key
+  const cacheKey = artifactCache.makeKey(address, datasetVersion);
+  
   // Store artifact and reflections
-  artifactCache.store(artifact, reflections);
+  if (artifact.horizon === 'weekly' || artifact.horizon === 'yearly') {
+    artifactCache.store(cacheKey, artifact.horizon, artifact, reflections);
+  }
 
+  // Get cached pair for this key
+  const pair = artifactCache.getPair(cacheKey);
+  
   // If we don't have both artifacts yet, return artifact as-is (persistence stays null)
-  if (!artifactCache.hasBoth()) {
+  if (!pair || !pair.weekly || !pair.yearly) {
     return artifact;
   }
 
   // Get both artifacts
-  const weeklyArtifact = artifactCache.get('weekly');
-  const yearlyArtifact = artifactCache.get('yearly');
+  const weeklyArtifact = pair.weekly.artifact;
+  const yearlyArtifact = pair.yearly.artifact;
 
   // Enforce silence: require both artifacts
   if (!weeklyArtifact || !yearlyArtifact) {
@@ -93,7 +158,7 @@ export function attachPersistenceToArtifact(
   }
 
   // Get reflections for Weekly (needed to compute distribution)
-  const weeklyReflections = artifactCache.getReflections('weekly') || reflections;
+  const weeklyReflections = pair.weekly.reflections || reflections;
   
   // Compare artifacts
   const comparison = compareArtifactsForPersistence(
@@ -107,23 +172,29 @@ export function attachPersistenceToArtifact(
     return artifact;
   }
 
-  // Attach persistence to the artifact that was passed in
+  // Update cached artifacts with persistence results
   if (artifact.horizon === 'weekly') {
-    return {
+    const updated = {
       ...comparison.weekly,
       debug: {
         ...artifact.debug,
         observerV1: comparison.debug,
       },
     };
+    // Update cache
+    artifactCache.store(cacheKey, 'weekly', updated, weeklyReflections);
+    return updated;
   } else if (artifact.horizon === 'yearly') {
-    return {
+    const updated = {
       ...comparison.yearly,
       debug: {
         ...artifact.debug,
         observerV1: comparison.debug,
       },
     };
+    // Update cache
+    artifactCache.store(cacheKey, 'yearly', updated, reflections);
+    return updated;
   }
 
   // For other horizons, return as-is
@@ -131,11 +202,13 @@ export function attachPersistenceToArtifact(
 }
 
 /**
- * Clear the artifact cache
+ * Reset persistence cache if wallet identity changed
  * 
- * Call this when starting a new request or session to prevent stale artifacts.
+ * Call this when wallet address changes to prevent cross-wallet contamination.
+ * 
+ * @param address - Current wallet address
  */
-export function clearArtifactCache(): void {
-  artifactCache.clear();
+export function resetPersistenceCacheIfIdentityChanged(address?: string | null): void {
+  artifactCache.resetIfIdentityChanged(address);
 }
 
