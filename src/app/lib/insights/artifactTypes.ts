@@ -42,6 +42,8 @@ export type InsightArtifactDebug = {
   timezone?: string;
   invalidReflectionDates?: number;
   sampleInvalidDateRaw?: string;
+  /** Data integrity: events that don't have corresponding reflections */
+  missingReflectionsForEvents?: number;
 };
 
 /**

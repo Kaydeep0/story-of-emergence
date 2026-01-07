@@ -98,6 +98,11 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
                 {debug.timezone && (
                   <div><span className="text-white/50">timezone:</span> {debug.timezone}</div>
                 )}
+                {debug.missingReflectionsForEvents !== undefined && debug.missingReflectionsForEvents > 0 && (
+                  <div className="mt-2 text-amber-400/70">
+                    <div><span className="text-white/50">missingReflectionsForEvents:</span> {debug.missingReflectionsForEvents} <span className="text-white/30">(data integrity issue)</span></div>
+                  </div>
+                )}
                 {debug.invalidReflectionDates !== undefined && debug.invalidReflectionDates > 0 && (
                   <div className="mt-2 text-amber-400/70">
                     <div><span className="text-white/50">invalidReflectionDates:</span> {debug.invalidReflectionDates}</div>

@@ -63,60 +63,52 @@ export function computeWeeklyArtifact(args: {
 }): InsightArtifact {
   const { events, windowStart, windowEnd, timezone, wallet, entriesCount, eventsCount } = args;
   
+  // IMPORTANT: Events are already filtered to the weekly window by computeInsightsForWindow
+  // Build windowEntries by matching reflection IDs from events, not by re-parsing dates
+  const windowEvents = events; // Events are already in the window
+  
   // Convert events to ReflectionEntry format (only journal events)
-  const allReflectionEntries = eventsToReflectionEntries(events);
+  // This gives us the reflection entries that correspond to the window events
+  const windowEntries = eventsToReflectionEntries(windowEvents);
   
-  // Filter entries to window using safe date parsing
-  const windowEntries: ReflectionEntry[] = [];
-  let invalidReflectionDates = 0;
-  let sampleInvalidDateRaw: any = null;
-  
-  for (const entry of allReflectionEntries) {
-    // Try multiple possible date fields
-    const created = toDateSafe(
-      (entry as any).created_at ?? 
-      entry.createdAt ?? 
-      (entry as any).createdAtIso ?? 
-      (entry as any).timestamp
-    );
-    
-    if (!created) {
-      invalidReflectionDates++;
-      if (!sampleInvalidDateRaw) {
-        sampleInvalidDateRaw = (entry as any).created_at ?? entry.createdAt ?? (entry as any).createdAtIso ?? (entry as any).timestamp;
-      }
-      continue; // Skip entries with invalid dates
-    }
-    
-    // Check if date falls within window using getTime() for precise comparison
-    const createdTime = created.getTime();
-    const windowStartTime = windowStart.getTime();
-    const windowEndTime = windowEnd.getTime();
-    
-    if (createdTime >= windowStartTime && createdTime <= windowEndTime) {
-      windowEntries.push(entry);
-    }
-  }
-  
-  // Compute insights using existing pure functions
-  const alwaysOnSummary = computeAlwaysOnSummary(windowEntries);
-  const timelineSpikes = computeTimelineSpikes(windowEntries);
-  
-  // Calculate activeDays early (needed for fallback card)
+  // Calculate activeDays from events (which have known-good timestamps)
+  // This is more reliable than parsing reflection dates
   const activeDaysSet = new Set<string>();
-  for (const entry of windowEntries) {
-    const created = toDateSafe(
-      (entry as any).created_at ?? 
-      entry.createdAt ?? 
-      (entry as any).createdAtIso ?? 
-      (entry as any).timestamp
-    );
-    if (created) {
-      const dateKey = created.toISOString().split('T')[0];
+  for (const event of windowEvents) {
+    // Extract timestamp from event using the same logic as reflectionAdapters
+    const isUnified = 'sourceKind' in event;
+    let eventDate: Date | null = null;
+    
+    if (isUnified) {
+      const unified = event as UnifiedInternalEvent & { occurredAt?: string | Date; createdAt?: string | Date };
+      if (unified.occurredAt) {
+        eventDate = typeof unified.occurredAt === 'string' ? new Date(unified.occurredAt) : unified.occurredAt;
+      } else if (unified.createdAt) {
+        eventDate = typeof unified.createdAt === 'string' ? new Date(unified.createdAt) : unified.createdAt;
+      } else if (unified.eventAt) {
+        eventDate = typeof unified.eventAt === 'string' ? new Date(unified.eventAt) : new Date(unified.eventAt);
+      }
+    } else {
+      const internal = event as InternalEvent;
+      if (internal.occurredAt) {
+        eventDate = internal.occurredAt instanceof Date ? internal.occurredAt : new Date(internal.occurredAt);
+      } else if (internal.createdAt) {
+        eventDate = internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt);
+      } else if (internal.eventAt) {
+        eventDate = internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt);
+      }
+    }
+    
+    if (eventDate && !isNaN(eventDate.getTime())) {
+      const dateKey = eventDate.toISOString().split('T')[0];
       activeDaysSet.add(dateKey);
     }
   }
   const activeDays = activeDaysSet.size;
+  
+  // Compute insights using existing pure functions
+  const alwaysOnSummary = computeAlwaysOnSummary(windowEntries);
+  const timelineSpikes = computeTimelineSpikes(windowEntries);
   
   // Combine cards in the order UI expects:
   // 1. Engine-generated cards first (always-on summary, timeline spikes)
