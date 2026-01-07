@@ -121,7 +121,10 @@ function extractPlaintext(event: InternalEvent | UnifiedInternalEvent): string |
 
 /**
  * Extract reflection ID from an event payload
- * For reflection_saved events, the reflection ID is in payload.id
+ * 
+ * Handles two cases:
+ * 1. Synthetic events (created from reflections): event.id IS the reflection ID
+ * 2. Real DB events: reflection ID is in payload.id (for reflection_saved events)
  * 
  * @param event - InternalEvent or UnifiedInternalEvent
  * @returns Reflection ID if found, null otherwise
@@ -138,24 +141,28 @@ export function extractReflectionIdFromEvent(event: InternalEvent | UnifiedInter
         return meta.id;
       }
     }
-    // Unified events don't preserve the original payload structure, so we can't extract reflection ID
+    // For synthetic UnifiedInternalEvents created from reflections, event.id IS the reflection ID
+    // This happens in Weekly page when converting reflections to events
+    if (typeof unified.id === 'string') {
+      return unified.id;
+    }
     return null;
   } else {
     const internal = event as InternalEvent;
     const payload: Record<string, unknown> = (internal.plaintext ?? {}) as Record<string, unknown>;
     
-    // For reflection_saved events, the reflection ID is in payload.id
-    if (typeof payload?.id === 'string') {
-      return payload.id;
-    }
-    
-    // Also check event_type to confirm this is a reflection event
+    // For reflection_saved events from DB, the reflection ID is in payload.id
     const eventType = payload?.event_type as string | undefined;
     if (eventType === 'reflection_saved' || eventType === 'reflection_deleted' || eventType === 'reflection_restored') {
-      // The id field should be present for these event types
       if (typeof payload?.id === 'string') {
         return payload.id;
       }
+    }
+    
+    // For synthetic events (created from reflections), event.id IS the reflection ID
+    // This happens when Weekly page converts reflections to events
+    if (typeof internal.id === 'string') {
+      return internal.id;
     }
   }
   
