@@ -34,7 +34,7 @@ A pattern signature describes structure. It does not interpret structure.
 
 A pattern signature contains these observable, window-agnostic, non-semantic fields:
 
-1. **Distribution classification:** The mathematical shape of the distribution (normal, log-normal, power law). Observable from the data, not interpreted.
+1. **Observed distribution fit:** Best-fit class among {normal, log-normal, power law} as determined by statistical fit to the data. Observable from the data, not assigned. Provisional and reversible.
 
 2. **Concentration ratio:** The ratio of top activity days to average activity days. A structural measure of how concentrated the activity is, independent of absolute values.
 
@@ -52,7 +52,7 @@ These fields are sufficient to describe the structural shape of any activity dis
 
 Observer v1 decides that two patterns are the same when:
 
-The pattern signatures share the same distribution classification, the same day-of-week pattern set, and concentration ratios that fall within the same structural band (e.g., both are "highly concentrated" as defined by top percentile share thresholds, or both are "moderately concentrated"). The relative spike threshold must also match (e.g., both use 2× baseline, or both use 3× baseline).
+The pattern signatures share the same observed distribution fit, the same day-of-week pattern set, and concentration ratios that fall within the same structural band (e.g., both are "highly concentrated" as defined by top percentile share thresholds, or both are "moderately concentrated"). Concentration bands must be coarse and ordinal (e.g., low, medium, high), not continuous. The relative spike threshold must also match (e.g., both use 2× baseline, or both use 3× baseline).
 
 Absolute values do not matter. A Weekly pattern with 5 entries on Saturday and a Yearly pattern with 50 entries on Saturday are the same pattern if they share the same structural signature: same distribution classification, same day-of-week pattern, same concentration characteristics, same spike threshold.
 
