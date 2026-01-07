@@ -2,7 +2,8 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 
-// Set NODE_ENV=test for test runs to avoid loading .env.local
+// Minimal vitest config for running tests without Next.js/PostCSS dependencies
+// Set NODE_ENV=test to avoid loading .env.local
 process.env.NODE_ENV = 'test';
 
 export default defineConfig({
@@ -16,6 +17,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // Skip CSS processing entirely during tests
+  // Explicitly disable CSS processing
   css: false,
 });
+

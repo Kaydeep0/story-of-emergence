@@ -135,6 +135,24 @@ export function attachPersistenceToArtifact(
   // Create cache key
   const cacheKey = artifactCache.makeKey(address, datasetVersion);
   
+  // Initialize debug info
+  let debug: {
+    cacheKey?: string;
+    weeklyInCache?: boolean;
+    yearlyInCache?: boolean;
+    weeklySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+    yearlySignature: { observedDistributionFit: string; concentrationRatio: number } | null;
+    match: boolean;
+    silenceReason?: string;
+  } = {
+    cacheKey,
+    weeklyInCache: false,
+    yearlyInCache: false,
+    weeklySignature: null,
+    yearlySignature: null,
+    match: false,
+  };
+  
   // Store artifact and reflections
   if (artifact.horizon === 'weekly' || artifact.horizon === 'yearly') {
     artifactCache.store(cacheKey, artifact.horizon, artifact, reflections);
