@@ -101,6 +101,22 @@ export function computeWeeklyArtifact(args: {
   const alwaysOnSummary = computeAlwaysOnSummary(windowEntries);
   const timelineSpikes = computeTimelineSpikes(windowEntries);
   
+  // Calculate activeDays early (needed for fallback card)
+  const activeDaysSet = new Set<string>();
+  for (const entry of windowEntries) {
+    const created = toDateSafe(
+      (entry as any).created_at ?? 
+      entry.createdAt ?? 
+      (entry as any).createdAtIso ?? 
+      (entry as any).timestamp
+    );
+    if (created) {
+      const dateKey = created.toISOString().split('T')[0];
+      activeDaysSet.add(dateKey);
+    }
+  }
+  const activeDays = activeDaysSet.size;
+  
   // Combine cards in the order UI expects:
   // 1. Engine-generated cards first (always-on summary, timeline spikes)
   // 2. Fallback card only if engine produces no cards but events exist
@@ -177,22 +193,8 @@ export function computeWeeklyArtifact(args: {
     }
   }
   
-  // Calculate debug metrics
+  // Calculate debug metrics (activeDays already computed above)
   const reflectionsInWindow = windowEntries.length;
-  const activeDaysSet = new Set<string>();
-  for (const entry of windowEntries) {
-    const created = toDateSafe(
-      (entry as any).created_at ?? 
-      entry.createdAt ?? 
-      (entry as any).createdAtIso ?? 
-      (entry as any).timestamp
-    );
-    if (created) {
-      const dateKey = created.toISOString().split('T')[0];
-      activeDaysSet.add(dateKey);
-    }
-  }
-  const activeDays = activeDaysSet.size;
   
   // Generate artifact ID (deterministic based on window)
   const startDateStr = windowStart.toISOString().split('T')[0];
