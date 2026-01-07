@@ -197,12 +197,19 @@ export function computeWeeklyArtifact(args: {
   const endDateStr = windowEnd.toISOString().split('T')[0];
   const artifactId = `weekly-${startDateStr}-${endDateStr}`;
   
-  // Calculate min/max event dates
+  // Calculate min/max event dates from windowEvents (events already filtered to window)
   let minEventIso: string | null = null;
   let maxEventIso: string | null = null;
-  if (events.length > 0) {
-    const eventDates = events.map(e => {
-      const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
+  if (windowEvents.length > 0) {
+    const eventDates = windowEvents.map(e => {
+      const isUnified = 'sourceKind' in e;
+      let eventAt: string;
+      if (isUnified) {
+        eventAt = (e as UnifiedInternalEvent).eventAt;
+      } else {
+        const internal = e as InternalEvent;
+        eventAt = internal.eventAt instanceof Date ? internal.eventAt.toISOString() : internal.eventAt;
+      }
       return new Date(eventAt).getTime();
     });
     const minTime = Math.min(...eventDates);
@@ -213,29 +220,36 @@ export function computeWeeklyArtifact(args: {
   
   // Build debug info with safe defaults
   // IMPORTANT: Debug values must come from the SAME variables used to build cards
-  // - windowEntries.length is used in fallback card evidence (line 142) and confidence (line 152)
-  // - activeDays is used in fallback card evidence (line 144) and confidence (line 152)
+  // - windowEntries.length is used in fallback card evidence and confidence
+  // - activeDays is used in fallback card evidence and confidence
   // - These same values are passed to computeAlwaysOnSummary(windowEntries) and computeTimelineSpikes(windowEntries)
   const debug: InsightArtifactDebug = {
-    eventCount: events.length,
+    eventCount: windowEvents.length,  // Events already filtered to window
     windowStartIso: windowStart.toISOString(),
     windowEndIso: windowEnd.toISOString(),
     minEventIso: minEventIso || null,
     maxEventIso: maxEventIso || null,
-    sampleEventIds: events.length > 0 ? events.slice(0, 3).map(e => (e as any).id || 'unknown') : [],
-    sampleEventDates: events.length > 0 ? events.slice(0, 3).map(e => {
-      const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
-      return eventAt.split('T')[0];
+    sampleEventIds: windowEvents.length > 0 ? windowEvents.slice(0, 3).map(e => (e as any).id || 'unknown') : [],
+    sampleEventDates: windowEvents.length > 0 ? windowEvents.slice(0, 3).map(e => {
+      const isUnified = 'sourceKind' in e;
+      const eventAt = isUnified 
+        ? (e as UnifiedInternalEvent).eventAt
+        : (e as InternalEvent).eventAt instanceof Date 
+          ? (e as InternalEvent).eventAt.toISOString()
+          : (e as InternalEvent).eventAt;
+      return typeof eventAt === 'string' ? eventAt.split('T')[0] : eventAt.toISOString().split('T')[0];
     }) : [],
     // These MUST match the exact variables used in card generation above
-    reflectionsInWindow: windowEntries.length,  // Same as used in fallback card (line 142, 152)
-    activeDays: activeDays,  // Same as used in fallback card (line 144, 152) and computed from windowEntries (line 118)
+    reflectionsInWindow: windowEntries.length,  // Same as used in fallback card
+    activeDays: activeDays,  // Same as used in fallback card and computed from windowEvents
     rawCardsGenerated: allCards.length,
     cardsPassingValidation: cards.length,
     rejectedCards: rejectedCards.length > 0 ? rejectedCards : undefined,
     timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-    invalidReflectionDates: invalidReflectionDates > 0 ? invalidReflectionDates : undefined,
-    sampleInvalidDateRaw: sampleInvalidDateRaw !== null ? String(sampleInvalidDateRaw) : undefined,
+    // Track if any reflections are missing for events (data integrity check)
+    missingReflectionsForEvents: windowEvents.length > windowEntries.length 
+      ? windowEvents.length - windowEntries.length 
+      : undefined,
   };
   
   const artifact: InsightArtifact = {
