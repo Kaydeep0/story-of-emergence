@@ -9,6 +9,7 @@ import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeAlwaysOnSummary } from './alwaysOnSummary';
 import { computeTimelineSpikes, itemToReflectionEntry } from './timelineSpikes';
+import { validateInsight } from './validateInsight';
 
 
 /**
@@ -47,15 +48,16 @@ export function computeWeeklyArtifact(args: {
   // Combine cards in the order UI expects:
   // 1. Engine-generated cards first (always-on summary, timeline spikes)
   // 2. Fallback card only if engine produces no cards but events exist
-  const cards: InsightCard[] = [
+  const allCards: InsightCard[] = [
     ...alwaysOnSummary,
     ...timelineSpikes,
   ];
   
   // Fallback: if no cards generated but we have events, create a baseline card
   // This ensures Weekly always shows something when there are reflections this week
-  if (cards.length === 0 && events.length > 0) {
-    cards.push({
+  // NOTE: Fallback card will be filtered by Insight Contract Gatekeeper if non-compliant
+  if (allCards.length === 0 && events.length > 0) {
+    const fallbackCard: InsightCard = {
       id: `weekly-fallback-${windowStart.toISOString()}`,
       kind: 'always_on_summary',
       title: 'This week',
@@ -69,8 +71,13 @@ export function computeWeeklyArtifact(args: {
         preview: 'Reflection', // Safe label, no reliance on title field
       })),
       computedAt: new Date().toISOString(),
-    } as InsightCard);
+    } as InsightCard;
+    allCards.push(fallbackCard);
   }
+  
+  // Insight Contract Gatekeeper: Only render contract-compliant insights
+  // Non-compliant insights fail silently (no warnings, no placeholders)
+  const cards = allCards.filter(validateInsight);
   
   // Generate artifact ID (deterministic based on window)
   const startDateStr = windowStart.toISOString().split('T')[0];

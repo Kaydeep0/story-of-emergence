@@ -12,6 +12,7 @@ import { computeLinkClusters } from './linkClusters';
 import { computeTopicDrift } from './topicDrift';
 import { computeContrastPairs } from './contrastPairs';
 import { detectTimelineEvents, timelineEventToCard } from './timelineEvents';
+import { validateInsight } from './validateInsight';
 import type { TopicDriftBucket } from './topicDrift';
 import type { ContrastPair } from './contrastPairs';
 
@@ -112,13 +113,17 @@ export function computeTimelineArtifact(args: {
   // Events come first (most important)
   // Spikes and clusters are already InsightCards
   // TopicDriftBucket and ContrastPair are converted to InsightCards with metadata
-  const cards: InsightCard[] = [
+  const allCards: InsightCard[] = [
     ...eventCards, // Timeline events first
     ...spikes,
     ...clusters,
     ...topicDrift.map((bucket, idx) => topicDriftBucketToCard(bucket, idx)),
     ...contrastPairs.map((pair, idx) => contrastPairToCard(pair, idx)),
   ] as InsightCard[];
+
+  // Insight Contract Gatekeeper: Only render contract-compliant insights
+  // Non-compliant insights fail silently (no warnings, no placeholders)
+  const cards = allCards.filter(validateInsight);
   
   const artifact: InsightArtifact = {
     horizon: 'timeline',

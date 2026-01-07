@@ -8,6 +8,7 @@ import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeDistributionLayerLegacy, computeDistributionInsight, type DistributionResult, type WindowDistribution } from './distributionLayer';
+import { validateInsight } from './validateInsight';
 
 
 /**
@@ -188,25 +189,30 @@ export function computeDistributionsArtifact(args: {
   // Always create card if events exist and we have entries to use
   if ((eventsCount ?? events.length) > 0 && entriesToUse.length > 0) {
     const card = createDistributionsCard(distributionInsight, distributionResult, windowDistributions);
-    cards.push(card);
     
-    // Dev log: Card created
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[computeDistributionsArtifact] Card created:', {
-        cardId: card.id,
-        cardKind: card.kind,
-        usedFallback: windowEntries.length === 0 && allReflectionEntries.length > 0,
-        eventsCount: eventsCount ?? events.length,
-        entriesUsedCount: entriesToUse.length,
-        windowEntriesCount: windowEntries.length,
-        allReflectionEntriesCount: allReflectionEntries.length,
-        hasDistributionResult: '_distributionResult' in card,
-        hasWindowDistributions: '_windowDistributions' in card,
-        hasDistributionInsight: '_distributionInsight' in card,
-        distributionResultTotalEntries: card._distributionResult?.totalEntries,
-        windowDistributionsLength: card._windowDistributions?.length ?? 0,
-        distributionInsightTitle: card._distributionInsight?.title,
-      });
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      cards.push(card);
+      
+      // Dev log: Card created
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[computeDistributionsArtifact] Card created:', {
+          cardId: card.id,
+          cardKind: card.kind,
+          usedFallback: windowEntries.length === 0 && allReflectionEntries.length > 0,
+          eventsCount: eventsCount ?? events.length,
+          entriesUsedCount: entriesToUse.length,
+          windowEntriesCount: windowEntries.length,
+          allReflectionEntriesCount: allReflectionEntries.length,
+          hasDistributionResult: '_distributionResult' in card,
+          hasWindowDistributions: '_windowDistributions' in card,
+          hasDistributionInsight: '_distributionInsight' in card,
+          distributionResultTotalEntries: card._distributionResult?.totalEntries,
+          windowDistributionsLength: card._windowDistributions?.length ?? 0,
+          distributionInsightTitle: card._distributionInsight?.title,
+        });
+      }
     }
   } else {
     // Dev log: No card created - no events or no entries

@@ -8,6 +8,7 @@ import type {
   AlwaysOnSummaryCard,
   AlwaysOnSummaryData,
 } from './types';
+import { validateInsight } from './validateInsight';
 
 /**
  * Get the start of day (midnight) for a given date in local timezone
@@ -245,7 +246,7 @@ export function computeAlwaysOnSummary(
         percentChange,
       };
 
-      cards.push({
+      const card: AlwaysOnSummaryCard = {
         id: generateInsightId('always_on_summary', 'writing_change'),
         kind: 'always_on_summary',
         title,
@@ -253,7 +254,12 @@ export function computeAlwaysOnSummary(
         evidence,
         computedAt,
         data,
-      });
+      };
+
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
   }
 
@@ -290,7 +296,7 @@ export function computeAlwaysOnSummary(
       activeDayNames,
     };
 
-    cards.push({
+    const card: AlwaysOnSummaryCard = {
       id: generateInsightId('always_on_summary', 'consistency'),
       kind: 'always_on_summary',
       title,
@@ -298,7 +304,12 @@ export function computeAlwaysOnSummary(
       evidence,
       computedAt,
       data,
-    });
+    };
+
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    if (validateInsight(card)) {
+      cards.push(card);
+    }
   }
 
   // Card 3: Weekly Pattern Insight
@@ -383,7 +394,7 @@ export function computeAlwaysOnSummary(
           patternDays,
         };
 
-        cards.push({
+        const card: AlwaysOnSummaryCard = {
           id: generateInsightId('always_on_summary', 'weekly_pattern'),
           kind: 'always_on_summary',
           title,
@@ -391,7 +402,12 @@ export function computeAlwaysOnSummary(
           evidence: limitedEvidence,
           computedAt,
           data,
-        });
+        };
+
+        // Insight Contract Gatekeeper: Only render contract-compliant insights
+        if (validateInsight(card)) {
+          cards.push(card);
+        }
       }
     }
   }
@@ -455,7 +471,7 @@ export function computeAlwaysOnSummary(
         baselineCount: Math.round(baselineAvgPerDay * 10) / 10, // Round to 1 decimal
       };
 
-      cards.push({
+      const card: AlwaysOnSummaryCard = {
         id: generateInsightId('always_on_summary', 'activity_spike'),
         kind: 'always_on_summary',
         title,
@@ -463,7 +479,12 @@ export function computeAlwaysOnSummary(
         evidence,
         computedAt,
         data,
-      });
+      };
+
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
   }
 

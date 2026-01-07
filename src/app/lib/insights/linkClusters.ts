@@ -3,7 +3,8 @@
 // Uses token-overlap (Jaccard similarity) for fast client-side clustering
 // Runs entirely client-side - no network calls, no side effects
 
-import type { ReflectionEntry, InsightEvidence } from './types';
+import type { ReflectionEntry, InsightEvidence, LinkClusterCard } from './types';
+import { validateInsight } from './validateInsight';
 
 /**
  * Configuration for cluster detection
@@ -374,7 +375,11 @@ export function computeLinkClusters(entries: ReflectionEntry[]): LinkClusterCard
       },
     };
     
-    cards.push(card);
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      cards.push(card);
+    }
   }
   
   return cards;

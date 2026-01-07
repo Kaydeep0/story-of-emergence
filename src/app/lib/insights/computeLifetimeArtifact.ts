@@ -8,6 +8,7 @@ import type { InternalEvent } from '../types';
 import type { UnifiedInternalEvent } from '../../../lib/internalEvents';
 import { eventsToReflectionEntries } from './reflectionAdapters';
 import { computeDistributionLayer, computeWindowDistribution, computeActiveDays, getTopSpikeDates, type DistributionResult, type WindowDistribution } from './distributionLayer';
+import { validateInsight } from './validateInsight';
 
 /**
  * Format classification label for display
@@ -208,15 +209,20 @@ export function computeLifetimeArtifact(args: {
   // Gate on entriesToUse.length > 0 (not events count)
   if (entriesToUse.length > 0) {
     const card = createLifetimeDistributionCard(distributionResult, windowDistribution);
-    cards.push(card);
+    
+    // Insight Contract Gatekeeper: Only render contract-compliant insights
+    // Non-compliant insights fail silently (no warnings, no placeholders)
+    if (validateInsight(card)) {
+      cards.push(card);
 
-    // Dev log: Card created
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Lifetime] artifact created with cardsLength and cardKinds:', {
-        cardsLength: cards.length,
-        cardKinds: cards.map(c => c.kind),
-        totalEntries: distributionResult.totalEntries,
-      });
+      // Dev log: Card created
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Lifetime] artifact created with cardsLength and cardKinds:', {
+          cardsLength: cards.length,
+          cardKinds: cards.map(c => c.kind),
+          totalEntries: distributionResult.totalEntries,
+        });
+      }
     }
   }
 
