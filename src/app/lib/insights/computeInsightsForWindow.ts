@@ -145,7 +145,20 @@ export function computeInsightsForWindow(args: {
   
   // Merge debug information (artifact may already have debug from computeWeeklyArtifact)
   // Only add/overwrite if artifact doesn't already have comprehensive debug
-  if (!artifact.debug || !artifact.debug.reflectionsInWindow) {
+  // Ensure debug object exists with safe defaults
+  if (!artifact.debug) {
+    artifact.debug = {
+      eventCount: 0,
+      windowStartIso: windowStart.toISOString(),
+      windowEndIso: windowEnd.toISOString(),
+      minEventIso: null,
+      maxEventIso: null,
+      sampleEventIds: [],
+      sampleEventDates: [],
+    };
+  }
+  
+  if (!artifact.debug.reflectionsInWindow) {
     const eventDates = events
       .map(e => {
         // Extract timestamp using same logic as reflectionAdapters

@@ -153,9 +153,7 @@ export default function WeeklyPage() {
         }
       });
 
-      if (events.length === 0) return { weeklyCards: [], eventsInWindow: 0 };
-
-      // Compute weekly artifact with filtered events
+      // Compute weekly artifact with filtered events (even if events.length === 0 for debug info)
       const artifact = computeInsightsForWindow({
         horizon: 'weekly',
         events,
@@ -172,7 +170,19 @@ export default function WeeklyPage() {
       const cards = artifact.cards ?? [];
       const normalizedCards = cards.map(normalizeInsightCard);
       
-      // Store artifact for debug panel
+      // Dev logging for debugging rendering issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Weekly] Artifact computed:', {
+          eventsInWindow: events.length,
+          cardsGenerated: cards.length,
+          normalizedCards: normalizedCards.length,
+          hasDebug: !!artifact.debug,
+          debugRawCards: artifact.debug?.rawCardsGenerated,
+          debugPassingCards: artifact.debug?.cardsPassingValidation,
+        });
+      }
+      
+      // Store artifact for debug panel (always set, even if empty)
       setArtifact(artifact);
       
       return {
@@ -345,7 +355,12 @@ export default function WeeklyPage() {
             ) : weeklyCards.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
                 <p className="text-sm text-white/60 mb-4">
-                  No weekly insights yet. Keep writing reflections and they&apos;ll appear here.
+                  Reflections exist this week, but no contract-compliant insights were generated.
+                  {artifact?.debug?.rawCardsGenerated !== undefined && artifact.debug.rawCardsGenerated > 0 && (
+                    <span className="block mt-2 text-xs text-white/40">
+                      ({artifact.debug.rawCardsGenerated} card{artifact.debug.rawCardsGenerated === 1 ? '' : 's'} generated, {artifact.debug.cardsPassingValidation || 0} passed validation)
+                    </span>
+                  )}
                 </p>
                 <Link
                   href="/insights/summary"

@@ -126,18 +126,18 @@ export function computeWeeklyArtifact(args: {
     maxEventIso = new Date(maxTime).toISOString();
   }
   
-  // Build debug info
+  // Build debug info with safe defaults
   const debug: InsightArtifactDebug = {
     eventCount: events.length,
     windowStartIso: windowStart.toISOString(),
     windowEndIso: windowEnd.toISOString(),
-    minEventIso,
-    maxEventIso,
-    sampleEventIds: events.slice(0, 3).map(e => (e as any).id || 'unknown'),
-    sampleEventDates: events.slice(0, 3).map(e => {
+    minEventIso: minEventIso || null,
+    maxEventIso: maxEventIso || null,
+    sampleEventIds: events.length > 0 ? events.slice(0, 3).map(e => (e as any).id || 'unknown') : [],
+    sampleEventDates: events.length > 0 ? events.slice(0, 3).map(e => {
       const eventAt = typeof e.eventAt === 'string' ? e.eventAt : e.eventAt.toISOString();
       return eventAt.split('T')[0];
-    }),
+    }) : [],
     reflectionsInWindow,
     activeDays,
     rawCardsGenerated: allCards.length,
