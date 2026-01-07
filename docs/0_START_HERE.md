@@ -11,7 +11,8 @@ Read these documents before proposing changes, especially UI changes.
 ## Design Contract
 4. docs/DESIGN_NORTH_STAR.md
 5. docs/OBSERVER_LAYER.md
-6. docs/CONTINUITY_OF_SELF.md
+6. docs/OBSERVER_V0.md (Observer v0 contract — frozen)
+7. docs/CONTINUITY_OF_SELF.md
 
 ## System Map
 7. docs/CORE_STACK.md
