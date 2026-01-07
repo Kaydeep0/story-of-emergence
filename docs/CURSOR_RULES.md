@@ -21,6 +21,20 @@ Definition of done for any task:
 
 ---
 
+## Protocol Execution Rule
+
+When the user says:
+- "Run start of day protocol"
+- "Run end of day protocol"
+
+You must:
+1. Load the corresponding protocol file from docs/
+2. Execute it verbatim
+3. Do not invent or omit sections
+4. Do not summarize philosophy unless the protocol asks
+
+---
+
 ## Decision Discipline for Insight Work
 
 ### Purpose

@@ -16,6 +16,8 @@ We allow insight. We forbid control.
 ## Start Here
 Read [docs/0_START_HERE.md](docs/0_START_HERE.md) before making changes.
 
+Daily work is governed by [docs/PROTOCOL_START_OF_DAY.md](docs/PROTOCOL_START_OF_DAY.md) and [docs/PROTOCOL_END_OF_DAY.md](docs/PROTOCOL_END_OF_DAY.md).
+
 ## Core Project Laws
 
 See [docs/0_START_HERE.md](docs/0_START_HERE.md) for the complete canonical index.
