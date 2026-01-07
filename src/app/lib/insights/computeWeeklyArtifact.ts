@@ -113,9 +113,8 @@ export function computeWeeklyArtifact(args: {
       }
     } else {
       const internal = event as InternalEvent;
-      if (internal.occurredAt) {
-        eventDate = internal.occurredAt instanceof Date ? internal.occurredAt : new Date(internal.occurredAt);
-      } else if (internal.createdAt) {
+      // InternalEvent has createdAt and eventAt, but not occurredAt
+      if (internal.createdAt) {
         eventDate = internal.createdAt instanceof Date ? internal.createdAt : new Date(internal.createdAt);
       } else if (internal.eventAt) {
         eventDate = internal.eventAt instanceof Date ? internal.eventAt : new Date(internal.eventAt);
