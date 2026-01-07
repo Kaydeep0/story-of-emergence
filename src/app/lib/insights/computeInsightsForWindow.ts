@@ -225,6 +225,19 @@ export function computeInsightsForWindow(args: {
     };
   }
   
+  // Ensure debug object always exists (safe default)
+  if (!artifact.debug) {
+    artifact.debug = {
+      eventCount: events.length,
+      windowStartIso: windowStart.toISOString(),
+      windowEndIso: windowEnd.toISOString(),
+      minEventIso: null,
+      maxEventIso: null,
+      sampleEventIds: [],
+      sampleEventDates: [],
+    };
+  }
+  
   // Dev-only validation checks
   if (process.env.NODE_ENV === 'development' && artifact.debug) {
     if (events.length > 0) {
@@ -287,8 +300,6 @@ export function computeInsightsForWindow(args: {
       }
     }
   }
-  
-  artifact.debug = debug;
   
   // Phase 5.4-5.5: Attach narratives to artifact (single integration point)
   // Extract patterns, generate snapshots, analyze deltas, generate narratives, select, attach
