@@ -7,7 +7,7 @@
  * Uses the same distribution layer pipeline as Weekly, Distributions, and YoY.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { useEncryptionSession } from '../../lib/useEncryptionSession';
 import { rpcFetchEntries } from '../../lib/entries';
@@ -533,6 +533,98 @@ export default function LifetimePage() {
     computeAsync();
   }, [reflections, address]);
 
+  // Build SharePack from lifetime lens state - always returns a SharePack
+  const sharePack = useMemo<SharePack>(() => {
+    if (!address) {
+      // Minimal fallback when no wallet connected
+      return buildSharePackForLens({
+        lens: 'lifetime',
+        oneSentenceSummary: 'Lifetime Analysis',
+        entryCount: 0,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    try {
+      const entryCount = distributionResult?.totalEntries ?? reflections.length;
+      const concentration = distributionResult?.stats.top10PercentDaysShare ?? 0;
+      
+      // Get distribution label from windowDistribution or distributionResult
+      const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+        entryCount === 0 ? 'none' :
+        windowDistribution?.classification === 'powerlaw' ? 'powerlaw' :
+        windowDistribution?.classification === 'lognormal' ? 'lognormal' :
+        concentration > 0.4 ? 'powerlaw' :
+        concentration > 0.2 ? 'lognormal' :
+        'normal';
+
+      // Get one sentence summary
+      const oneSentenceSummary = entryCount > 0 
+        ? `Lifetime analysis of ${entryCount} reflection${entryCount === 1 ? '' : 's'}` 
+        : 'Lifetime Analysis';
+
+      // Get key moments from top spike dates
+      const keyMoments: Array<{ date: string }> = [];
+      if (windowDistribution?.topSpikeDates) {
+        for (const dateStr of windowDistribution.topSpikeDates.slice(0, 5)) {
+          try {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            keyMoments.push({ date: date.toISOString() });
+          } catch {
+            // Skip invalid dates
+          }
+        }
+      }
+
+      // Calculate active days from reflections
+      const activeDays = distributionResult ? computeActiveDays(distributionResult.dailyCounts) : 0;
+
+      // Calculate spike count from distributionResult stats
+      const spikeCount = distributionResult?.stats.spikeRatio ? 
+        Math.round(distributionResult.stats.spikeRatio * 10) : 0;
+
+      // Get period from distributionResult or use all reflections
+      const periodStart = distributionResult?.dateRange.start.toISOString() ?? 
+        (reflections.length > 0 ? new Date(reflections[reflections.length - 1].createdAt).toISOString() : new Date().toISOString());
+      const periodEnd = distributionResult?.dateRange.end.toISOString() ?? new Date().toISOString();
+
+      return buildSharePackForLens({
+        lens: 'lifetime',
+        oneSentenceSummary,
+        entryCount,
+        activeDays,
+        distributionLabel,
+        concentrationShareTop10PercentDays: concentration,
+        spikeCount,
+        keyMoments,
+        periodStart,
+        periodEnd,
+        generatedAt: new Date().toISOString(),
+        mirrorInsight: null,
+      });
+    } catch (err) {
+      console.error('Failed to build lifetime SharePack:', err);
+      // Minimal fallback on error
+      return buildSharePackForLens({
+        lens: 'lifetime',
+        oneSentenceSummary: 'Lifetime Analysis',
+        entryCount: reflections.length,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+  }, [reflections, address, distributionResult, windowDistribution]);
+
   if (!mounted) return null;
 
   const lens = LENSES.lifetime;
@@ -842,13 +934,11 @@ export default function LifetimePage() {
                 </div>
 
                 {/* Share Actions Bar */}
-                {sharePack && (
-                  <ShareActionsBar
-                    sharePack={sharePack}
-                    senderWallet={address}
-                    encryptionReady={encryptionReady}
-                  />
-                )}
+                <ShareActionsBar
+                  sharePack={sharePack}
+                  senderWallet={address}
+                  encryptionReady={encryptionReady}
+                />
               </div>
             );
           }

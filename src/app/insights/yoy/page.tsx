@@ -311,7 +311,7 @@ export default function YearOverYearPage() {
       const windowReflections = filterEventsByWindow(reflections, combinedStart, combinedEnd);
       
       // Compute distribution layer for metrics
-      const distributionResult = computeDistributionLayer(windowReflections, combinedStart, combinedEnd);
+      const distributionResult = computeDistributionLayer(windowReflections, { windowDays: 365 });
       
       const entryCount = windowReflections.length;
       const activeDays = computeActiveDays(distributionResult?.dailyCounts || []);
@@ -333,7 +333,7 @@ export default function YearOverYearPage() {
       const concentration = distributionResult?.stats.top10PercentDaysShare || 0;
       
       // Get one sentence summary from YoY card
-      const oneSentenceSummary = yoyCard.headline || `Year-over-year comparison: ${year1} vs ${year2}`;
+      const oneSentenceSummary = yoyCard.title || `Year-over-year comparison: ${year1} vs ${year2}`;
 
       // Determine distribution label (simplified)
       const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
@@ -341,13 +341,11 @@ export default function YearOverYearPage() {
         concentration > 0.2 ? 'lognormal' :
         'normal';
 
-      // Get key moments from comparison
+      // Get key moments from comparison (use year boundaries)
       const keyMoments: Array<{ date: string }> = [];
-      if (yoyCard.year1TopDay) {
-        keyMoments.push({ date: new Date(year1, 0, 1).toISOString() });
-      }
-      if (yoyCard.year2TopDay) {
-        keyMoments.push({ date: new Date(year2, 0, 1).toISOString() });
+      if (yoyCard.data) {
+        keyMoments.push({ date: new Date(yoyCard.data.fromYear, 0, 1).toISOString() });
+        keyMoments.push({ date: new Date(yoyCard.data.toYear, 0, 1).toISOString() });
       }
 
       return buildSharePackForLens({

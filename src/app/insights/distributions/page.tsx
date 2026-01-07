@@ -522,6 +522,103 @@ export default function DistributionsPage() {
     }
   }, [distributionResult, distributionInsight, distributions]);
 
+  // Build SharePack from distributions lens state - always returns a SharePack
+  const sharePack = useMemo<SharePack>(() => {
+    if (!address) {
+      // Minimal fallback when no wallet connected
+      return buildSharePackForLens({
+        lens: 'distributions',
+        oneSentenceSummary: 'Distribution Analysis',
+        entryCount: 0,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    try {
+      const entryCount = distributionResult?.totalEntries ?? reflections.length;
+      const concentration = distributionResult?.stats.top10PercentDaysShare ?? 0;
+      
+      // Get distribution label from distributionResult or distributions array
+      const dist30 = distributions.find(d => d.windowDays === 30);
+      const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 
+        entryCount === 0 ? 'none' :
+        dist30?.classification === 'powerlaw' ? 'powerlaw' :
+        dist30?.classification === 'lognormal' ? 'lognormal' :
+        concentration > 0.4 ? 'powerlaw' :
+        concentration > 0.2 ? 'lognormal' :
+        'normal';
+
+      // Get one sentence summary from distributionInsight or fallback
+      const oneSentenceSummary = distributionInsight?.title || 
+        (entryCount > 0 ? `Distribution analysis of ${entryCount} reflection${entryCount === 1 ? '' : 's'}` : 'Distribution Analysis');
+
+      // Get key moments from top spike dates
+      const keyMoments: Array<{ date: string }> = [];
+      if (dist30?.topSpikeDates) {
+        for (const dateStr of dist30.topSpikeDates.slice(0, 5)) {
+          try {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            keyMoments.push({ date: date.toISOString() });
+          } catch {
+            // Skip invalid dates
+          }
+        }
+      }
+
+      // Calculate active days from reflections
+      const activeDaysSet = new Set<string>();
+      for (const reflection of reflections) {
+        const dateKey = `${new Date(reflection.createdAt).getFullYear()}-${String(new Date(reflection.createdAt).getMonth() + 1).padStart(2, '0')}-${String(new Date(reflection.createdAt).getDate()).padStart(2, '0')}`;
+        activeDaysSet.add(dateKey);
+      }
+      const activeDays = activeDaysSet.size;
+
+      // Calculate spike count from distributionResult stats
+      const spikeCount = distributionResult?.stats.spikeRatio ? 
+        Math.round(distributionResult.stats.spikeRatio * 10) : 0;
+
+      // Get period from distributionResult or use all reflections
+      const periodStart = distributionResult?.dateRange.start.toISOString() ?? 
+        (reflections.length > 0 ? new Date(reflections[reflections.length - 1].createdAt).toISOString() : new Date().toISOString());
+      const periodEnd = distributionResult?.dateRange.end.toISOString() ?? new Date().toISOString();
+
+      return buildSharePackForLens({
+        lens: 'distributions',
+        oneSentenceSummary,
+        entryCount,
+        activeDays,
+        distributionLabel,
+        concentrationShareTop10PercentDays: concentration,
+        spikeCount,
+        keyMoments,
+        periodStart,
+        periodEnd,
+        generatedAt: new Date().toISOString(),
+        mirrorInsight: distributionInsight?.explanation || null,
+      });
+    } catch (err) {
+      console.error('Failed to build distributions SharePack:', err);
+      // Minimal fallback on error
+      return buildSharePackForLens({
+        lens: 'distributions',
+        oneSentenceSummary: 'Distribution Analysis',
+        entryCount: reflections.length,
+        activeDays: 0,
+        distributionLabel: 'none',
+        concentrationShareTop10PercentDays: 0,
+        spikeCount: 0,
+        keyMoments: [],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+  }, [reflections, address, distributionResult, distributionInsight, distributions]);
+
   // Format date for display
   const formatDate = (dateStr: string): string => {
     const [year, month, day] = dateStr.split('-').map(Number);
@@ -929,13 +1026,11 @@ export default function DistributionsPage() {
         })()}
 
         {/* Share Actions */}
-        {sharePack && (
-          <ShareActionsBar
-            sharePack={sharePack}
-            senderWallet={address}
-            encryptionReady={encryptionReady}
-          />
-        )}
+        <ShareActionsBar
+          sharePack={sharePack}
+          senderWallet={address}
+          encryptionReady={encryptionReady}
+        />
 
         {/* Session Closing */}
         <SessionClosing lens="distributions" narrativeTone={narrativeTone} />

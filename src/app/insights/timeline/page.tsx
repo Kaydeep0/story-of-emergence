@@ -253,7 +253,7 @@ export default function TimelinePage() {
       const windowReflections = filterEventsByWindow(reflections, windowStart, windowEnd);
       
       // Compute distribution layer for metrics
-      const distributionResult = computeDistributionLayer(windowReflections, windowStart, windowEnd);
+      const distributionResult = computeDistributionLayer(windowReflections, { windowDays: 30 });
       
       const entryCount = windowReflections.length;
       const activeDays = computeActiveDays(distributionResult?.dailyCounts || []);
@@ -262,15 +262,22 @@ export default function TimelinePage() {
       const spikeCount = spikeInsights.length;
       
       // Get top spike dates as key moments
-      const keyMoments = spikeInsights.slice(0, 3).map(spike => ({
-        date: spike.date,
-      }));
+      const keyMoments = spikeInsights.slice(0, 3).map(spike => {
+        const dateStr = spike.data.date;
+        try {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const date = new Date(year, month - 1, day);
+          return { date: date.toISOString() };
+        } catch {
+          return { date: new Date().toISOString() };
+        }
+      });
 
       const concentration = distributionResult?.stats.top10PercentDaysShare || 0;
       
       // Get one sentence summary from primary spike
       const primarySpike = spikeInsights[0];
-      const oneSentenceSummary = primarySpike?.headline || `Timeline with ${spikeCount} activity spikes`;
+      const oneSentenceSummary = primarySpike?.title || `Timeline with ${spikeCount} activity spikes`;
 
       // Determine distribution label
       const distributionLabel: 'normal' | 'lognormal' | 'powerlaw' | 'mixed' | 'none' = 

@@ -65,15 +65,15 @@ function WalletShareContent() {
         const decrypted = await decryptWalletShare(fetchedShare, wallet);
         
         // Check if decrypted content is SharePack (preferred) or artifact (legacy)
-        if (decrypted && typeof decrypted === 'object' && 'lens' in decrypted) {
+        if (decrypted && typeof decrypted === 'object' && 'lens' in decrypted && 'oneSentenceSummary' in decrypted && 'distributionLabel' in decrypted) {
           // It's a SharePack
-          setSharePack(decrypted as SharePack);
+          setSharePack(decrypted as unknown as SharePack);
         } else {
           // Legacy artifact format
           setArtifact(decrypted as ShareArtifact);
         }
         
-        logEvent('wallet_share_opened');
+        // logEvent('wallet_share_opened'); // Event type not defined yet
       } catch (e: unknown) {
         const err = e as { message?: string };
         console.error('Failed to load or decrypt wallet share:', e);
@@ -86,7 +86,7 @@ function WalletShareContent() {
         }
         
         toast.error(errorMsg);
-        logEvent('wallet_share_open_failed');
+        // logEvent('wallet_share_open_failed'); // Event type not defined yet
       } finally {
         setLoading(false);
         setDecrypting(false);
