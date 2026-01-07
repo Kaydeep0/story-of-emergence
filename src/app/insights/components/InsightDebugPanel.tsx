@@ -80,10 +80,14 @@ export function InsightDebugPanel({ debug }: InsightDebugPanelProps) {
               <div className="pt-1 pb-2 border-t border-white/10 mt-2">
                 <div className="text-white/40 text-[10px] uppercase tracking-wide mb-1">Insight Contract Validation</div>
                 {debug.reflectionsInWindow !== undefined && (
-                  <div><span className="text-white/50">reflectionsInWindow:</span> {debug.reflectionsInWindow}</div>
+                  <div><span className="text-white/50">reflectionsInWindow:</span> {debug.reflectionsInWindow} <span className="text-white/30">(from windowEntries)</span></div>
                 )}
                 {debug.activeDays !== undefined && (
                   <div><span className="text-white/50">activeDays:</span> {debug.activeDays}</div>
+                )}
+                <div><span className="text-white/50">eventCount:</span> {debug.eventCount} <span className="text-white/30">(from events)</span></div>
+                {debug.invalidReflectionDates !== undefined && (
+                  <div><span className="text-white/50">invalidReflectionDates:</span> {debug.invalidReflectionDates}</div>
                 )}
                 {debug.rawCardsGenerated !== undefined && (
                   <div><span className="text-white/50">rawCardsGenerated:</span> {debug.rawCardsGenerated}</div>

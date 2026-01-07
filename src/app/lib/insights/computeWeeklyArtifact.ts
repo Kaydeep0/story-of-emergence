@@ -11,6 +11,7 @@ import { computeAlwaysOnSummary } from './alwaysOnSummary';
 import { computeTimelineSpikes, itemToReflectionEntry } from './timelineSpikes';
 import { validateInsight, validateInsightDetailed } from './validateInsight';
 import type { InsightArtifactDebug, RejectedCard } from './artifactTypes';
+import { pickEvidenceChips } from './pickEvidenceChips';
 
 /**
  * Safe date parsing helper
@@ -152,6 +153,11 @@ export function computeWeeklyArtifact(args: {
     const confidence = `Pattern computed over the last 7 days (${windowStart.toISOString().split('T')[0]} to ${windowEnd.toISOString().split('T')[0]}) with ${windowEntries.length} valid reflection${windowEntries.length === 1 ? '' : 's'} and ${activeDays} active day${activeDays === 1 ? '' : 's'}.`;
     
     const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
+
+    // Observer v0: Pick evidence chips from window entries for fallback card
+    const fallbackEvidenceChips = windowEntries.length > 0 
+      ? pickEvidenceChips(windowEntries, claim)
+      : [];
     
     const fallbackCard: InsightCard = {
       id: `weekly-fallback-${windowStart.toISOString()}`,
@@ -167,6 +173,7 @@ export function computeWeeklyArtifact(args: {
         preview: 'Reflection', // Safe label, no reliance on title field
       })),
       computedAt: new Date().toISOString(),
+      evidenceChips: fallbackEvidenceChips.length > 0 ? fallbackEvidenceChips : undefined,
     } as InsightCard;
     allCards.push(fallbackCard);
   }
