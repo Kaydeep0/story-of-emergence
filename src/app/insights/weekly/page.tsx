@@ -43,7 +43,7 @@ import { useDensity } from '../hooks/useDensity';
 import { DensityToggle } from '../components/DensityToggle';
 import { ShareActionsBar } from '../components/ShareActionsBar';
 import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
-import { compareArtifactsForPersistence } from '../../lib/observer/compareArtifacts';
+import { clearArtifactCache } from '../../lib/observer/attachPersistence';
 import '../styles/delights.css';
 
 export default function WeeklyPage() {
@@ -193,63 +193,17 @@ export default function WeeklyPage() {
         });
       }
       
-      // Observer v1: Compare with Yearly artifact for pattern persistence
-      // Compute Yearly artifact for comparison
+      // Observer v1: Attach persistence by comparing with Yearly artifact if available
+      // Clear cache at start to prevent stale artifacts from previous requests
+      clearArtifactCache();
+      
       let updatedArtifact = artifact;
       try {
-        const now = new Date();
-        const yearlyWindowStart = new Date(now);
-        yearlyWindowStart.setFullYear(yearlyWindowStart.getFullYear() - 1);
-        const yearlyWindowEnd = now;
-        
-        const yearlyArtifact = computeInsightsForWindow({
-          horizon: 'yearly',
-          events: eventsAll, // Use all events for yearly window
-          windowStart: yearlyWindowStart,
-          windowEnd: yearlyWindowEnd,
-          wallet: address ?? undefined,
-          entriesCount: reflections.length,
-          eventsCount: eventsAll.length,
-          reflectionsLoaded: reflections.length,
-          eventsGenerated: eventsAll.length,
-          reflections: reflections.map((r) => ({
-            id: r.id,
-            createdAt: r.createdAt,
-            plaintext: r.plaintext ?? '',
-          })),
-        } as any);
-        
-        // Compare artifacts
-        const comparison = compareArtifactsForPersistence(artifact, yearlyArtifact, reflections);
-        
-        if (comparison) {
-          // Update artifact with persistence results and debug
-          updatedArtifact = {
-            ...comparison.weekly,
-            debug: {
-              ...artifact.debug,
-              observerV1: comparison.debug,
-            },
-          };
-        } else {
-          // No persistence, but still attach debug info
-          updatedArtifact = {
-            ...artifact,
-            debug: {
-              ...artifact.debug,
-              observerV1: {
-                weeklySignature: null,
-                yearlySignature: null,
-                match: false,
-                silenceReason: 'Comparison returned null',
-              },
-            },
-          };
-        }
+        const { attachPersistenceToArtifact } = await import('../../lib/observer/attachPersistence');
+        updatedArtifact = attachPersistenceToArtifact(artifact, reflections);
       } catch (err) {
-        // If comparison fails, keep original artifact
-        console.warn('[Weekly] Observer v1 comparison failed:', err);
-        updatedArtifact = artifact;
+        // If Observer v1 is not available, keep artifact as-is
+        console.warn('[Weekly] Observer v1 attachment failed:', err);
       }
       
       // Store artifact for debug panel (always set, even if empty)
