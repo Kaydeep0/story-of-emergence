@@ -183,58 +183,78 @@ export function computeAlwaysOnSummary(
   const cards: AlwaysOnSummaryCard[] = [];
   const computedAt = new Date().toISOString();
 
-  // Card 1: Writing Change
-  if (previousCount > 0 || currentCount > 0) {
+  // Card 1: Writing Change (New Insight Contract)
+  // Only generate if we have enough data to make a falsifiable claim
+  if (previousCount > 0 && currentCount > 0) {
     const percentChange =
       previousCount > 0
         ? Math.round(((currentCount - previousCount) / previousCount) * 100)
-        : currentCount > 0
-        ? 100
         : 0;
 
-    const direction = percentChange >= 0 ? 'up' : 'down';
-    const absPercent = Math.abs(percentChange);
+    // Detect clustering pattern: entries concentrated in fewer days vs spread evenly
+    const currentActiveDaysCount = countActiveDays(currentWeekEntries);
+    const previousActiveDaysCount = countActiveDays(previousWeekEntries);
+    
+    // Calculate clustering ratio: entries per active day
+    const currentClusteringRatio = currentActiveDaysCount > 0 ? currentCount / currentActiveDaysCount : 0;
+    const previousClusteringRatio = previousActiveDaysCount > 0 ? previousCount / previousActiveDaysCount : 0;
+    
+    // Detect if user clusters (writes multiple entries on fewer days) vs spreads evenly
+    const isClustered = currentClusteringRatio >= 2.0; // 2+ entries per active day indicates clustering
+    const clusteringChanged = Math.abs(currentClusteringRatio - previousClusteringRatio) >= 0.5;
+    
+    // Only generate insight if we can make a falsifiable claim about clustering behavior
+    if (isClustered || clusteringChanged) {
+      // CLAIM: User processes in bursts rather than gradually
+      const claim = isClustered 
+        ? "You don't process things gradually. You wait, then commit fully."
+        : "Your writing pattern shifted this week.";
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${currentCount} entries across ${currentActiveDaysCount} active days (${currentClusteringRatio.toFixed(1)} entries/day)`,
+        `Previous week: ${previousCount} entries across ${previousActiveDaysCount} active days (${previousClusteringRatio.toFixed(1)} entries/day)`,
+      ];
+      
+      if (currentActiveDaysCount < 7) {
+        const gapDays = 7 - currentActiveDaysCount;
+        evidenceItems.push(`${gapDays} day${gapDays === 1 ? '' : 's'} with no entries`);
+      }
+      
+      // CONTRAST: What didn't happen
+      const contrast = currentActiveDaysCount < 4 
+        ? "A steady daily cadence was not observed."
+        : "No sustained low-level activity pattern detected.";
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = "Pattern observed across two consecutive weeks with measurable clustering ratio.";
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
-    let title: string;
-    if (percentChange === 0) {
-      title = 'Writing activity steady this week';
-    } else if (previousCount === 0 && currentCount > 0) {
-      title = 'Started writing this week';
-    } else {
-      title = `Writing activity ${direction} ${absPercent}% this week`;
+      // Build evidence from both weeks
+      const currentEvidence = getEvidencePerDay(currentWeekEntries, 3);
+      const previousEvidence = getEvidencePerDay(previousWeekEntries, 2);
+      const evidence = [...currentEvidence, ...previousEvidence];
+
+      const data: AlwaysOnSummaryData = {
+        summaryType: 'writing_change',
+        currentWeekEntries: currentCount,
+        previousWeekEntries: previousCount,
+        currentWeekActiveDays: currentActiveDaysCount,
+        percentChange,
+      };
+
+      cards.push({
+        id: generateInsightId('always_on_summary', 'writing_change'),
+        kind: 'always_on_summary',
+        title,
+        explanation,
+        evidence,
+        computedAt,
+        data,
+      });
     }
-
-    let explanation: string;
-    if (previousCount === 0 && currentCount > 0) {
-      explanation = `You wrote ${currentCount} ${currentCount === 1 ? 'entry' : 'entries'} in the last 7 days. Keep it up!`;
-    } else if (currentCount === 0 && previousCount > 0) {
-      explanation = `You had ${previousCount} ${previousCount === 1 ? 'entry' : 'entries'} the week before but none in the last 7 days.`;
-    } else {
-      explanation = `You wrote ${currentCount} ${currentCount === 1 ? 'entry' : 'entries'} in the last 7 days versus ${previousCount} the week before.`;
-    }
-
-    // Build evidence from both weeks
-    const currentEvidence = getEvidencePerDay(currentWeekEntries, 3);
-    const previousEvidence = getEvidencePerDay(previousWeekEntries, 2);
-    const evidence = [...currentEvidence, ...previousEvidence];
-
-    const data: AlwaysOnSummaryData = {
-      summaryType: 'writing_change',
-      currentWeekEntries: currentCount,
-      previousWeekEntries: previousCount,
-      currentWeekActiveDays: currentActiveDays,
-      percentChange,
-    };
-
-    cards.push({
-      id: generateInsightId('always_on_summary', 'writing_change'),
-      kind: 'always_on_summary',
-      title,
-      explanation,
-      evidence,
-      computedAt,
-      data,
-    });
   }
 
   // Card 2: Consistency (only if we have current week data)
