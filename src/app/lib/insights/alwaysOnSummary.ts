@@ -263,52 +263,79 @@ export function computeAlwaysOnSummary(
     }
   }
 
-  // Card 2: Consistency (only if we have current week data)
-  if (currentCount > 0) {
+  // Card 2: Consistency (New Insight Contract)
+  // Only generate if we can make a falsifiable claim about daily cadence patterns
+  if (currentCount > 0 && previousCount > 0) {
     const activeDayNames = getActiveDayNames(currentWeekEntries);
-    const dayListFormatted =
-      activeDayNames.length <= 3
-        ? activeDayNames.join(', ')
-        : activeDayNames.slice(0, -1).join(', ') +
-          ', and ' +
-          activeDayNames[activeDayNames.length - 1];
+    const previousActiveDays = countActiveDays(previousWeekEntries);
+    
+    // Detect pattern: daily cadence vs sporadic
+    const isDailyCadence = currentActiveDays === 7;
+    const isSporadic = currentActiveDays <= 3;
+    const cadenceChanged = Math.abs(currentActiveDays - previousActiveDays) >= 3;
+    
+    // Only generate if we can make a falsifiable claim
+    if (isDailyCadence || isSporadic || cadenceChanged) {
+      // CLAIM: User maintains daily cadence OR writes sporadically OR pattern shifted
+      let claim: string;
+      if (isDailyCadence) {
+        claim = "You maintain a daily writing cadence. Every day this week had at least one entry.";
+      } else if (isSporadic) {
+        claim = "Your writing is concentrated on specific days, not spread evenly.";
+      } else {
+        claim = `Your writing cadence shifted from ${previousActiveDays} active days to ${currentActiveDays} active days.`;
+      }
+      
+      // EVIDENCE: Concrete metrics
+      const evidenceItems: string[] = [
+        `${currentActiveDays} active days out of 7 this week`,
+        `${currentCount} total entries this week`,
+        `Previous week: ${previousActiveDays} active days with ${previousCount} entries`,
+      ];
+      
+      // Add gap information if sporadic
+      if (isSporadic) {
+        const gapDays = 7 - currentActiveDays;
+        evidenceItems.push(`${gapDays} day${gapDays === 1 ? '' : 's'} with no entries`);
+      }
+      
+      // CONTRAST: What didn't happen
+      const contrast = isDailyCadence
+        ? "No days were skipped. A sporadic pattern was not observed."
+        : isSporadic
+        ? "A steady daily cadence was not observed. Most days had zero entries."
+        : "A consistent cadence pattern was not maintained across consecutive weeks.";
+      
+      // CONFIDENCE: Why we're confident
+      const confidence = `Pattern observed across two consecutive weeks with measurable active day counts (${previousActiveDays} → ${currentActiveDays}).`;
+      
+      const title = claim;
+      const explanation = `${claim}\n\nEvidence:\n${evidenceItems.map(e => `• ${e}`).join('\n')}\n\nContrast: ${contrast}\n\nConfidence: ${confidence}`;
 
-    const title = `You wrote on ${currentActiveDays} of the last 7 days`;
+      const evidence = getEvidencePerDay(currentWeekEntries, 7);
 
-    let explanation: string;
-    if (currentActiveDays === 7) {
-      explanation = 'Perfect week! You had entries every single day.';
-    } else if (currentActiveDays >= 5) {
-      explanation = `Great consistency! You had entries on ${dayListFormatted}.`;
-    } else if (currentActiveDays >= 3) {
-      explanation = `You had entries on ${dayListFormatted}.`;
-    } else {
-      explanation = `You had entries on ${dayListFormatted}. Try writing more often to build a habit.`;
-    }
+      const data: AlwaysOnSummaryData = {
+        summaryType: 'consistency',
+        currentWeekEntries: currentCount,
+        previousWeekEntries: previousCount,
+        currentWeekActiveDays: currentActiveDays,
+        activeDayNames,
+      };
 
-    const evidence = getEvidencePerDay(currentWeekEntries, 7);
+      const card: AlwaysOnSummaryCard = {
+        id: generateInsightId('always_on_summary', 'consistency'),
+        kind: 'always_on_summary',
+        title,
+        explanation,
+        evidence,
+        computedAt,
+        data,
+      };
 
-    const data: AlwaysOnSummaryData = {
-      summaryType: 'consistency',
-      currentWeekEntries: currentCount,
-      previousWeekEntries: previousCount,
-      currentWeekActiveDays: currentActiveDays,
-      activeDayNames,
-    };
-
-    const card: AlwaysOnSummaryCard = {
-      id: generateInsightId('always_on_summary', 'consistency'),
-      kind: 'always_on_summary',
-      title,
-      explanation,
-      evidence,
-      computedAt,
-      data,
-    };
-
-    // Insight Contract Gatekeeper: Only render contract-compliant insights
-    if (validateInsight(card)) {
-      cards.push(card);
+      // Insight Contract Gatekeeper: Only render contract-compliant insights
+      if (validateInsight(card)) {
+        cards.push(card);
+      }
     }
   }
 
