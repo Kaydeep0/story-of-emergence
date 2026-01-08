@@ -605,9 +605,11 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Loading State */}
-        {loading && (
+        {(loading || (!insightArtifact && reflections.length > 0)) && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
-            <p className="text-white/70">Loading reflections…</p>
+            <p className="text-white/70">
+              {loading ? 'Loading reflections…' : 'Computing Yearly wrap…'}
+            </p>
           </div>
         )}
 
@@ -619,7 +621,7 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Empty State - Only show if no data loaded/generated */}
-        {!loading && !error && (() => {
+        {!loading && !error && insightArtifact && (() => {
           const debug = insightArtifact?.debug;
           const reflectionsLoaded = debug?.reflectionsLoaded ?? 0;
           const eventsGenerated = debug?.eventsGenerated ?? 0;
@@ -643,16 +645,32 @@ export default function YearlyWrapPage() {
           </div>
         )}
 
-        {/* Yearly wrap still forming - Only show when truly no usable data */}
-        {!loading && !error && (() => {
-          const debug = insightArtifact?.debug;
+        {/* Yearly wrap still forming - Data exists but artifact incomplete */}
+        {!loading && !error && insightArtifact && (() => {
+          const debug = insightArtifact.debug;
           const eventCount = debug?.eventCount ?? 0;
-          const cards = insightArtifact?.cards ?? [];
+          const cards = insightArtifact.cards ?? [];
           const yearlyCard = cards.find((c) => c.kind === 'distribution');
           const hasYearlyCard = !!yearlyCard;
           
-          // Check if we have usable distribution data
-          const hasDistributionData = distributionResult && distributionResult.totalEntries > 0;
+          // Check if Yearly's own distribution computation has started
+          // Once Yearly starts computing (even if it produces no data), suppress banner (monotonic silence)
+          // Note: distributionResult is null before computation starts, set to DistributionResult or null after
+          const hasYearlyDistributionStarted = distributionResult !== null;
+          
+          // Single authoritative phase flag: computation is complete when both artifact and distribution exist
+          // Note: distributionResult is initialized as null, not undefined, so check for null
+          const isComputing =
+            !insightArtifact ||
+            distributionResult === null;
+          
+          // Banner condition: only show after compute completes, with events, no card and no distribution started
+          // Once Yearly's own computation begins, stay silent (monotonic silence rule)
+          const shouldShowStillForming =
+            !isComputing &&
+            eventCount > 0 &&
+            !hasYearlyCard &&
+            !hasYearlyDistributionStarted;
           
           // Dev-only logging: gate values
           if (process.env.NODE_ENV === 'development') {
@@ -661,19 +679,13 @@ export default function YearlyWrapPage() {
               cardsLength: cards.length,
               yearlyCardExists: hasYearlyCard,
               yearlyCardKind: yearlyCard?.kind,
-              hasDistributionData,
-              distributionResultTotalEntries: distributionResult?.totalEntries,
-              shouldShowStillForming: eventCount > 0 && !hasYearlyCard && !hasDistributionData,
+              hasYearlyDistributionStarted,
+              distributionResultIsNull: distributionResult === null,
+              shouldShowStillForming,
             });
           }
           
-          // Show "still forming" ONLY if:
-          // - Events exist (eventCount > 0)
-          // - But no card exists (hasYearlyCard === false)
-          // - AND no usable distribution data (hasDistributionData === false)
-          // This means we're truly waiting for data to be computed
-          // If distribution data exists, render the content even without card (content gates handle it)
-          return eventCount > 0 && !hasYearlyCard && !hasDistributionData;
+          return shouldShowStillForming;
         })() && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
             <p className="text-white/70 mb-2">Yearly wrap is still forming. Data is present.</p>
@@ -681,7 +693,7 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Yearly Wrap Content - Organized for clarity and completeness */}
-        {!loading && !error && (() => {
+        {!loading && !error && insightArtifact && (() => {
           const debug = insightArtifact?.debug;
           const eventCount = debug?.eventCount ?? 0;
           const cards = insightArtifact?.cards ?? [];
