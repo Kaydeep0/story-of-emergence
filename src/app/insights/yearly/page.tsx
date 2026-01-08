@@ -79,6 +79,12 @@ export default function YearlyWrapPage() {
 
   const connected = isConnected && !!address;
 
+  // Single authoritative phase flag: computation is complete when both artifact and distribution exist
+  // Note: distributionResult is initialized as null, not undefined, so check for null
+  const isComputing =
+    !insightArtifact ||
+    distributionResult === null;
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -605,7 +611,7 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Loading State */}
-        {(loading || (!insightArtifact && reflections.length > 0)) && (
+        {(loading || isComputing) && (
           <div className="rounded-2xl border border-white/10 p-6 text-center">
             <p className="text-white/70">
               {loading ? 'Loading reflections…' : 'Computing Yearly wrap…'}
@@ -621,7 +627,7 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Empty State - Only show if no data loaded/generated */}
-        {!loading && !error && insightArtifact && (() => {
+        {!loading && !error && !isComputing && (() => {
           const debug = insightArtifact?.debug;
           const reflectionsLoaded = debug?.reflectionsLoaded ?? 0;
           const eventsGenerated = debug?.eventsGenerated ?? 0;
@@ -646,10 +652,10 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Yearly wrap still forming - Data exists but artifact incomplete */}
-        {!loading && !error && insightArtifact && (() => {
-          const debug = insightArtifact.debug;
+        {!loading && !error && !isComputing && (() => {
+          const debug = insightArtifact!.debug;
           const eventCount = debug?.eventCount ?? 0;
-          const cards = insightArtifact.cards ?? [];
+          const cards = insightArtifact!.cards ?? [];
           const yearlyCard = cards.find((c) => c.kind === 'distribution');
           const hasYearlyCard = !!yearlyCard;
           
@@ -657,12 +663,6 @@ export default function YearlyWrapPage() {
           // Once Yearly starts computing (even if it produces no data), suppress banner (monotonic silence)
           // Note: distributionResult is null before computation starts, set to DistributionResult or null after
           const hasYearlyDistributionStarted = distributionResult !== null;
-          
-          // Single authoritative phase flag: computation is complete when both artifact and distribution exist
-          // Note: distributionResult is initialized as null, not undefined, so check for null
-          const isComputing =
-            !insightArtifact ||
-            distributionResult === null;
           
           // Banner condition: only show after compute completes, with events, no card and no distribution started
           // Once Yearly's own computation begins, stay silent (monotonic silence rule)
@@ -675,6 +675,7 @@ export default function YearlyWrapPage() {
           // Dev-only logging: gate values
           if (process.env.NODE_ENV === 'development') {
             console.log('[Yearly Wrap] Still forming gate:', {
+              isComputing,
               eventCount,
               cardsLength: cards.length,
               yearlyCardExists: hasYearlyCard,
@@ -685,6 +686,7 @@ export default function YearlyWrapPage() {
             });
           }
           
+<<<<<<< HEAD
           return shouldShowStillForming;
         })() && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center">
@@ -693,7 +695,7 @@ export default function YearlyWrapPage() {
         )}
 
         {/* Yearly Wrap Content - Organized for clarity and completeness */}
-        {!loading && !error && insightArtifact && (() => {
+        {!loading && !error && !isComputing && (() => {
           const debug = insightArtifact?.debug;
           const eventCount = debug?.eventCount ?? 0;
           const cards = insightArtifact?.cards ?? [];
