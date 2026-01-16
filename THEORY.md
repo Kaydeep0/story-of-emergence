@@ -16,6 +16,8 @@ The restraint in this system is not a limitation. It is an enforcement of theory
 
 This intelligence delays judgment by design, because premature measurement collapses structure. It reflects how memory and experience shape a person physically over time, as information constrains behavior, reorganizes internal states, and alters what futures remain possible.
 
+This restraint is structural, not moral. It exists because premature evaluation collapses layered meaning into flat conclusions.
+
 Story of Emergence is often mistaken for a system that has not finished measuring. In reality, it is a system that understands when measurement destroys meaning.
 
 ---
