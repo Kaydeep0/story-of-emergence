@@ -26,6 +26,18 @@ All insights are presented as observations only; interpretation and meaning are 
 
 Story of Emergence is grounded in scale-resolved theories of connectivity, not aggregate metrics.
 
+### System Flow (Conceptual)
+
+```
+Encrypted Reflections
+        ↓
+Local Client-Side Computation
+        ↓
+Observed Structure
+        ↓
+Human Interpretation
+```
+
 ## Theoretical Foundation
 
 Story of Emergence is not a productivity tool or a conventional journaling app.
