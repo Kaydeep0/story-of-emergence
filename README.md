@@ -6,7 +6,7 @@ All reflections, insights, and shared artifacts are encrypted locally using AES-
 
 This repository contains the full web application, including the encrypted journaling engine, insights pipeline, and wallet-based sharing capsule system.
 
-Story of Emergence exists to explore how meaning, memory, and insight emerge from encrypted personal data without collapsing structure through premature measurement or optimization. The system is designed so interpretation remains external to the machine and agency remains with the human observer.
+Story of Emergence exists to explore how meaning, memory, and insight emerge from encrypted personal data without collapsing structure through premature measurement or optimization. Interpretation remains external to the machine and agency remains with the human observer.
 
 ## Product Posture
 
