@@ -959,7 +959,7 @@ export function SharePackBuilder({
               className="rounded border-white/20"
             />
             <span className="text-xs text-white/80">
-              Include selected insights only (recommended)
+              Include selected insights only (filtered)
             </span>
           </label>
           {!includeSelectedOnly && (
