@@ -56,6 +56,13 @@ Affirmations:
 
 ---
 
+## Observation Language Check
+
+- Confirm Observation Language Invariant is active (see `docs/ARCHITECTURE_NOW.md`)
+- If doing any UI work today, run the five token scan (`recommended`, `important`, `significant`, `strongest`, `deserve`) and log results
+
+---
+
 ## Continuity Reminder
 The system remembers patterns, tensions, and shifts — not goals, judgments, or prescriptions.
 

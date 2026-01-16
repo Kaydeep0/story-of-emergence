@@ -62,6 +62,28 @@ If any file contradicts your memory, the file wins.
 
 ---
 
+## Step 2.5: Observation Language Gate
+
+Before generating the progress report, confirm:
+
+1. `docs/ARCHITECTURE_NOW.md` contains `Observation Language Invariant`
+2. Run a quick repo search for these tokens in user-facing copy and record counts:
+
+   * `recommended`
+   * `important`
+   * `significant`
+   * `strongest`
+   * `deserve`
+
+3. For each match found, classify as:
+   * OK (purely descriptive and non-evaluative)
+   * Soft interpretation (risky)
+   * Violation (must be fixed before new work)
+
+Record results in START_OF_DAY file or PROGRESS_REPORT.
+
+---
+
 ## Step 3: Ground Truth Progress Report (Delegated)
 
 Ask Cursor to generate a Ground Truth Progress Report using the authority order above.

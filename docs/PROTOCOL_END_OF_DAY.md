@@ -58,6 +58,12 @@ Notes for next session (optional):
 
 ---
 
+## Observation Language Seal
+
+If any user-facing copy was changed today, re-run the five token scan (`recommended`, `important`, `significant`, `strongest`, `deserve`) and note deltas.
+
+---
+
 ## Re-Entry Gate Reminder
 
 If work ended without updating PROGRESS_REPORT.md, expect the Re-Entry Gate to block the next session.
