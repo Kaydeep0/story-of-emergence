@@ -18,7 +18,7 @@ This intelligence delays judgment by design, because premature measurement colla
 
 This restraint is structural, not moral. It exists because premature evaluation collapses layered meaning into flat conclusions.
 
-Story of Emergence is often mistaken for a system that has not finished measuring. In reality, it is a system that understands when measurement destroys meaning.
+Story of Emergence understands when measurement destroys meaning. It delays judgment not because measurement is incomplete, but because premature measurement collapses structure.
 
 ---
 
@@ -125,10 +125,7 @@ not what it must yet implement.
 
 ## Relationship to the Observation Layer
 
-The Observation Layer is intentionally incomplete.
-
-This is not an omission.
-It is a consequence of the theory.
+The Observation Layer is intentionally incomplete as a consequence of the theory.
 
 Observation must:
 • Detect distribution across scales  

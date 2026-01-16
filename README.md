@@ -91,7 +91,7 @@ This invariant is documented in [ARCHITECTURE_NOW.md](docs/ARCHITECTURE_NOW.md) 
 
 The theory precedes implementation.
 
-Story of Emergence intentionally delays certain observation and interpretation layers. This is not a missing feature. It is a consequence of the theoretical constraint that structure must not be prematurely compressed.
+Story of Emergence intentionally delays certain observation and interpretation layers as a consequence of the theoretical constraint that structure must not be prematurely compressed.
 
 Future layers will inherit this foundation naturally.
 
