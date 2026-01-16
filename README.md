@@ -16,6 +16,8 @@ There is no coaching. No rewards. No streaks. No optimization loops.
 The system allows insight.
 It explicitly forbids control.
 
+Story of Emergence does not coach, improve, optimize, or direct behavior. It does not infer goals, assess progress, or suggest interpretations. The system's role ends at rendering structure. Meaning and action remain external to the system by design.
+
 All insights are derived from past data only. The system never recommends, nudges, or shapes future behavior. Interpretation and action belong solely to the human observer.
 
 All insights are presented as observations only; interpretation and meaning are deliberately left to the human observer.
