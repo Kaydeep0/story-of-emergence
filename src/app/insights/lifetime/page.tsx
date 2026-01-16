@@ -63,7 +63,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     primaryInsight: 'Your thinking concentrates into a small number of high-intensity days.',
     patternNarrative: {
       paragraph1: 'Across your lifetime, your thinking does not distribute evenly. Instead, it gathers quietly and releases in concentrated bursts. Long stretches of lower activity are punctuated by days where attention, processing, or emotional energy converges into a short window.',
-      paragraph2: 'This pattern suggests a mind that accumulates insight internally and externalizes it when something reaches significance. Rather than maintaining steady daily output, your reflections cluster around moments that matter, creating a small number of high-impact days that carry a disproportionate share of your thinking.',
+      paragraph2: 'This pattern suggests a mind that accumulates insight internally and externalizes it when something reaches significance. Rather than maintaining steady daily output, your reflections cluster around moments that matter, creating a small number of high-intensity days that carry a disproportionate share of your thinking.',
     },
     activeDaysMicro: 'Your writing concentrates into fewer days rather than spreading evenly over time.',
     spikeRatioMicro: 'When you write, intensity tends to scale sharply rather than incrementally.',
@@ -135,7 +135,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     primaryInsight: 'Your thinking exhibits concentration bias: a small number of high-intensity days account for disproportionate output.',
     patternNarrative: {
       paragraph1: 'Your reflection distribution is non-uniform. Activity clusters into discrete high-intensity events separated by periods of lower output. Long intervals of minimal activity are interrupted by days where cognitive load, attention allocation, and processing converge into compressed time windows.',
-      paragraph2: 'This distribution pattern indicates a system that accumulates internal state and externalizes it when thresholds are reached. Rather than maintaining constant output rate, your reflections cluster around significant events, creating a small number of high-impact days that account for a disproportionate share of total output.',
+      paragraph2: 'This distribution pattern indicates a system that accumulates internal state and externalizes it when thresholds are reached. Rather than maintaining constant output rate, your reflections cluster around notable events, creating a small number of high-intensity days that account for a disproportionate share of total output.',
     },
     activeDaysMicro: 'Output concentrates into fewer active days rather than distributing uniformly across time.',
     spikeRatioMicro: 'Output intensity scales non-linearly, with sharp increases rather than incremental growth.',
@@ -171,7 +171,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     primaryInsight: 'You concentrate your thinking into a small number of high-intensity days.',
     patternNarrative: {
       paragraph1: 'You do not distribute your thinking evenly across time. Instead, you gather it quietly and release it in concentrated bursts. Long stretches of lower activity are punctuated by days where your attention, processing, or emotional energy converges into a short window.',
-      paragraph2: 'This pattern suggests you accumulate insight internally and externalize it when something reaches significance. Rather than maintaining steady daily output, you cluster your reflections around moments that matter, creating a small number of high-impact days that carry a disproportionate share of your thinking.',
+      paragraph2: 'This pattern suggests you accumulate insight internally and externalize it when something reaches significance. Rather than maintaining steady daily output, you cluster your reflections around moments that matter, creating a small number of high-intensity days that carry a disproportionate share of your thinking.',
     },
     activeDaysMicro: 'You concentrate your writing into fewer days rather than spreading it evenly over time.',
     spikeRatioMicro: 'When you write, your intensity scales sharply rather than incrementally.',
