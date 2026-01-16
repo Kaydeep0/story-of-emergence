@@ -67,18 +67,11 @@ If any file contradicts your memory, the file wins.
 Before generating the progress report, confirm:
 
 1. `docs/ARCHITECTURE_NOW.md` contains `Observation Language Invariant`
-2. Run a quick repo search for these tokens in user-facing copy and record counts:
-
-   * `recommended`
-   * `important`
-   * `significant`
-   * `strongest`
-   * `deserve`
-
-3. For each match found, classify as:
-   * OK (purely descriptive and non-evaluative)
-   * Soft interpretation (risky)
-   * Violation (must be fixed before new work)
+2. Run:
+   ```
+   ./scripts/observation_language_scan.sh
+   ```
+   If it exits nonzero, classify each match as OK, Soft interpretation, or Violation and fix violations before proceeding. Log results in START_OF_DAY or PROGRESS_REPORT.
 
 Record results in START_OF_DAY file or PROGRESS_REPORT.
 

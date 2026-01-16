@@ -60,7 +60,11 @@ Notes for next session (optional):
 
 ## Observation Language Seal
 
-If any user-facing copy was changed today, re-run the five token scan (`recommended`, `important`, `significant`, `strongest`, `deserve`) and note deltas.
+If any user-facing copy was changed today, run:
+```
+./scripts/observation_language_scan.sh
+```
+If it exits nonzero, classify each match as OK, Soft interpretation, or Violation and fix violations before proceeding. Note deltas in PROGRESS_REPORT or START_OF_DAY.
 
 ---
 

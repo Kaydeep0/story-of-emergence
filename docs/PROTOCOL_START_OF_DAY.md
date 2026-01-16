@@ -59,7 +59,11 @@ Affirmations:
 ## Observation Language Check
 
 - Confirm Observation Language Invariant is active (see `docs/ARCHITECTURE_NOW.md`)
-- If doing any UI work today, run the five token scan (`recommended`, `important`, `significant`, `strongest`, `deserve`) and log results
+- If doing any UI work today, run:
+  ```
+  ./scripts/observation_language_scan.sh
+  ```
+  If it exits nonzero, classify each match as OK, Soft interpretation, or Violation and fix violations before proceeding. Log results in START_OF_DAY.
 
 ---
 
