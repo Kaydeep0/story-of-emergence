@@ -191,5 +191,23 @@ When adding new features:
 
 ---
 
+## Scale-Resolved Connectivity Invariant
+
+Operational connectivity in Story of Emergence is not determined by aggregate magnitude alone.
+
+Two states may exhibit identical total correlation, activity, or volume while differing materially in what can be reconstructed, transmitted, or connected.
+
+Connectivity depends on the distribution of correlation across scales, not merely on how much correlation exists.
+
+Accordingly, no subsystem may infer connectivity, coherence, or reorganization from global totals or scalar summaries alone.
+
+This invariant constrains all future Observation, Meaning, and Distribution layers but does not yet imply implementation.
+
+### Theoretical provenance
+
+The invariant is grounded in the theoretical framework established by the paper "Scale-Resolved Correlation as a Control Variable in Emergent Connectivity" (Kaur, Kirandeep; repository: https://github.com/Kaydeep0/scale-structure-tests). The paper demonstrates that states with identical total mutual information can differ materially in operational connectivity, depending on how correlation is distributed across scales rather than aggregate totals alone. Story of Emergence adopts this as a spine-level constraint governing all future observation, meaning, and distribution mechanisms, not as an implemented feature.
+
+---
+
 *This document serves as a checkpoint after Phase 21 stabilization. Future phases must align with these boundaries.*
 

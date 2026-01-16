@@ -56,3 +56,9 @@ Is the engine still:
 
 Notes for next session (optional):
 
+---
+
+## Re-Entry Gate Reminder
+
+If work ended without updating PROGRESS_REPORT.md, expect the Re-Entry Gate to block the next session.
+This is intentional.

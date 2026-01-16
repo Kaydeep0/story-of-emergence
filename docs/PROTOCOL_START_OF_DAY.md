@@ -4,6 +4,36 @@ This protocol anchors work to canonical system memory before any changes are mad
 
 ---
 
+## Re-Entry Gate
+
+If any of the following are true:
+• More than 7 days since last repository activity
+• Returning after travel, illness, burnout, or interruption
+• Uncertain about current phase, locks, or allowed work
+• Handing control to an assistant (Cursor or human)
+• Feeling disoriented about what is real vs assumed
+
+Then STOP.
+
+Run `docs/PROTOCOL_REENTRY_AND_PROGRESS.md` in full before continuing.
+
+No code may be written until the Re-Entry Protocol is complete and
+`PROGRESS_REPORT.md` exists for the current date.
+
+This makes re-entry structural, not optional.
+
+**What NOT to do**
+
+Do not auto-fill intent or exit conditions.
+Those must remain human choices.
+
+The system protects you from drift, not from decision-making.
+
+**Mechanical enforcement (required):**
+- Run `./scripts/reentry_guard.sh` before executing this protocol.
+
+---
+
 ## Repository State Check
 - Current branch:
 - Uncommitted changes:

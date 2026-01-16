@@ -64,6 +64,8 @@ Story of Emergence is a private wallet-bound personal intelligence system that t
 - `/insights/timeline` - Timeline lens (direct compute)
 - `/insights/distributions` - Distribution analysis
 
+**Future observation mechanisms must respect the Scale-Resolved Connectivity Invariant defined in ARCHITECTURE_NOW.md.**
+
 ---
 
 ### Narrative Views

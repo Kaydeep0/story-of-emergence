@@ -1,63 +1,154 @@
-Story of Emergence
+# Story of Emergence
 
 Story of Emergence is a privacy-first, client-side encrypted personal knowledge system built with Next.js.
-All reflections, insights, and shared content are encrypted locally using AES-GCM, and only ciphertext is stored in Supabase.
 
-This repository contains the full web application, including the encrypted journaling engine, insights pipeline, and shared content capsule system.
+All reflections, insights, and shared artifacts are encrypted locally using AES-GCM. Only ciphertext is ever stored in Supabase. Decryption, computation, and insight generation occur entirely on the client after explicit user consent.
 
-## Product posture
+This repository contains the full web application, including the encrypted journaling engine, insights pipeline, and wallet-based sharing capsule system.
 
-A Mirror that can speak, but cannot steer.
+## Product Posture
 
-Story of Emergence is an encrypted private vault that computes meaning locally and returns it as a second voice. Everything is computed locally after decrypt. No coaching, no reward loops, no shame loops.
+A mirror that can speak, but cannot steer.
 
-We allow insight. We forbid control.
+Story of Emergence is a private, encrypted vault that computes structure locally and reflects it back as a second voice.
+There is no coaching. No rewards. No streaks. No optimization loops.
+
+The system allows insight.
+It explicitly forbids control.
+
+All insights are derived from past data only. The system never recommends, nudges, or shapes future behavior. Interpretation and action belong solely to the human observer.
+
+Story of Emergence is grounded in scale-resolved theories of connectivity, not aggregate metrics.
+
+## Theoretical Foundation
+
+Story of Emergence is not a productivity tool or a conventional journaling app.
+
+It is a research-driven system built around a single structural claim:
+
+**Connectivity is governed by how correlation is distributed across scales, not by how much correlation exists in total.**
+
+This project is grounded in original research by the author, which formalizes this claim in information-theoretic terms and demonstrates it using falsifiable models.
+
+### Related Research by the Author
+
+**Scale-Resolved Correlation as a Control Variable in Emergent Connectivity**  
+Kirandeep Kaur  
+Independent Research, January 2026  
+https://github.com/Kaydeep0/scale-structure-tests
+
+The paper shows that two systems can exhibit identical total mutual information yet differ radically in operational connectivity. The difference is not geometry, intensity, or volume, but where correlation resides across hierarchical scales.
+
+In operational terms:
+
+• Total activity does not determine what can connect
+
+• Structure across scales determines what can transmit, reconstruct, or reorganize
+
+• Scalar summaries discard precisely the information that governs connectivity
+
+### Why This Matters for Story of Emergence
+
+Story of Emergence is concerned with:
+
+• Memory
+
+• Meaning
+
+• Connectivity
+
+• Insight
+
+• Observer position
+
+People can record the same volume of experience, write the same amount, or appear identical under surface metrics, yet differ profoundly in how their internal system reorganizes over time.
+
+The research explains why.
+
+Meaning is layered.
+Connectivity depends on scale.
+Magnitude alone is insufficient.
+
+This insight constrains Story of Emergence at the architectural level. The system is intentionally designed to avoid collapsing structure into global scores, sentiment metrics, or engagement proxies.
+
+### Architectural Consequence
+
+The theoretical result is encoded as a spine-level invariant in the system architecture:
+
+• No subsystem may infer coherence, progress, or connectivity from totals alone
+
+• Observation mechanisms must respect scale distribution and uncertainty
+
+• Future observer layers are constrained by theory before they are implemented
+
+This invariant is documented in [ARCHITECTURE_NOW.md](docs/ARCHITECTURE_NOW.md) and expanded in [THEORY.md](THEORY.md).
+
+### Status
+
+The theory precedes implementation.
+
+Story of Emergence intentionally delays certain observation and interpretation layers. This is not a missing feature. It is a consequence of the theoretical constraint that structure must not be prematurely compressed.
+
+Future layers will inherit this foundation naturally.
 
 ## Start Here
+
 Read [docs/0_START_HERE.md](docs/0_START_HERE.md) before making changes.
 
-Daily work is governed by [docs/PROTOCOL_START_OF_DAY.md](docs/PROTOCOL_START_OF_DAY.md) and [docs/PROTOCOL_END_OF_DAY.md](docs/PROTOCOL_END_OF_DAY.md).
+Daily work is governed by:
+
+• [docs/PROTOCOL_START_OF_DAY.md](docs/PROTOCOL_START_OF_DAY.md)
+
+• [docs/PROTOCOL_END_OF_DAY.md](docs/PROTOCOL_END_OF_DAY.md)
+
+**Returning after time away?**  
+Run the Re-Entry Protocol first: [docs/PROTOCOL_REENTRY_AND_PROGRESS.md](docs/PROTOCOL_REENTRY_AND_PROGRESS.md)
 
 ## Core Project Laws
 
-See [docs/0_START_HERE.md](docs/0_START_HERE.md) for the complete canonical index.
+All non-negotiable constraints, invariants, and system posture are defined in [docs/0_START_HERE.md](docs/0_START_HERE.md).
 
-These documents define the non-negotiable constraints and vision for Story of Emergence. They are enforceable constraints, not inspiration.
+These documents are enforceable constraints, not inspiration.
 
-Tech Stack
+## Tech Stack
 
-Next.js 15 (App Router + Turbopack)
+• Next.js 15 (App Router, Turbopack)
 
-Supabase (database + row-level security)
+• Supabase (database with strict row-level security)
 
-Client-side AES-GCM encryption
+• Client-side AES-GCM encryption
 
-RainbowKit + Wagmi (wallet auth and signature-based key derivation)
+• RainbowKit + Wagmi (wallet auth and signature-based key derivation)
 
-TypeScript
+• TypeScript
 
-React server components
+• React Server Components
 
-Getting Started
+## Getting Started
 
 Install dependencies:
 
+```bash
 pnpm install
-
+```
 
 Run the development server:
 
+```bash
 pnpm dev
-
+```
 
 Then open:
 
+```
 http://localhost:3000
+```
 
+The app auto-reloads as files change.
 
-The app will auto-reload as you edit files.
+## Project Structure
 
-Project Structure
+```
 src/
   app/
     reflections/
@@ -69,121 +160,81 @@ src/
     insights/
     contacts/
     entries/
-  supabase/
-    migrations/
+supabase/
+  migrations/
 public/
+```
 
+**Key directories:**
 
-Key directories:
+• `src/app` — UI routes for Reflections, Insights, and Shared Capsules
 
-src/app — UI routes for Reflections, Insights, Shared tab, capsules
+• `src/lib` — encryption, RPCs, insight engine, contacts
 
-src/lib — encryption logic, RPC wrappers, insights engine, contacts system
+• `supabase/migrations` — SQL migrations and RLS policies
 
-supabase/migrations — SQL migrations and RLS policies
+• `public` — static assets
 
-public — static assets
+## Core Features
 
-Core Features
-1. Client-side Encryption
+### 1. Client-Side Encryption
 
 All journaling data and shared content is encrypted before leaving the browser.
 
-Encryption keys are derived from:
+Keys are derived from:
 
-Wallet signature
+• Wallet signature
 
-Session-scoped consent flow
+• Session-scoped consent
 
-AES-GCM with versioned envelopes
+• AES-GCM with versioned envelopes
 
-2. Encrypted Contacts
+### 2. Encrypted Contacts
 
-Every contact label (names for shared senders) is encrypted uniquely per user.
+All contact labels and metadata are encrypted uniquely per user.
 
-3. Shared Capsules
+### 3. Shared Capsules
 
-Users can share encrypted slices of their data with others.
+Users may share encrypted slices of their data.
 
 Capsules include:
 
-Wrapped content keys
+• Wrapped content keys
 
-Sender wallet metadata
+• Sender wallet metadata
 
-Expiration settings
+• Optional expiration
 
-Client-side verification
+• Client-side verification
 
-4. Insight Engine (Phase 1)
+### 4. Insight Engine (Phase 1)
 
-Local analytics that compute:
+Local analytics compute:
 
-Timeline spikes
+• Timeline spikes
 
-Always-on summaries
+• Always-on summaries
 
-Cross-reflection link patterns
+• Cross-reflection link patterns
 
-Topics (in future phases)
+All insights are computed on-device and never leave the browser.
 
-All insights are computed on device and never leave the browser.
-
-Deployment
-
-Deploy to Vercel:
-
-vercel
-
-
-Or connect the repo via the Vercel dashboard.
-
-Development Server Guide (Important)
+## Development Server Rules (Important)
 
 Story of Emergence must always run on port 3000.
-If Next.js switches to 3001, 3002, or 3003, the dev server was already running in the background.
 
-Start the dev server
-pnpm dev
+If Next.js falls back to another port, a previous instance is still running.
 
+Fix port conflicts carefully and only terminate processes that clearly belong to this project.
 
-You should always see:
+Cursor agents must never modify documentation files.
 
-Local: http://localhost:3000
+## Final Note
 
-If you see:
-Port 3000 is in use, using port 3003 instead
+Story of Emergence is a private, wallet-bound reflection vault.
+It reveals structure, timelines, clusters, and distributions as observable facts.
 
+It does not assign meaning, goals, or recommendations.
 
-This means a previous Story of Emergence server is still running.
-
-Fix the port conflict
-1. Check what is using port 3000:
-lsof -i:3000
-
-2. If the output shows:
-
-COMMAND is node or next-server
-
-The PATH contains story-of-emergence
-
-Then it is safe to kill:
-
-kill -9 <PID>
-
-3. Restart the server
-pnpm dev
-
-Important Rules
-
-Always run Story of Emergence on port 3000
-
-Never allow it to fall back to 3001, 3002, or 3003
-
-Only kill processes if they clearly belong to this project
-
-Avoid running more than one terminal with pnpm dev running
-
-Cursor agents should never modify documentation files
-
-Story of Emergence is a private, wallet bound reflection vault that encrypts all content client side and stores only ciphertext. The system is designed as a Mirror: it reveals structure, timelines, clusters, and distributions as observable facts without assigning meaning, preference, goals, or recommendations. Interpretation, significance, and action belong to the human observer. The product explicitly avoids feedback loops, reinforcement mechanics, coaching, streaks, highlights, or any feature that shapes future behavior. Insights are projections over past data only, and interactions are view-only so the system never crosses from reflection into agency.
+The system reflects.
+The human decides.
