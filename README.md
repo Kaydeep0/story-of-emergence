@@ -20,7 +20,7 @@ Story of Emergence does not coach, improve, optimize, or direct behavior. It doe
 
 All insights are derived from past data only. The system never recommends, nudges, or shapes future behavior. Interpretation and action belong solely to the human observer.
 
-All insights are presented as observations only; interpretation and meaning are deliberately left to the human observer.
+All insights are presented as observations only; interpretation and meaning are left to the human observer.
 
 Story of Emergence is grounded in scale-resolved theories of connectivity, not aggregate metrics.
 
@@ -73,9 +73,9 @@ Meaning is layered.
 Connectivity depends on scale.
 Magnitude alone is insufficient.
 
-This insight constrains Story of Emergence at the architectural level. The system is intentionally designed to avoid collapsing structure into global scores, sentiment metrics, or engagement proxies.
+This insight constrains Story of Emergence at the architectural level. The system avoids collapsing structure into global scores, sentiment metrics, or engagement proxies.
 
-This restraint is not accidental. It is grounded in the system's theory of information, memory, and structure. See [THEORY.md](THEORY.md).
+This restraint is grounded in the system's theory of information, memory, and structure. See [THEORY.md](THEORY.md).
 
 ### Architectural Consequence
 

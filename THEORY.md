@@ -71,8 +71,7 @@ The paper represents a control-variable shift:
 • From **geometry** → **operational protocols**  
 • From **metaphor** → **what actually transmits**
 
-This matters because it replaces intuitive judgments
-with constraints that can be violated or satisfied.
+It replaces intuitive judgments with constraints that can be violated or satisfied.
 
 ---
 
