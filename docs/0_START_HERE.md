@@ -7,6 +7,7 @@ Read these documents before proposing changes, especially UI changes.
 1. docs/INVARIANTS.md
 2. docs/POSTURE.md
 3. docs/SCOPE.md
+4. docs/OBSERVATION_BOUNDARIES.md
 
 ## Design Contract
 4. docs/DESIGN_NORTH_STAR.md
