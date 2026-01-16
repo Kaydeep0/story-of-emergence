@@ -48,7 +48,7 @@ It is a research-driven system built around a single structural claim:
 
 This project is grounded in original research that formalizes this claim in information-theoretic terms and demonstrates it using falsifiable models.
 
-### Related Research
+### Research Foundation
 
 **Scale-Resolved Correlation as a Control Variable in Emergent Connectivity**  
 Kirandeep Kaur  
