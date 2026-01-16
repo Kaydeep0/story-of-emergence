@@ -5,7 +5,7 @@ Story of Emergence is built on a single guiding premise:
 > Connectivity is not determined by how much information exists,
 > but by where information resides across scales.
 
-This document explains the theoretical foundation for that premise
+This document describes the theoretical foundation for that premise
 and how it constrains the design of the system.
 
 ---
@@ -14,7 +14,7 @@ and how it constrains the design of the system.
 
 The restraint in this system is not a limitation. It is an enforcement of theory.
 
-This intelligence delays judgment by design, because premature measurement collapses structure. It reflects how memory and experience shape a person physically over time, as information constrains behavior, reorganizes internal states, and alters what futures remain possible.
+This intelligence delays judgment because premature measurement collapses structure. It reflects how memory and experience shape a person physically over time, as information constrains behavior, reorganizes internal states, and alters what futures remain possible.
 
 This restraint is structural, not moral. It exists because premature evaluation collapses layered meaning into flat conclusions.
 
@@ -75,7 +75,7 @@ It replaces intuitive judgments with constraints that can be violated or satisfi
 
 ---
 
-## Why This Matters for Story of Emergence
+## Story of Emergence Domain
 
 Story of Emergence is not a journaling app.
 It is a system concerned with:
@@ -124,7 +124,7 @@ not what it must yet implement.
 
 ## Relationship to the Observation Layer
 
-The Observation Layer is intentionally incomplete as a consequence of the theory.
+The Observation Layer is incomplete as a consequence of the theory.
 
 Observation must:
 • Detect distribution across scales  

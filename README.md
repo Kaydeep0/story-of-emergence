@@ -16,7 +16,7 @@ There is no coaching. No rewards. No streaks. No optimization loops.
 The system allows insight.
 It explicitly forbids control.
 
-Story of Emergence does not coach, improve, optimize, or direct behavior. It does not infer goals, assess progress, or suggest interpretations. The system's role ends at rendering structure. Meaning and action remain external to the system by design.
+Story of Emergence does not coach, improve, optimize, or direct behavior. It does not infer goals, assess progress, or suggest interpretations. The system's role ends at rendering structure. Meaning and action remain external to the system.
 
 All insights are derived from past data only. The system never recommends, nudges, or shapes future behavior. Interpretation and action belong solely to the human observer.
 
@@ -32,9 +32,9 @@ It is a research-driven system built around a single structural claim:
 
 **Connectivity is governed by how correlation is distributed across scales, not by how much correlation exists in total.**
 
-This project is grounded in original research by the author, which formalizes this claim in information-theoretic terms and demonstrates it using falsifiable models.
+This project is grounded in original research that formalizes this claim in information-theoretic terms and demonstrates it using falsifiable models.
 
-### Related Research by the Author
+### Related Research
 
 **Scale-Resolved Correlation as a Control Variable in Emergent Connectivity**  
 Kirandeep Kaur  
@@ -51,7 +51,7 @@ In operational terms:
 
 • Scalar summaries discard precisely the information that governs connectivity
 
-### Why This Matters for Story of Emergence
+### Story of Emergence Domain
 
 Story of Emergence is concerned with:
 
@@ -93,9 +93,9 @@ This invariant is documented in [ARCHITECTURE_NOW.md](docs/ARCHITECTURE_NOW.md) 
 
 The theory precedes implementation.
 
-Story of Emergence intentionally delays certain observation and interpretation layers as a consequence of the theoretical constraint that structure must not be prematurely compressed.
+Story of Emergence delays certain observation and interpretation layers as a consequence of the theoretical constraint that structure must not be prematurely compressed.
 
-Future layers will inherit this foundation naturally.
+Future layers will inherit this foundation.
 
 ## Start Here
 
