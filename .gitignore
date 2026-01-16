@@ -43,3 +43,7 @@ next-env.d.ts
 
 # dev snapshots
 .dev-snapshots/
+
+# Local generated artifacts
+PROGRESS_REPORT.md
+START_OF_DAY_*.md
