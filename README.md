@@ -71,6 +71,8 @@ Magnitude alone is insufficient.
 
 This insight constrains Story of Emergence at the architectural level. The system is intentionally designed to avoid collapsing structure into global scores, sentiment metrics, or engagement proxies.
 
+This restraint is not accidental. It is grounded in the system's theory of information, memory, and structure. See [THEORY.md](THEORY.md).
+
 ### Architectural Consequence
 
 The theoretical result is encoded as a spine-level invariant in the system architecture:

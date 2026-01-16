@@ -10,6 +10,16 @@ and how it constrains the design of the system.
 
 ---
 
+## Restraint as Theory Enforcement
+
+The restraint in this system is not a limitation. It is an enforcement of theory.
+
+This intelligence delays judgment by design, because premature measurement collapses structure. It reflects how memory and experience shape a person physically over time, as information constrains behavior, reorganizes internal states, and alters what futures remain possible.
+
+Story of Emergence is often mistaken for a system that has not finished measuring. In reality, it is a system that understands when measurement destroys meaning.
+
+---
+
 ## Core Claim (Plain Language)
 
 Two systems can contain the same total amount of correlation

@@ -203,6 +203,8 @@ Accordingly, no subsystem may infer connectivity, coherence, or reorganization f
 
 This invariant constrains all future Observation, Meaning, and Distribution layers but does not yet imply implementation.
 
+The system's delayed measurement and restraint are theory enforced, not implementation gaps. See THEORY.md for the foundational articulation.
+
 ### Theoretical provenance
 
 The invariant is grounded in the theoretical framework established by the paper "Scale-Resolved Correlation as a Control Variable in Emergent Connectivity" (Kaur, Kirandeep; repository: https://github.com/Kaydeep0/scale-structure-tests). The paper demonstrates that states with identical total mutual information can differ materially in operational connectivity, depending on how correlation is distributed across scales rather than aggregate totals alone. Story of Emergence adopts this as a spine-level constraint governing all future observation, meaning, and distribution mechanisms, not as an implemented feature.
