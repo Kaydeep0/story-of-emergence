@@ -124,7 +124,7 @@ function normalizeTopicDrift(bucket: TopicDriftBucket): NormalizedInsight {
  * Helper to normalize Contrast Pairs
  */
 function normalizeContrastPair(pair: ContrastPair, index: number): NormalizedInsight {
-  const whyThisMatters = 'Contrast pairs reveal how your attention shifts between different areas of life. These opposing trends can highlight important transitions, conflicts, or evolving priorities that deserve deeper reflection.';
+  const whyThisMatters = 'Contrast pairs show how your attention shifts between different areas of life. These opposing trends may mark transitions, conflicts, or evolving priorities.';
 
   // Contrast pairs don't have direct evidence, so we create a summary evidence item
   const evidence: InsightEvidence[] = [
@@ -159,7 +159,7 @@ function normalizeTimelineSpike(spike: TimelineSpikeCard): NormalizedInsight {
     title: spike.title,
     type: 'Spike',
     summary: spike.explanation,
-    whyThisMatters: 'Activity spikes show periods of intense reflection. These moments often capture important transitions or significant events.',
+    whyThisMatters: 'Activity spikes show periods of intense reflection. These moments may coincide with transitions or notable periods.',
     evidence: spike.evidence,
   };
 }

@@ -436,7 +436,7 @@ const DISTRIBUTION_VIEW_TEXT: Record<NarrativeTone, DistributionViewText> = {
   },
   analytical: {
     line1: 'Frequency distribution shows concentration at lower intensity values.',
-    line2: 'A small subset of sessions exhibit significantly higher intensity, indicating disproportionate effort allocation.',
+    line2: 'A small subset of sessions exhibit much higher intensity, showing uneven effort allocation.',
   },
   mirror: {
     line1: 'Most of your activity concentrates at low intensity.',

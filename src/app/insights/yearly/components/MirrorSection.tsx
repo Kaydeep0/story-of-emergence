@@ -99,7 +99,7 @@ export function MirrorSection({ mirrorInsights, formatDate, entries, topSpikeDat
             <div className="rounded-lg border border-white/10 bg-black/30 p-4 min-h-[80px]">
               <div className="text-xs font-semibold text-white/90 mb-1">Moments will appear here</div>
               <p className="text-xs text-white/60 leading-relaxed">
-                As you write, Story of Emergence will surface your strongest days automatically. Keep going.
+                As you write, Story of Emergence will surface your highest activity days automatically. Keep going.
               </p>
             </div>
           )}

@@ -260,7 +260,7 @@ export const YearlyShareCard = forwardRef<HTMLDivElement, YearlyShareCardProps>(
               Top Moments
             </div>
             <div style={{ fontSize: '18px', lineHeight: '1.4', color: 'rgba(255, 255, 255, 0.7)', fontStyle: 'italic' }}>
-              Moments will appear here. As you write, Story of Emergence will surface your strongest days automatically. Keep going.
+              Moments will appear here. As you write, Story of Emergence will surface your highest activity days automatically. Keep going.
             </div>
           </div>
         )}
