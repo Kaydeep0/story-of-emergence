@@ -18,6 +18,8 @@ It explicitly forbids control.
 
 All insights are derived from past data only. The system never recommends, nudges, or shapes future behavior. Interpretation and action belong solely to the human observer.
 
+All insights are presented as observations only; interpretation and meaning are deliberately left to the human observer.
+
 Story of Emergence is grounded in scale-resolved theories of connectivity, not aggregate metrics.
 
 ## Theoretical Foundation

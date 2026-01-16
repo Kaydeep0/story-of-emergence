@@ -21,6 +21,7 @@ Story of Emergence is a private wallet-bound personal intelligence system that t
 - No cross-user analytics
 - Export is always possible
 - Sharing defaults to derived artifacts only
+- All user-facing language must remain observational, non-prescriptive, and non-evaluative (no "important," "strongest," "recommended," "deserves reflection," or similar interpretive language)
 
 ---
 

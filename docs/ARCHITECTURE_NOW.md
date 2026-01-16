@@ -211,5 +211,32 @@ The invariant is grounded in the theoretical framework established by the paper 
 
 ---
 
+## Observation Language Invariant
+
+Story of Emergence operates strictly as an observational system.
+
+All user-facing language must describe what is detected, surfaced, or shown, without assigning value, priority, desirability, or recommended action.
+
+The system must not:
+
+* Instruct the user on what to focus on
+* Elevate findings as important, meaningful, or significant
+* Imply progress, success, strength, or deficiency
+* Suggest reflection depth, urgency, or corrective behavior
+
+This constraint applies equally to:
+
+* UI copy
+* Insight descriptions
+* Empty states
+* Tooltips
+* Share artifacts
+
+Any language that collapses observation into interpretation is considered a violation of system posture.
+
+This invariant exists to prevent premature meaning collapse caused by evaluative measurement.
+
+---
+
 *This document serves as a checkpoint after Phase 21 stabilization. Future phases must align with these boundaries.*
 
