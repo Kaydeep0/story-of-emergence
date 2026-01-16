@@ -47,3 +47,7 @@ next-env.d.ts
 # Local generated artifacts
 PROGRESS_REPORT.md
 START_OF_DAY_*.md
+
+# local artifacts
+INTERPRETATION_LANGUAGE_AUDIT.md
+pnpm-lock.yaml
