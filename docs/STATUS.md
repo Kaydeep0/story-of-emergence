@@ -185,6 +185,8 @@ These tables remain in the database for backward compatibility but are not exten
 
 Quiet sweep applied: legacy implementation files have header markers indicating frozen status.
 
+Distribution tests out of sync with current classifier logic. No runtime impact. Deferred intentionally.
+
 ---
 
 ### What we are not doing yet

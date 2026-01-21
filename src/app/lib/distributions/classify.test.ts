@@ -1,3 +1,8 @@
+/**
+ * LEGACY TEST — expectations reflect pre refactor behavior.
+ * Requires explicit re validation before modification.
+ */
+
 import { describe, it, expect } from 'vitest';
 import { classifyDistribution } from './classify';
 import type { DistributionSeries } from '@/app/lib/distributionTypes';
