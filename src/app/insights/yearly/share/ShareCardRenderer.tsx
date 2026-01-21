@@ -1,3 +1,12 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical SharePackRenderer
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ * Note: no known imports as of 2026-01-21
+ */
+
 'use client';
 
 /**

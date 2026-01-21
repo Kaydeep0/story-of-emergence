@@ -183,6 +183,8 @@ These tables remain in the database for backward compatibility but are not exten
 - Summary render only: Sentence renders in `src/app/insights/summary/page.tsx` from `persistenceResult.sentence`
 - Weekly and Yearly silent: No persistence statement rendering in Weekly or Yearly pages
 
+Quiet sweep applied: legacy implementation files have header markers indicating frozen status.
+
 ---
 
 ### What we are not doing yet

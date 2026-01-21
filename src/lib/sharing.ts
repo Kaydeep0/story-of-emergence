@@ -1,3 +1,11 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical wallet_shares sharing system
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 // src/lib/sharing.ts
 // Types and helpers for private sharing (Phase 2)
 

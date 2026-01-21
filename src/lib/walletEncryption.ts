@@ -1,3 +1,11 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical wallet_shares encryption system
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 // src/app/lib/walletEncryption.ts
 // Wallet encryption utilities using eth_getEncryptionPublicKey and eth_decrypt (Option B)
 // For wrapping capsule keys to recipient wallets

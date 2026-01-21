@@ -1,3 +1,11 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical entry_sources table via entrySources.ts
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 // src/app/lib/reflectionLinks.ts
 // Supabase-backed reflection → source links (persistent across reloads)
 // Legacy reflection links - now uses entry_sources table via entrySources.ts

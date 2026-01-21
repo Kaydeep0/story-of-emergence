@@ -1,7 +1,13 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical ShareActionsBar from components/ShareActionsBar.tsx
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ * Note: no known imports as of 2026-01-21
+ */
+
 // src/app/insights/yearly/components/ShareActionsBar.tsx
-//
-// LEGACY: Frozen. Unused. All lenses use canonical ShareActionsBar from components/ShareActionsBar.tsx
-// This component is kept for reference only. Do not extend or use.
 //
 // Share Actions Bar for canonical SharePack
 // Phase 3.3: UI-only sharing actions using frozen SharePack contract

@@ -1,3 +1,11 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical lifetime signal system or removed
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 import { useMemo } from 'react';
 import {
   buildLifetimeSignalInventory,

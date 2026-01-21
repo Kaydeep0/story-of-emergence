@@ -1,11 +1,14 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical wallet_shares table and wallet_shares.ts
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ * Note: no known imports as of 2026-01-21
+ */
+
 // src/app/lib/shares.ts
 // DEPRECATED: Legacy shares table functions
-// 
-// ⚠️ DO NOT USE: This file is deprecated.
-// Use src/app/lib/wallet_shares.ts instead.
-// 
-// This file exists only for backward compatibility during migration.
-// All new code MUST use wallet_shares table via wallet_shares.ts
 
 import { getSupabaseForWallet } from "./supabase";
 import { encryptText, type EncryptionEnvelope } from "../../lib/crypto";

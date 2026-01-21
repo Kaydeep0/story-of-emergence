@@ -1,6 +1,12 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical insights engine (computeInsightsForWindow)
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 // src/app/lib/weeklyInsights.ts
-//
-// LEGACY: Frozen. Weekly lens uses canonical insights engine. Do not extend.
 //
 // This module is kept for type exports only. The Weekly lens route uses
 // computeInsightsForWindow directly. No new code should import computeWeeklyInsights.

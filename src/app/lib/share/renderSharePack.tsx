@@ -1,3 +1,11 @@
+/**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical SharePackRenderer component
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ */
+
 // src/app/lib/share/renderSharePack.tsx
 // Legacy wrapper - use SharePackRenderer component instead
 // Kept for backward compatibility

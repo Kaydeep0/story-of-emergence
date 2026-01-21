@@ -1,4 +1,13 @@
 /**
+ * LEGACY FROZEN
+ * Status: frozen in place
+ * Reason: superseded by canonical SharePack format
+ * Rule: do not extend, do not add new call sites
+ * Allowed: bug fix for existing call sites only
+ * Note: no known imports as of 2026-01-21
+ */
+
+/**
  * Share Artifact Contract
  * 
  * Defines the structure for shareable artifacts generated from views.
