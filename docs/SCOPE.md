@@ -120,6 +120,25 @@ Story of Emergence is a private wallet-bound personal intelligence system that t
 
 ---
 
+## Canonical Sharing System
+
+**Canonical System:** `wallet_shares`
+
+- Table: `public.wallet_shares`
+- Library: `src/app/lib/wallet_shares.ts`
+- RPCs: `insert_wallet_share`, `list_wallet_shares_sent`, `list_wallet_shares_received`, `get_wallet_share`, `revoke_wallet_share`
+- Format: `SharePack` (universal artifact contract)
+
+**Legacy Systems (Frozen):**
+
+- `public.shares` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+- `public.accepted_shares` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+- `public.capsules` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+
+No new code may be written against legacy tables. All new sharing functionality must use `wallet_shares` and `SharePack` format.
+
+---
+
 ### Sources System
 **Status:** FUNCTIONAL
 

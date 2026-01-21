@@ -1,6 +1,8 @@
 // src/app/lib/share/sharePack.ts
 // Canonical SharePack Contract and Schema Boundary
 // Phase 3.2: Contract-only step - no UI, no rendering, no platform logic
+//
+// CANONICAL: This is the canonical sharing format. All sharing uses SharePack + wallet_shares.
 
 /**
  * SharePack Contract

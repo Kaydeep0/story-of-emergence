@@ -1,6 +1,8 @@
 /**
  * Share Capsule System
  * 
+ * LEGACY: Do not extend. Canonical sharing uses wallet_shares.
+ * 
  * Encrypted sharing of artifacts to a single recipient.
  * 
  * Rules:

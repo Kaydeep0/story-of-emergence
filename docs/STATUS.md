@@ -140,6 +140,20 @@ Story of Emergence is a private, wallet bound reflection vault with a client sid
 
 ---
 
+## Legacy / Frozen Systems
+
+**Canonical sharing system:** `wallet_shares` (table: `public.wallet_shares`, library: `src/app/lib/wallet_shares.ts`)
+
+**Legacy sharing tables (frozen):**
+
+- `public.capsules` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+- `public.shares` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+- `public.accepted_shares` - Status: Legacy. Allowed: Read-only or maintenance only. Forbidden: New features or extensions.
+
+These tables remain in the database for backward compatibility but are not extended or used by new code.
+
+---
+
 ### What we are not doing yet
 
 - No new lenses
