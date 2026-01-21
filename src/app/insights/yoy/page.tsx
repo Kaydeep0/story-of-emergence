@@ -415,7 +415,7 @@ export default function YearOverYearPage() {
         {!loading && !error && reflections.length > 0 && availableYears.length < 2 && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
             <p className="text-sm text-white/60">
-              Need at least 2 years of reflections to compare. You currently have {availableYears.length} year{availableYears.length !== 1 ? 's' : ''} of data.
+              At least 2 years of reflections are required to compare. You currently have {availableYears.length} year{availableYears.length !== 1 ? 's' : ''} of data.
             </p>
           </div>
         )}
@@ -627,7 +627,7 @@ export default function YearOverYearPage() {
 
             {/* Transition to boundaries */}
             {yoyCard && (
-              <LensTransition text="Comparing moments reveals how patterns evolve." />
+              <LensTransition text="Comparing moments shows how patterns evolve." />
             )}
 
             {/* What this shows / does not show */}
