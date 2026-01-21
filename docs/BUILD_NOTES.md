@@ -15,3 +15,5 @@ Node/pnpm version mismatch. Unix file permissions. pnpm linker mode (using defau
 
 ## Resolution
 Cleared extended attributes on node_modules: `xattr -dr com.apple.quarantine node_modules`. Build passes after fix.
+
+Cold start build (rm node_modules, fresh install) passes on macOS ARM64.
