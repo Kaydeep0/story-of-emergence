@@ -2,6 +2,8 @@
 
 Consolidation complete. Next work requires explicit phase activation with intent and exit condition.
 
+Observer v1 persistence sentence is wired and tested. Further Observer speech requires explicit activation.
+
 ## Top priorities
 
 ### 1 Raise Threads coverage or make orphans first class

@@ -172,6 +172,19 @@ These tables remain in the database for backward compatibility but are not exten
 
 ---
 
+## Observer v1 (micro) complete
+
+**Date:** 2026-01-21
+
+**Facts:**
+
+- Detector exists: `detectPatternPersistence` pure function in `src/app/lib/observer/detectPatternPersistence.ts`
+- Unit tests exist: `detectPatternPersistence.test.ts` (13 cases), `computeCrossLensPersistence.test.ts` (3 cases)
+- Summary render only: Sentence renders in `src/app/insights/summary/page.tsx` from `persistenceResult.sentence`
+- Weekly and Yearly silent: No persistence statement rendering in Weekly or Yearly pages
+
+---
+
 ### What we are not doing yet
 
 - No new lenses
