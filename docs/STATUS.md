@@ -154,6 +154,22 @@ These tables remain in the database for backward compatibility but are not exten
 
 ---
 
+## Consolidation Phase Complete (Option A)
+
+**Date:** 2026-01-20
+
+**Completed items:**
+
+- Sharing canonized to wallet_shares, legacy tables frozen
+- Entries table and RPC migration recovered in repo
+- Weekly compute canonicalized, legacy frozen
+- Lifetime and YoY copy aligned to observation boundaries
+- SharePack contract unified, yearly ShareActionsBar frozen
+
+**Result:** Critical mismatches from audit resolved. Repo truth matches runtime truth. No split-brain between legacy and canonical paths.
+
+---
+
 ### What we are not doing yet
 
 - No new lenses

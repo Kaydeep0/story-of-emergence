@@ -1,5 +1,7 @@
 # NEXT
 
+Consolidation complete. Next work requires explicit phase activation with intent and exit condition.
+
 ## Top priorities
 
 ### 1 Raise Threads coverage or make orphans first class
