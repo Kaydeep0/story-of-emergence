@@ -5,7 +5,9 @@
 
 ## Operating Frame
 
-Current focus is documentation alignment and stabilization. No new conceptual primitives are being introduced in this phase.
+**Active Phase:** Invariant Hardening (see `docs/PHASE_ACTIVATION.md`)
+
+Current focus is mechanical enforcement of existing invariants. No new conceptual primitives are being introduced in this phase.
 
 **Stance**
 A Mirror that can speak, but cannot steer.
