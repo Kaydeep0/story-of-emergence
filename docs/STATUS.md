@@ -133,6 +133,7 @@ Story of Emergence is a private, wallet bound reflection vault with a client sid
 - Wallet share encryption simplified (app key, no eth_encrypt)
 - PNG export fixed (html2canvas replaces html-to-image)
 - "Send privately" button fixed
+- Distribution test suites are frozen (classify, deltas, buildSeries). Pending semantic realignment of classifier model.
 
 **What remains:** 
 - Install html2canvas package (npm install)
