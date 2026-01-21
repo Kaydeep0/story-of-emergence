@@ -71,7 +71,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     top10ShareMicro: 'A small number of sessions carry a large share of your total output.',
     top10ShareExplanation: (share) => share >= 40 
       ? 'Nearly half of your total writing happened on just a few days.'
-      : 'A significant portion of your writing concentrated on your most active days.',
+      : 'A portion of your writing concentrated on your most active days.',
     distributionPatternMicro: (classification) => {
       if (classification === 'lognormal') {
         return 'Most days are quiet. A few days carry unusually high cognitive load.';
@@ -143,7 +143,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     top10ShareMicro: 'A small subset of sessions accounts for a large proportion of total output.',
     top10ShareExplanation: (share) => share >= 40 
       ? 'Approximately half of total output occurred during a small number of days.'
-      : 'A significant proportion of output concentrated into the most active days.',
+      : 'A proportion of output concentrated into the most active days.',
     distributionPatternMicro: (classification) => {
       if (classification === 'lognormal') {
         return 'Most days exhibit low intensity, while a small number show very high intensity.';
@@ -179,7 +179,7 @@ const TONE_COPY: Record<NarrativeTone, ToneCopy> = {
     top10ShareMicro: 'A small number of your sessions carry a large share of your total output.',
     top10ShareExplanation: (share) => share >= 40 
       ? 'Nearly half of your total writing happened on just a few days.'
-      : 'A significant portion of your writing concentrated on your most active days.',
+      : 'A portion of your writing concentrated on your most active days.',
     distributionPatternMicro: (classification) => {
       if (classification === 'lognormal') {
         return 'Most of your days are quiet, while a few days carry unusually high cognitive load.';
