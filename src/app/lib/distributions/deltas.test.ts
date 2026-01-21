@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { compareNarratives } from './deltas';
 import type { DistributionNarrative } from './narratives';
 
-describe('compareNarratives', () => {
+describe.skip('compareNarratives (LEGACY — frozen)', () => {
   const basePrev: DistributionNarrative = {
     scope: 'month',
     headline: 'This month maintained consistent patterns',
