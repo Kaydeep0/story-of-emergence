@@ -1,4 +1,9 @@
 // src/app/lib/weeklyInsights.ts
+//
+// LEGACY: Frozen. Weekly lens uses canonical insights engine. Do not extend.
+//
+// This module is kept for type exports only. The Weekly lens route uses
+// computeInsightsForWindow directly. No new code should import computeWeeklyInsights.
 
 import type { InternalEvent } from "./types";
 import type { UnifiedInternalEvent } from "../../lib/internalEvents";
@@ -10,6 +15,8 @@ import { computeInsightsForWindow as computeInsightsForWindowEngine } from "./in
  * @deprecated Use computeInsightsForWindow from insight engine instead.
  * This function is now a thin wrapper for backward compatibility.
  * Will be removed in Phase 4.1+.
+ * 
+ * LEGACY: Frozen. Weekly lens uses canonical insights engine. Do not extend.
  */
 
 export type WeeklyInsight = {
