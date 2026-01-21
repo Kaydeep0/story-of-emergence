@@ -5,6 +5,8 @@
 
 ## Operating Frame
 
+Current focus is documentation alignment and stabilization. No new conceptual primitives are being introduced in this phase.
+
 **Stance**
 A Mirror that can speak, but cannot steer.
 

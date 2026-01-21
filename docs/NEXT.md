@@ -3,7 +3,7 @@
 ## Top priorities
 
 ### 1 Raise Threads coverage or make orphans first class
-Goal: reduce orphan reflections or clearly explain them in product language.
+Goal: reduce orphan reflections or surface them with clear operational labels in UI.
 
 Deliverables:
 A deterministic auto tune path that tries to reach a target coverage
