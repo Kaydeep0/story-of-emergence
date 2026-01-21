@@ -47,61 +47,7 @@ import { NarrativeToneSelector } from '../components/NarrativeToneSelector';
 import { getLensPurposeCopy, getLensBoundaries } from '../lib/lensPurposeCopy';
 import { DeterminismEmergenceAxis } from '../components/DeterminismEmergenceAxis';
 import { buildSharePackForLens, type SharePack } from '../../lib/share/sharePack';
-import { detectPatternPersistence, type PatternSignature as CoarsePatternSignature } from '../../lib/observer/detectPatternPersistence';
-import { makePatternSignature, type PatternSignature as ContinuousPatternSignature } from '../../lib/observer/patternSignature';
-
-/**
- * Convert continuous pattern signature to coarse-band signature
- * 
- * This adapter converts the continuous PatternSignature (with numeric values)
- * to the coarse-band PatternSignature (with low/medium/high bands) required
- * by detectPatternPersistence.
- */
-function toCoarseSignature(sig: ContinuousPatternSignature): CoarsePatternSignature {
-  // Convert concentrationRatio to band
-  // Thresholds: < 1.5 = low, 1.5-3.0 = medium, > 3.0 = high
-  let concentrationBand: "low" | "medium" | "high" = "low";
-  if (sig.concentrationRatio >= 3.0) {
-    concentrationBand = "high";
-  } else if (sig.concentrationRatio >= 1.5) {
-    concentrationBand = "medium";
-  }
-
-  // Convert topPercentileShare to band (0-1 range)
-  // Thresholds: < 0.2 = low, 0.2-0.4 = medium, > 0.4 = high
-  let topPercentileShareBand: "low" | "medium" | "high" | undefined = undefined;
-  if (sig.topPercentileShare >= 0.4) {
-    topPercentileShareBand = "high";
-  } else if (sig.topPercentileShare >= 0.2) {
-    topPercentileShareBand = "medium";
-  } else if (sig.topPercentileShare > 0) {
-    topPercentileShareBand = "low";
-  }
-
-  // Convert relativeSpikeThreshold to band
-  // Thresholds: < 1.5 = low, 1.5-2.5 = medium, > 2.5 = high
-  let spikeThresholdBand: "low" | "medium" | "high" | undefined = undefined;
-  if (sig.relativeSpikeThreshold >= 2.5) {
-    spikeThresholdBand = "high";
-  } else if (sig.relativeSpikeThreshold >= 1.5) {
-    spikeThresholdBand = "medium";
-  } else {
-    spikeThresholdBand = "low";
-  }
-
-  // Convert dayOfWeekPattern Set to string representation
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const activeDays = Array.from(sig.dayOfWeekPattern).sort().map(d => dayNames[d]).join(',');
-  const dayOfWeekShape = activeDays || undefined;
-
-  return {
-    distributionClass: sig.observedDistributionFit,
-    concentrationBand,
-    dayOfWeekShape,
-    topPercentileShareBand,
-    spikeThresholdBand,
-  };
-}
+import { computeCrossLensPersistence } from '../../lib/observer/computeCrossLensPersistence';
 
 export default function SummaryPage() {
   const { address, isConnected } = useAccount();
@@ -328,84 +274,17 @@ export default function SummaryPage() {
         eventsGenerated: events.length,
       });
 
-      // Extract pattern signatures from artifacts
+      // Extract weekly reflections for distribution computation
       const weeklyReflections = reflections.filter((r) => {
         const createdAt = new Date(r.createdAt);
         return createdAt >= weeklyStart && createdAt < weeklyEnd;
       });
 
-      const yearlyReflections = reflections.filter((r) => {
-        const createdAt = new Date(r.createdAt);
-        return createdAt >= yearlyStart && createdAt <= yearlyEnd;
-      });
-
-      // Compute distributions for signature extraction
-      const weeklyDistribution = weeklyReflections.length > 0
-        ? computeDistributionLayer(weeklyReflections, { windowDays: 7 })
-        : null;
-
-      const yearlyDistribution = yearlyReflections.length > 0
-        ? computeDistributionLayer(yearlyReflections, { windowDays: 365 })
-        : null;
-
-      if (!weeklyDistribution || !yearlyDistribution) {
-        return null;
-      }
-
-      // Extract windowDistribution from Yearly artifact for classification
-      let yearlyWindowDistribution: { classification: 'normal' | 'lognormal' | 'powerlaw' } | undefined;
-      for (const card of yearlyArtifact.cards) {
-        if ('_windowDistribution' in card && card._windowDistribution) {
-          yearlyWindowDistribution = card._windowDistribution as { classification: 'normal' | 'lognormal' | 'powerlaw' };
-          break;
-        }
-      }
-
-      // Build signature inputs
-      const weeklyClassification: 'normal' | 'lognormal' | 'powerlaw' = 
-        weeklyDistribution.fittedBuckets.normal.share > weeklyDistribution.fittedBuckets.lognormal.share
-          ? (weeklyDistribution.fittedBuckets.normal.share > weeklyDistribution.fittedBuckets.powerlaw.share ? 'normal' : 'powerlaw')
-          : (weeklyDistribution.fittedBuckets.lognormal.share > weeklyDistribution.fittedBuckets.powerlaw.share ? 'lognormal' : 'powerlaw');
-
-      const yearlyClassification: 'normal' | 'lognormal' | 'powerlaw' = 
-        yearlyWindowDistribution?.classification || (
-          yearlyDistribution.fittedBuckets.normal.share > yearlyDistribution.fittedBuckets.lognormal.share
-            ? (yearlyDistribution.fittedBuckets.normal.share > yearlyDistribution.fittedBuckets.powerlaw.share ? 'normal' : 'powerlaw')
-            : (yearlyDistribution.fittedBuckets.lognormal.share > yearlyDistribution.fittedBuckets.powerlaw.share ? 'lognormal' : 'powerlaw')
-        );
-
-      const weeklyInput = {
-        distributionClassification: weeklyClassification,
-        spikeRatio: weeklyDistribution.stats.spikeRatio,
-        top10PercentDaysShare: weeklyDistribution.stats.top10PercentDaysShare,
-        dailyCounts: weeklyDistribution.topDays.map(d => ({ date: d.date, count: d.count })),
-        spikeThreshold: 2.0,
-      };
-
-      const yearlyInput = {
-        distributionClassification: yearlyClassification,
-        spikeRatio: yearlyDistribution.stats.spikeRatio,
-        top10PercentDaysShare: yearlyDistribution.stats.top10PercentDaysShare,
-        dailyCounts: yearlyDistribution.topDays.map(d => ({ date: d.date, count: d.count })),
-        spikeThreshold: 2.0,
-      };
-
-      // Compute continuous signatures
-      const weeklySignature = makePatternSignature(weeklyInput);
-      const yearlySignature = makePatternSignature(yearlyInput);
-
-      if (!weeklySignature || !yearlySignature) {
-        return null;
-      }
-
-      // Convert to coarse-band signatures
-      const weeklyCoarse = toCoarseSignature(weeklySignature);
-      const yearlyCoarse = toCoarseSignature(yearlySignature);
-
-      // Detect persistence
-      return detectPatternPersistence({
-        weeklySignatures: [weeklyCoarse],
-        yearlySignatures: [yearlyCoarse],
+      // Use helper to compute persistence
+      return computeCrossLensPersistence({
+        weeklyArtifact,
+        yearlyArtifact,
+        weeklyReflections,
       });
     } catch (err) {
       console.error('Failed to compute persistence:', err);
