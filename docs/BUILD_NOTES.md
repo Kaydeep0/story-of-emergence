@@ -17,3 +17,12 @@ Node/pnpm version mismatch. Unix file permissions. pnpm linker mode (using defau
 Cleared extended attributes on node_modules: `xattr -dr com.apple.quarantine node_modules`. Build passes after fix.
 
 Cold start build (rm node_modules, fresh install) passes on macOS ARM64.
+
+## Mac EPERM quick fix
+
+Run this if you see EPERM under node_modules or pnpm store:
+
+```bash
+xattr -dr com.apple.quarantine node_modules
+xattr -dr com.apple.quarantine "$(pnpm store path)"
+```
