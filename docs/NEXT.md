@@ -25,4 +25,11 @@ At least one quick regression test for deterministic bridge output
 
 Lockfile conflict: Both `package-lock.json` and `pnpm-lock.yaml` exist. Choose one strategy and remove the other. Logged on 2026-01-20.
 
-Build blocker: pnpm build fails with `EPERM: operation not permitted, open '/Users/kiran/dev/story-of-emergence/node_modules/.pnpm/next@16.1.3_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/client/components/router-reducer/create-href-from-url.js'`. Logged on 2026-01-20.
+Build blocker: `pnpm build` fails with:
+```
+unhandledRejection Error: EPERM: operation not permitted, open '/Users/kiran/dev/story-of-emergence/node_modules/.pnpm/next@16.1.3_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/client/components/router-reducer/create-href-from-url.js'
+```
+Command: `pnpm build`
+First error: EPERM: operation not permitted
+File path: `node_modules/.pnpm/next@16.1.3_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/client/components/router-reducer/create-href-from-url.js`
+Logged on 2026-01-20.
