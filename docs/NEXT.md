@@ -4,6 +4,8 @@ Consolidation complete. Next work requires explicit phase activation with intent
 
 Observer v1 persistence sentence is wired and tested. Further Observer speech requires explicit activation.
 
+Distribution classifier re validation requires explicit activation (tests currently frozen as legacy expectations).
+
 ## Top priorities
 
 ### 1 Raise Threads coverage or make orphans first class
