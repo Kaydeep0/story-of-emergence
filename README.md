@@ -50,6 +50,9 @@ This project is grounded in original research that formalizes this claim in info
 
 ### Research Foundation
 
+- *Trace-Preserving Co-Creation and Observer-Dependent Reconstruction* (2026)  
+  Introduces trace preservation as a necessary condition for epistemic agency in human–AI co-creation, framing understanding as reconstructibility of the observer's cognitive path rather than possession of compressed abstractions.
+
 **Scale-Resolved Correlation as a Control Variable in Emergent Connectivity**  
 Kirandeep Kaur  
 Independent Research, January 2026  

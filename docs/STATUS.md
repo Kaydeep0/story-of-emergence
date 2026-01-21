@@ -213,3 +213,7 @@ Vault: Apply migration 024 in Supabase (drop old function overload, then run mig
 Lens: None - all lenses stable
 Meaning: None - no changes needed
 Distribution: Install html2canvas package, apply migration 024, test PNG export and wallet shares end-to-end
+
+---
+
+Conceptual spine aligned with trace-preserving co-creation paper (Jan 2026). No engine changes required.
