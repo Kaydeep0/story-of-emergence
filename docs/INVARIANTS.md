@@ -57,7 +57,7 @@ These invariants define what must always be true about Story of Emergence. They 
 - ✅ Decrypt only client-side using `decryptJSON()`
 - ✅ Use `wallet_address` and timestamps as plaintext metadata only
 
-**Architecture Reference**: See `docs/ARCHITECTURE.md` sections 2.3 (Crypto Envelope Format) and 2.4 (Storage Layer).
+**Architecture Reference**: See `docs/ARCHITECTURE_NOW.md` for current architecture. Historical details in `docs/archive/ARCHITECTURE.md`.
 
 ---
 
@@ -144,7 +144,7 @@ These invariants define what must always be true about Story of Emergence. They 
 - ✅ Store derived artifacts (pins) separately in `pins` table
 - ✅ All views read from `entries`, compute their own perspective
 
-**Architecture Reference**: See `docs/ARCHITECTURE.md` section 2.6 (Insights Engine Pipeline) and 2.8 (Graph and Links Layer).
+**Architecture Reference**: See `docs/ARCHITECTURE_NOW.md` for current architecture. Historical details in `docs/archive/ARCHITECTURE.md`.
 
 ---
 
@@ -187,7 +187,7 @@ These invariants define what must always be true about Story of Emergence. They 
 - ✅ All RPCs validate wallet via `get_wallet_from_header()`
 - ✅ All RPCs are `SECURITY DEFINER` with `SET search_path = public`
 
-**Architecture Reference**: See `supabase/migrations/023_entries_rpcs.sql` for the canonical RPC surface. See `docs/CLEANUP_PLAN.md` for migration safety guidelines.
+**Architecture Reference**: See `supabase/migrations/023_entries_rpcs.sql` for the canonical RPC surface. Historical migration guidelines in `docs/archive/CLEANUP_PLAN.md`.
 
 ---
 
@@ -228,7 +228,7 @@ If performance degrades:
 
 ## Related Documentation
 
-- `docs/ARCHITECTURE.md` - System architecture and data flow
+- `docs/ARCHITECTURE_NOW.md` - Current system architecture and mental model
 - `docs/SCOPE.md` - Product definition and non-negotiable guarantees
 - `docs/STATUS.md` - Current project phase and completion status
 - `docs/CURSOR_RULES.md` - Agent rules and decision discipline

@@ -50,12 +50,10 @@ Re-read only the following files, in this order:
 1. `docs/0_START_HERE.md`
 2. `docs/INVARIANTS.md`
 3. `docs/POSTURE.md`
-4. `docs/SANCTUARY_PRINCIPLES.md`
-5. `docs/SCOPE.md`
-6. `docs/PHASES.md`
-7. `PHASE_X_COMPLETE.md` files (if present)
-8. `WHAT_IS_BUILT.md`
-9. `docs/STATUS.md`
+4. `docs/SCOPE.md`
+5. `docs/STATUS.md`
+6. `docs/NEXT.md` (if present)
+7. Historical phase docs (if needed, see `docs/archive/`)
 
 **Rule:**
 If any file contradicts your memory, the file wins.
