@@ -33,3 +33,5 @@ Command: `pnpm build`
 First error: EPERM: operation not permitted
 File path: `node_modules/.pnpm/next@16.1.3_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/client/components/router-reducer/create-href-from-url.js`
 Logged on 2026-01-20.
+
+Resolved 2026-01-20: pnpm build EPERM in node_modules. Cause: macOS extended attributes (provenance). Fix: xattr clear on node_modules (xattr -dr com.apple.quarantine node_modules). Build now passes.
