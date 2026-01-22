@@ -188,6 +188,8 @@ Quiet sweep applied: legacy implementation files have header markers indicating 
 
 Distribution tests out of sync with current classifier logic. No runtime impact. Deferred intentionally.
 
+Test status: 13 active suites passing. 2 legacy suites skipped intentionally.
+
 ---
 
 ### What we are not doing yet
