@@ -51,24 +51,24 @@ describe('buildLifetimeSignalInventory', () => {
     expect(c1).toBeDefined();
     expect(c1?.totalCount).toBe(3); // Only r1, r2, r3 (missing-id filtered)
     expect(c1?.reflectionIds).toEqual(['r1', 'r2', 'r3']); // Missing ID filtered
-    expect(c1?.firstSeen).toBe('2023-01-15T10:00:00Z');
-    expect(c1?.lastSeen).toBe('2023-03-10T09:00:00Z');
+    expect(c1?.firstSeen).toBe('2023-01-15T10:00:00.000Z');
+    expect(c1?.lastSeen).toBe('2023-03-10T09:00:00.000Z');
     expect(c1?.distinctMonths).toBe(3); // Jan, Feb, Mar 2023
 
     // Verify c2 (transition) - higher confidence
     const c2 = result.signals.find((s) => s.id === 'c2');
     expect(c2).toBeDefined();
     expect(c2?.totalCount).toBe(2);
-    expect(c2?.firstSeen).toBe('2024-01-15T10:00:00Z');
-    expect(c2?.lastSeen).toBe('2024-02-20T14:00:00Z');
+    expect(c2?.firstSeen).toBe('2024-01-15T10:00:00.000Z');
+    expect(c2?.lastSeen).toBe('2024-02-20T14:00:00.000Z');
     expect(c2?.distinctMonths).toBe(2); // Jan, Feb 2024
 
     // Verify c3 (anchor)
     const c3 = result.signals.find((s) => s.id === 'c3');
     expect(c3).toBeDefined();
     expect(c3?.totalCount).toBe(1);
-    expect(c3?.firstSeen).toBe('2023-01-15T10:00:00Z');
-    expect(c3?.lastSeen).toBe('2023-01-15T10:00:00Z');
+    expect(c3?.firstSeen).toBe('2023-01-15T10:00:00.000Z');
+    expect(c3?.lastSeen).toBe('2023-01-15T10:00:00.000Z');
     expect(c3?.distinctMonths).toBe(1);
 
     // Verify sorting: confidence desc, distinctMonths desc, totalCount desc

@@ -38,37 +38,43 @@ export function resolveCabinMode(inputs: CabinResolutionInputs): CabinResolution
     urlHasCabinMode,
   } = inputs;
 
-  // Explicit mode always wins
+  // 1. Explicit mode always wins
   if (explicitMode === 'cabin') {
     return { cabin: true, reason: null };
   }
 
-  // Calculate shouldAutoCabin (before opt-out check)
-  const shouldAutoCabin = !debug && 
-    !optedOut &&
-    (
-      fromBridge ||
-      threadDepth >= 2 ||
-      highlightsFound
-    );
+  // 2. URL mode overrides opt-out
+  if (urlHasCabinMode === true) {
+    return { cabin: true, reason: 'bridge' };
+  }
 
-  // If user opted out and URL doesn't explicitly have mode=cabin, don't auto-enter
-  const finalShouldAutoCabin = optedOut && !urlHasCabinMode ? false : shouldAutoCabin;
+  // 3. Opt-out prevents auto-cabin
+  if (optedOut === true) {
+    return { cabin: false, reason: null };
+  }
+
+  // 4. Debug mode prevents auto-cabin
+  if (debug === true) {
+    return { cabin: false, reason: null };
+  }
+
+  // 5. Evaluate triggers normally (priority: bridge > depth > highlights)
+  const shouldAutoCabin = fromBridge || threadDepth >= 2 || highlightsFound;
+  
+  if (!shouldAutoCabin) {
+    return { cabin: false, reason: null };
+  }
 
   // Determine reason (priority: bridge > depth > highlights)
   let reason: 'bridge' | 'depth' | 'highlights' | null = null;
-  if (finalShouldAutoCabin) {
-    if (fromBridge) {
-      reason = 'bridge';
-    } else if (threadDepth >= 2) {
-      reason = 'depth';
-    } else if (highlightsFound) {
-      reason = 'highlights';
-    }
+  if (fromBridge) {
+    reason = 'bridge';
+  } else if (threadDepth >= 2) {
+    reason = 'depth';
+  } else if (highlightsFound) {
+    reason = 'highlights';
   }
 
-  const cabin = finalShouldAutoCabin;
-
-  return { cabin, reason };
+  return { cabin: true, reason };
 }
 

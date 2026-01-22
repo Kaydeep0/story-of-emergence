@@ -91,7 +91,7 @@ function generateNarrativeText(
         case 'power_law':
           return {
             headline: 'This week concentrated into intense moments',
-            summary: 'Most of your week\'s reflections occurred during a few powerful periods, highlighting how meaning can accumulate in brief, significant windows.',
+            summary: 'Most of your week\'s reflections occurred during a few powerful periods, highlighting how meaning can accumulate in brief windows.',
           };
         default:
           return {
@@ -116,7 +116,7 @@ function generateNarrativeText(
         case 'power_law':
           return {
             headline: 'This month highlighted key moments of intensity',
-            summary: 'The month\'s reflections were dominated by a few significant periods, showing how certain times carried disproportionate meaning and attention.',
+            summary: 'The month\'s reflections were dominated by a few periods, showing how certain times carried disproportionate meaning and attention.',
           };
         default:
           return {
